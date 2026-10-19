@@ -1,4 +1,4 @@
-# IT PMT Dashboard (Team IT Care) — Python + PostgreSQL
+# Dashboard IT PMT — Python + PostgreSQL
 
 Versi engine dari mockup `ITOC Dashboard Revisi`. Perhitungan pindah ke server (FastAPI), data dan seluruh konfigurasi di PostgreSQL. Frontend tetap tampilan yang sama, tetapi hanya merender hasil dari API.
 
