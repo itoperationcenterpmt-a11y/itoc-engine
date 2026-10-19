@@ -1,0 +1,19 @@
+# rahasia dan lingkungan lokal
+.env
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# data lokal dan keluaran
+pgdata/
+*.log
+backend/assets/*.tmp
+.DS_Store
+Thumbs.db
+# editor/agent local settings
+.claude/settings.local.json

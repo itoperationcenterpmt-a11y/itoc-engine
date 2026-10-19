@@ -1,0 +1,119 @@
+import zipfile
+from io import BytesIO
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from sqlalchemy.orm import Session
+from ..config import settings
+from ..db import get_db
+from ..models import User, SyncLog
+from ..security import require_upload, require_admin
+from ..store import load_config, audit, bump_data
+from ..ingest import panorama, manageengine, prtg_pdf
+from .. import jobs
+from ..calc.soc import batch_json
+
+router = APIRouter(prefix="/api/ingest", tags=["ingest"])
+
+
+async def _read(f: UploadFile, exts: tuple[str, ...] = (".xlsx",)) -> bytes:
+    data = await f.read()
+    if len(data) > settings().upload_max_mb * 1024 * 1024:
+        raise HTTPException(413, f"File lebih dari {settings().upload_max_mb} MB")
+    if not (f.filename or "").lower().endswith(exts):
+        raise HTTPException(415, "Hanya file " + ", ".join(exts))
+    return data
+
+
+async def _bundle(files: list[UploadFile], inner: str) -> list[tuple[str, bytes]]:
+    """RAW: boleh banyak file `inner` (.csv / .pdf) sekaligus dan/atau .zip yang berisi file tersebut (mis. 'SOC 011026.zip')."""
+    out, total, cap = [], 0, settings().upload_max_mb * 1024 * 1024 * 5
+    for f in files:
+        name = f.filename or "file"
+        data = await _read(f, (inner, ".zip"))
+        if name.lower().endswith(".zip"):
+            try:
+                with zipfile.ZipFile(BytesIO(data)) as z:
+                    infos = [i for i in z.infolist() if i.filename.lower().endswith(inner) and not i.is_dir()]
+                    if len(infos) > 200 or sum(i.file_size for i in infos) > cap:
+                        raise HTTPException(413, f"Isi {name} terlalu besar atau terlalu banyak file")
+                    for i in infos:
+                        out.append((f"{name}/{i.filename.split('/')[-1]}", z.read(i)))
+            except zipfile.BadZipFile:
+                raise HTTPException(422, f"{name} bukan file zip yang valid")
+        else:
+            out.append((name, data))
+        total = sum(len(d) for _, d in out)
+        if total > cap:
+            raise HTTPException(413, "Total file terlalu besar")
+    if not out:
+        raise HTTPException(422, f"Tidak ada file {inner} yang ditemukan")
+    return out
+
+
+async def _csv_files(files: list[UploadFile]) -> list[tuple[str, bytes]]:
+    return await _bundle(files, ".csv")
+
+
+@router.post("/soc")
+async def soc_upload(files: list[UploadFile] = File(...), user: User = Depends(require_upload("soc")), db: Session = Depends(get_db)):
+    """Unggah RAW SOC: CSV custom report Panorama (sebelas laporan; dikenali dari header). Satu unggahan = satu batch."""
+    cfg = load_config(db)
+    csvs = await _csv_files(files)
+    label = csvs[0][0] if len(csvs) == 1 else f"{len(csvs)} file CSV Panorama"
+    try:
+        b = panorama.import_file(db, cfg, b"", label, user.full_name, files=csvs)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    db.flush()
+    db.add(SyncLog(source=cfg.sources["panorama"]["label"] + " (unggah RAW)", at=cfg.now(), ok=b.status != "failed", rows=b.rows_read, ms=0,
+                   message=label + (f" · {b.rows_skipped} baris dilewati" if b.rows_skipped else "")))
+    audit(db, user.username, f"Mengunggah RAW SOC {label} ({b.status})")
+    db.commit()
+    bump_data()
+    return batch_json(b)
+
+
+@router.post("/prtg")
+async def prtg_upload(files: list[UploadFile] = File(...), user: User = Depends(require_upload("prtg")), db: Session = Depends(get_db)):
+    """Unggah RAW PRTG: PDF laporan harian per sensor (semua Part), banyak file/hari sekaligus atau .zip. Satu baris per sensor per hari."""
+    cfg = load_config(db)
+    pdfs = await _bundle(files, ".pdf")
+    try:
+        rows, notes, st = prtg_pdf.read_pdfs(pdfs)
+    except ImportError:
+        raise HTTPException(500, "Pustaka pypdf belum terpasang di server (jalankan build ulang)")
+    if not rows:
+        raise HTTPException(422, "Tidak ada halaman sensor PRTG yang terbaca. " + "; ".join(notes[:5]))
+    n_sensor = prtg_pdf.save(db, rows)
+    days = sorted({r["day"] for r in rows})
+    msg = f"{st['files']} PDF · {len(rows)} data sensor-hari · {len(days)} hari ({days[0]} – {days[-1]})" + (f" · {len(notes)} catatan" if notes else "")
+    db.add(SyncLog(source=cfg.sources["prtg"]["label"] + " (unggah RAW)", at=cfg.now(), ok=True, rows=len(rows), ms=0, message=msg))
+    audit(db, user.username, f"Mengunggah RAW PRTG: {msg}")
+    db.commit()
+    bump_data()
+    return {"files": st["files"], "pages": st["pages"], "rows": len(rows), "sensors": n_sensor, "days": [d.isoformat() for d in days], "notes": notes[:30]}
+
+
+@router.post("/tickets")
+async def tickets_upload(file: UploadFile = File(...), user: User = Depends(require_upload("tickets")), db: Session = Depends(get_db)):
+    """Unggah RAW ManageEngine: ekspor daftar request (.xls/.xlsx) apa adanya. Upsert per Request ID, jadi aman diunggah ulang/tumpang-tindih."""
+    cfg = load_config(db)
+    data = await _read(file, (".xls", ".xlsx"))
+    try:
+        P = manageengine.parse_excel(data, cfg)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    except Exception as e:  # file rusak / bukan Excel
+        raise HTTPException(422, f"File tidak bisa dibaca sebagai Excel: {e}")
+    n = manageengine.upsert(db, P["tickets"], "excel")
+    db.add(SyncLog(source=cfg.sources["manageengine"]["label"] + " (unggah RAW)", at=cfg.now(), ok=True, rows=n, ms=0, message=file.filename))
+    audit(db, user.username, f"Mengunggah RAW tiket {file.filename} ({n} baris)")
+    db.commit()
+    bump_data()
+    return {"rows": n, "skipped": P["skipped"], "file": file.filename}
+
+@router.post("/sync/{key}")
+def sync_now(key: str, user: User = Depends(require_admin)):
+    r = jobs.run_source(key)
+    if not r["ok"]:
+        raise HTTPException(502, r["msg"])
+    return r
