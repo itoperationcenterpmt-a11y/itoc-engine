@@ -28,9 +28,11 @@ def _top(rows, key, n=12, val=lambda r: 1):
     return [{"k": k, "n": v} for k, v in sorted(c.items(), key=lambda x: -x[1])[:n]]
 
 
-def build(db, cfg: Config, user=None) -> dict:
-    rows = db.query(WifiClient).order_by(WifiClient.username, WifiClient.mac).all()
-    aps = db.query(WifiAp).all()
+def build(db, cfg: Config, user=None, zone: str = "", ssid: str = "", band: str = "") -> dict:
+    every_row = db.query(WifiClient).order_by(WifiClient.username, WifiClient.mac).all()
+    opts = {"zones": sorted({r.zone for r in every_row if r.zone}), "ssids": sorted({r.ssid for r in every_row if r.ssid})}
+    rows = [r for r in every_row if (not zone or r.zone == zone) and (not ssid or r.ssid == ssid) and (not band or _band(r) == band)]
+    aps = [a for a in db.query(WifiAp).all() if not zone or a.zone == zone]
     src = db.get(DataSource, "ruckus")
     last = max((r.updated_at for r in rows), default=None) or max((a.updated_at for a in aps), default=None)
     every = (src.interval_min if src else 5) or 5
@@ -56,7 +58,7 @@ def build(db, cfg: Config, user=None) -> dict:
             "byZone": _top(rows, lambda r: r.zone, 10), "byType": _top(rows, lambda r: (r.raw or {}).get("deviceType") or "-", 8), "byBand": _top(rows, _band, 4),
             "top": [{"user": r.username, "host": r.hostname, "mac": r.mac, "ssid": r.ssid, "ap": r.ap_name, "bytes": tot(r), "rx": r.rx_bytes, "tx": r.tx_bytes}
                     for r in sorted(rows, key=lambda r: -tot(r))[:10]],
-            "trend": trend, "canKill": bool(user and can_kill(user, cfg)),
+            "trend": trend, "opts": opts, "canKill": bool(user and can_kill(user, cfg)),
             "list": [{"mac": r.mac, "ip": r.ip, "user": r.username, "host": r.hostname, "ssid": r.ssid, "ap": r.ap_name, "zone": r.zone, "os": r.os, "band": _band(r),
                       "rssi": r.rssi, "vlan": r.vlan, "since": ms(r.started_at), "rx": r.rx_bytes, "tx": r.tx_bytes, "auth": (r.raw or {}).get("authMethod")} for r in rows[:3000]],
             "updated": ms(last + (now - datetime.utcnow())) if last else None,

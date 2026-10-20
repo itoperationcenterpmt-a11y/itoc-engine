@@ -50,6 +50,19 @@ function widgetList() {
         html: () => panel("c6", "Devices Down · " + k.k, "", tbl(["Perangkat", "Lokasi", "Lama"], (V.dev.kindDown[k.key] || []).map(x => [x.name, x.loc, {h: `<span class="${x.ageH != null && x.ageH > 24 ? "crit-t" : ""}">${durTxt(x.ageH)}</span>`}]), {empty: "Semua perangkat online."}))});
     });
   }
+  const Wf = V.wifi;
+  if (Wf) {
+    const WP = wifiPanels(Wf), add = (key, title, desc, size, fn) => extra.push({key: "wifi-" + key, mod: "wifi", need: "wifi", title, desc, size, html: WP[fn]});
+    add("kpi", "WiFi Summary", "Client aktif, Access Point online, sinyal lemah, usage", "c4", "kpi");
+    add("trend", "WiFi Client Trend", "Jumlah client WiFi 24 jam terakhir", "c8", "trend");
+    add("ssid", "WiFi Clients per SSID", "Client aktif menurut SSID", "c4", "ssid");
+    add("usage", "WiFi Usage per SSID", "Total trafik sesi berjalan per SSID", "c4", "usage");
+    add("ap", "WiFi Clients per AP", "10 Access Point dengan client terbanyak", "c4", "ap");
+    add("zone", "WiFi Clients per Zone", "Client aktif menurut zone vSZ", "c4", "zone");
+    add("band", "WiFi Band dan Tipe Perangkat", "Sebaran band dan tipe perangkat client", "c4", "band");
+    add("top", "WiFi Top Usage", "Client dengan trafik terbesar", "c8", "top");
+    add("apdown", "WiFi AP Tidak Online", "Access Point yang tidak online", "c4", "apdown");
+  }
   return WIDGETS.concat(extra);
 }
 /* Widget berparameter: "dev-map:<group>" = peta khusus satu host group Zabbix (mis. Network-SDWAN). Boleh dipasang lebih dari satu. */

@@ -92,7 +92,7 @@
  {"key": "servicedesk", "label": "Ticketing", "icon": "ticket", "sort": 2, "filters": {"p": 1, "s": 1, "l": 1, "c": 1}, "note": "Shift dan periode menurut waktu tiket dibuat; lokasi = Group di ManageEngine."},
  {"key": "noc", "label": "Networking", "icon": "activity", "sort": 3, "filters": {"p": 1, "s": 1, "l": 1, "c": 1}, "note": "Shift memilih jam pantau PRTG yang masuk perhitungan; lokasi = device PRTG."},
  {"key": "soc", "label": "Cyber Security", "icon": "shield", "sort": 4, "filters": {"p": 1, "s": 0, "l": 0, "c": 1}, "why": "Data Panorama berupa ringkasan harian seluruh firewall, jadi tidak bisa dipilah per shift atau lokasi."},
- {"key": "wifi", "label": "WiFi Users", "icon": "wifi", "sort": 5, "filters": {"p": 0, "s": 0, "l": 0, "c": 0}, "why": "Daftar client WiFi adalah kondisi terkini dari Ruckus vSZ, jadi periode, shift, dan lokasi tidak berlaku."},
+ {"key": "wifi", "label": "WiFi Users", "icon": "wifi", "sort": 5, "filters": {"p": 0, "s": 0, "l": 0, "c": 0, "k": 1, "g": 1, "y": 1}, "why": "Daftar client WiFi adalah kondisi terkini dari Ruckus vSZ, jadi periode, shift, dan lokasi tidak berlaku."},
  {"key": "devices", "label": "Devices", "icon": "camera", "sort": 5, "filters": {"p": 0, "s": 0, "l": 1, "c": 0, "k": 1, "t": 1, "g": 1, "y": 1}, "why": "Status perangkat adalah kondisi terkini dari Zabbix, jadi periode dan shift tidak berlaku."},
  {"key": "jadwal", "label": "Personnel", "icon": "users", "sort": 6, "filters": {"p": 0, "s": 0, "l": 0, "c": 0}, "why": "Personel tidak bergantung filter; jadwal menampilkan bulan berjalan."},
  {"key": "serahterima", "label": "Handover", "icon": "handover", "parent": "report", "sort": 6, "filters": {"p": 1, "s": 1, "l": 1, "c": 0}},
@@ -138,6 +138,7 @@
  {"key": "itoc", "label": "ITOC Shift", "modules": ["ringkasan", "servicedesk", "noc", "soc", "devices", "wifi", "jadwal", "report"], "can_write": false, "is_admin": false, "admin_view": false, "scope": "all", "uploads": [], "sort": 3},
  {"key": "itcare", "label": "IT Care", "modules": ["ringkasan", "servicedesk", "noc", "jadwal", "report"], "can_write": false, "is_admin": false, "admin_view": false, "scope": "ho", "uploads": [], "sort": 4},
  {"key": "eos", "label": "EOS Branch", "modules": ["ringkasan", "servicedesk", "noc", "jadwal", "report"], "can_write": false, "is_admin": false, "admin_view": false, "scope": "own", "uploads": [], "sort": 5},
+ {"key": "wifiview", "label": "WiFi Viewer", "modules": ["wifi"], "can_write": false, "is_admin": false, "admin_view": false, "scope": "all", "uploads": [], "sort": 7},
  {"key": "manajemen", "label": "Management", "modules": ["ringkasan", "servicedesk", "noc", "soc", "devices", "jadwal", "report"], "can_write": false, "is_admin": false, "admin_view": false, "scope": "all", "uploads": [], "sort": 6}
 ],"shifts": [{"no": 1, "code": "P", "name": "Pagi", "start_hour": 8}, {"no": 2, "code": "S", "name": "Sore", "start_hour": 15}, {"no": 3, "code": "M", "name": "Malam", "start_hour": 22}],
 "teams": [{"code": "1", "label": "Team 1", "rotation_offset": 0, "sort": 1}, {"code": "2", "label": "Team 2", "rotation_offset": 1, "sort": 2}, {"code": "3", "label": "Team 3", "rotation_offset": 2, "sort": 3}, {"code": "4", "label": "Team 4", "rotation_offset": 3, "sort": 4}],

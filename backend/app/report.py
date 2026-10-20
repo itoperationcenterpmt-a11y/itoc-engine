@@ -12,7 +12,7 @@ from . import views as VW
 from .calc import soc as SOC
 from .security import can_see
 
-SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking"), ("soc", "Cyber Security")]
+SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking"), ("soc", "Cyber Security"), ("devices", "Devices"), ("wifi", "WiFi Users")]
 WEEKLY_AFTER = 31  # rentang harian lebih panjang dari ini diringkas per minggu (sama dengan dashboard Excel)
 _UK = {"type": "Tipe ancaman", "action": "Tindakan", "severity": "Severity"}
 
@@ -279,7 +279,76 @@ def _soc(db, cfg, f, preset="standar"):
     return s
 
 
-_BUILD = {"servicedesk": _servicedesk, "noc": _noc, "soc": _soc}
+DEV_IDS = ["dev_status", "dev_kind", "dev_down_loc", "dev_age", "dev_type"]
+WIFI_IDS = ["wifi_ssid", "wifi_ssid_gb", "wifi_ap", "wifi_zone", "wifi_band", "wifi_trend"]
+_GB = 1073741824
+
+
+def _devices(db, cfg, f, preset="standar"):
+    """Status perangkat adalah kondisi terkini dari Zabbix saat laporan dibuat; periode tidak berlaku."""
+    from .calc import devices as DEV
+    D = DEV.build(db, cfg, f.site, "", "", full=False)
+    s = {"key": "devices", "title": "Devices", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    A = D["all"]
+    if not D["configured"] or not A["total"]:
+        s["notes"].append("Belum ada data perangkat dari Zabbix." + (" Sinkron terakhir gagal: " + D["error"] if D["error"] else ""))
+        return s
+    s["notes"].append("Kondisi terkini saat laporan dibuat (snapshot Zabbix), bukan rata-rata periode.")
+    s["kpis"] = [_kpi("Devices", A["total"], "n", "dipantau dari Zabbix"), _kpi("Online", A["up"], "n", fmt_p(A["avail"], 1) + " dari yang aktif" if A["avail"] is not None else ""),
+                 _kpi("Down", A["down"], "n", f"{D['chronic']} lebih dari {D['chronicDays']} hari"), _kpi("Availability Now", A["avail"], "p2", "online ÷ (online + down)"),
+                 _kpi("Interface Issue", A["deg"], "n", "ping normal, SNMP/agent tidak tersedia"), _kpi("Maintenance", A["maint"], "n", "nonaktif di Zabbix: " + fmt_n(A["off"]))]
+    bk, bl, bt = D["byKind"], sorted(D["byLoc"], key=lambda r: -r["down"]), D["byType"]
+    s["charts"] = _pick(cfg, "devices", DEV_IDS, preset, [
+        _chart("Status perangkat", ["Online", "Down", "Interface", "Maintenance"], [{"name": "Perangkat", "values": [A["up"], A["down"], A["deg"], A["maint"]]}], "donut"),
+        _chart("Status per kategori", [r["k"] for r in bk], [{"name": "Online", "values": [r["up"] for r in bk]}, {"name": "Down", "values": [r["down"] for r in bk]}], "stack"),
+        _top("10 lokasi dengan perangkat down terbanyak", [(r["k"], r["down"]) for r in bl], "Down"),
+        _chart("Sebaran lama perangkat down", [x["k"] for x in D["ageDist"]], [{"name": "Perangkat", "values": [x["n"] for x in D["ageDist"]]}]),
+        _top("10 tipe perangkat terbanyak", [(r["k"], r["total"]) for r in sorted(bt, key=lambda r: -r["total"])], "Perangkat")])
+    s["tables"].append(_table("Per kategori", ["Kategori", "Perangkat", "Online", "Down", "Interface", "Availability"], ["t", "n", "n", "n", "n", "p1"], [[r["k"], r["total"], r["up"], r["down"], r["deg"], r["avail"]] for r in bk]))
+    s["tables"].append(_table("Per tipe perangkat", ["Tipe", "Kode", "Perangkat", "Down", "Availability"], ["t", "t", "n", "n", "p1"], [[r["k"], r["code"], r["total"], r["down"], r["avail"]] for r in bt]))
+    s["tables"].append(_table("Per lokasi", ["Lokasi", "Perangkat", "Down", "Interface", "Availability"], ["t", "n", "n", "n", "p1"], [[r["k"], r["total"], r["down"], r["deg"], r["avail"]] for r in bl[:40]]))
+    s["tables"].append(_table("Perangkat down terlama", ["Perangkat", "Tipe", "Lokasi", "Lama (jam)", "Masalah"], ["t", "t", "t", "f1", "t"],
+                              [[x["name"], x.get("typeLabel"), x["loc"], x["ageH"], x.get("problem")] for x in D["down"][:30]]))
+    if A["down"]:
+        s["attention"].append(f"{A['down']} perangkat down, {D['chronic']} di antaranya lebih dari {D['chronicDays']} hari")
+    if D["unmapped"]:
+        s["attention"].append(f"{len(D['unmapped'])} kode lokasi Zabbix belum dipetakan ke lokasi")
+    return s
+
+
+def _wifi(db, cfg, f, preset="standar"):
+    """Client WiFi aktif dan Access Point dari Ruckus vSZ: kondisi terkini saat laporan dibuat; usage = trafik sesi yang sedang berjalan."""
+    from .calc import wifi as WIFI
+    W = WIFI.build(db, cfg)
+    s = {"key": "wifi", "title": "WiFi Users", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    if not W["configured"] or not (W["total"] or W["apTotal"]):
+        s["notes"].append("Belum ada data WiFi dari Ruckus vSZ." + (" Sinkron terakhir gagal: " + W["error"] if W["error"] else ""))
+        return s
+    s["notes"].append("Kondisi terkini saat laporan dibuat (snapshot vSZ). Usage adalah trafik sesi yang sedang berjalan, bukan total harian.")
+    s["kpis"] = [_kpi("Client aktif", W["total"], "n", "terhubung saat ini"), _kpi("User login", W["users"], "n", f"{fmt_n(W['named'])} client dengan username"),
+                 _kpi("Access Point online", W["apOnline"], "n", f"dari {fmt_n(W['apTotal'])} AP"), _kpi("Sinyal lemah", W["weak"], "n", f"di bawah {W['weakAt']} dBm"),
+                 _kpi("Download (GB)", W["tx"] / _GB, "f1", "sesi berjalan"), _kpi("Upload (GB)", W["rx"] / _GB, "f1", "sesi berjalan")]
+    tr = W["trend"]
+    s["charts"] = _pick(cfg, "wifi", WIFI_IDS, preset, [
+        _top("Client per SSID", [(x["k"], x["n"]) for x in W["bySsid"]], "Client"),
+        _top("Usage per SSID (GB)", [(x["k"], round(x["n"] / _GB, 2)) for x in W["bySsidBytes"]], "GB"),
+        _top("Client per Access Point", [(x["k"], x["n"]) for x in W["byAp"]], "Client"),
+        _top("Client per zone", [(x["k"], x["n"]) for x in W["byZone"]], "Client"),
+        _chart("Client per band", [x["k"] for x in W["byBand"]], [{"name": "Client", "values": [x["n"] for x in W["byBand"]]}], "donut"),
+        _chart("Client 24 jam terakhir", [f"{(x['t'] // 3600000) % 24:02d}.{(x['t'] // 60000) % 60:02d}" for x in tr], [{"name": "Client", "values": [x["c"] for x in tr]}], "line") if len(tr) > 1 else None])
+    s["tables"].append(_table("Per SSID", ["SSID", "Client", "Usage (GB)"], ["t", "n", "f2"], [[x["k"], x["n"], 0] for x in W["bySsid"]]))
+    gb = dict((x["k"], x["n"]) for x in W["bySsidBytes"])
+    s["tables"][-1]["rows"] = [[x["k"], x["n"], gb.get(x["k"], 0) / _GB] for x in W["bySsid"]]
+    s["tables"].append(_table("Client dengan usage terbesar", ["User / Host", "MAC", "SSID", "AP", "Download (GB)", "Upload (GB)"], ["t", "t", "t", "t", "f2", "f2"],
+                              [[x["user"] or x["host"], x["mac"], x["ssid"], x["ap"], (x["tx"] or 0) / _GB, (x["rx"] or 0) / _GB] for x in W["top"]]))
+    if W["apDown"]:
+        s["tables"].append(_table("Access Point tidak online", ["AP", "Zone", "Status", "Model"], ["t", "t", "t", "t"], [[x["name"], x["zone"], x["status"], x["model"]] for x in W["apDown"][:30]]))
+        s["attention"].append(f"{len(W['apDown'])} Access Point tidak online dari {W['apTotal']}")
+    if W["weak"]:
+        s["attention"].append(f"{W['weak']} client dengan sinyal lemah (di bawah {W['weakAt']} dBm)")
+    return s
+
+_BUILD = {"servicedesk": _servicedesk, "noc": _noc, "soc": _soc, "devices": _devices, "wifi": _wifi}
 
 # Jenis laporan (bisa diubah di Admin → Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
@@ -287,6 +356,8 @@ DEFAULT_KINDS = {
     "noc": {"label": "Networking", "desc": "Availability, downtime, link bermasalah, utilisasi", "title": "Report ITOC Network SLA & Traffic ISP", "subtitle": "Evaluasi Availability, Coverage Monitoring, Traffic", "prefix": "Network SLA", "sections": ["noc"]},
     "soc": {"label": "Cyber Security", "desc": "Event ancaman, severity, tindakan firewall, URL", "title": "Report ITOC SOC Monitoring", "subtitle": "Ringkasan traffic security, threat, web security, dan triage high/critical", "prefix": "SOC", "sections": ["soc"]},
     "servicedesk": {"label": "Ticketing", "desc": "Tiket masuk, SLA, kategori, ranking teknisi, tiket open", "title": "Report ITOC Ticketing Servicedesk", "subtitle": "Ringkasan Performa Ticketing ManageEngine", "prefix": "Ticketing", "sections": ["servicedesk"]},
+    "devices": {"label": "Devices", "desc": "Status perangkat Zabbix: kategori, tipe, lokasi, perangkat down", "title": "Report ITOC Devices", "subtitle": "Status Perangkat dari Zabbix", "prefix": "Devices", "sections": ["devices"]},
+    "wifi": {"label": "WiFi Users", "desc": "Client aktif, Access Point, usage per SSID dan AP (Ruckus vSZ)", "title": "Report ITOC WiFi Users", "subtitle": "Client dan Access Point Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
     "full": {"label": "Full", "desc": "Summary dan rincian semua bidang dalam satu berkas", "title": "Report ITOC : Summary & Rincian", "subtitle": "Management Overview", "prefix": "", "sections": None},
 }
 
