@@ -16,6 +16,7 @@ async function wifiKill(mac, mode) {
 }
 /* Panel WiFi yang dipakai halaman WiFi Users, Overview (katalog widget), dan widget katalog. */
 function wifiPanels(W) {
+  const hh = t => { const d = new Date(t); return {label: pad(d.getUTCHours()) + "." + pad(d.getUTCMinutes()), full: dtime(t)}; };
   const hb = (a, f) => hbars(a.map(x => [x.k, x.n, 0, f ? f(x) : fmt(x.n)]));
   return {
     kpi: () => `<section class="panel c4 dom"><header><h2>WiFi Users</h2></header><div class="mini">${kpi("Client Aktif", fmt(W.total), "terhubung saat ini")}${kpi("Access Point", W.apTotal ? fmt(W.apOnline) + " / " + fmt(W.apTotal) : "-", "online", {cls: W.apTotal && W.apOnline < W.apTotal ? "warnv" : ""})}${kpi("Sinyal Lemah", fmt(W.weak), "di bawah " + W.weakAt + " dBm", {cls: W.weak ? "warnv" : ""})}${kpi("Usage", wBytes(W.tx + W.rx), "sesi berjalan")}</div>${go("wifi")}</section>`,
