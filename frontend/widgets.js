@@ -60,6 +60,8 @@ function widgetList() {
     add("ap", "WiFi Clients per AP", "10 Access Point dengan client terbanyak", "c4", "ap");
     add("zone", "WiFi Clients per Zone", "Client aktif menurut zone vSZ", "c4", "zone");
     add("band", "WiFi Band dan Tipe Perangkat", "Sebaran band dan tipe perangkat client", "c4", "band");
+    add("portal", "WiFi Portal Users", "User yang login lewat portal WiFi, dengan lokasi dan AP", "c12", "portal");
+    add("loc", "WiFi Clients per Lokasi", "Client aktif menurut lokasi", "c4", "loc");
     add("top", "WiFi Top Usage", "Client dengan trafik terbesar", "c8", "top");
     add("apdown", "WiFi AP Tidak Online", "Access Point yang tidak online", "c4", "apdown");
   }

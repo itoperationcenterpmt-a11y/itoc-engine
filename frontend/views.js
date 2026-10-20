@@ -84,7 +84,7 @@ function renderShell() {
   $("psub").textContent = APPLY[S.tab] && APPLY[S.tab].p ? rangeTxt() : "";
   $("fPreset").innerHTML = PRESETS.map(([k, l]) => `<button type="button" data-p="${k}" aria-pressed="${S.preset === k}">${l}</button>`).join("");
   $("fShift").innerHTML = SN.map((l, i) => `<button type="button" data-s="${i}" aria-pressed="${S.sf === i}" ${i ? `title="${shiftHours(i)}"` : ""}>${l}</button>`).join("");
-  $("fSite").innerHTML = `<option value="">${CFG.me.site ? "Lokasi akun Anda" : "All lokasi"}</option>` + [...CFG.sites, ...(S.tab === "devices" && V.dev ? V.dev.unmapped.map(u => u.code) : [])].map(s => `<option ${s === S.site ? "selected" : ""}>${esc(s)}</option>`).join("");
+  $("fSite").innerHTML = `<option value="">${CFG.me.site ? "Lokasi akun Anda" : "All lokasi"}</option>` + [...CFG.sites, ...(S.tab === "devices" && V.dev ? V.dev.unmapped.map(u => u.code) : []), ...(S.tab === "wifi" && V.wifi ? V.wifi.opts.locs.filter(x => !CFG.sites.includes(x)) : [])].map(s => `<option ${s === S.site ? "selected" : ""}>${esc(s)}</option>`).join("");
   $("fFrom").value = S.from; $("fTo").value = S.to; $("fFrom").max = $("fTo").max = nowShift().today; $("fFrom").min = $("fTo").min = CFG.params.data_start; $("fCmp").checked = S.cmp;
   const ap = APPLY[S.tab], anyF = !!(ap.p || ap.l || ap.k || ap.t || ap.g || ap.y), KL = CFG.params["dev.kind_labels"] || {}, SL = [["", "All"], ["down", "Down"], ["degraded", "Interface"], ["up", "Online"], ["maintenance", "Maintenance"], ["disabled", "Disabled"]];
   const kinds = new Map(Object.entries(KL)); ((V.dev && V.dev.byKind) || []).forEach(k => kinds.set(k.key, KL[k.key] || k.k));

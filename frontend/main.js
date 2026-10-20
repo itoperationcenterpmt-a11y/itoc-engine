@@ -59,8 +59,10 @@ function applyLayout() {
     return {key, blk, h2, i, s: byKey[key] ? byKey[key].sort : 1e6 + i};
   }).sort((a, b) => a.s - b.s || a.i - b.i);
   Object.keys(byKey).filter(k => k.startsWith("w-")).forEach((k, j) => {         // widget dari katalog yang dipasang di layout ini
-    const w = widgetFind(k.slice(2)); if (!w || !widgetOk(w)) return;
-    const {el, h2} = widgetBlock(w); blocks.push({key: k, blk: el, h2, i: 1e5 + j, s: byKey[k].sort});
+    try {                                                  // widget katalog yang gagal dirender dilewati, tidak merusak halaman
+      const w = widgetFind(k.slice(2)); if (!w || !widgetOk(w)) return;
+      const {el, h2} = widgetBlock(w); blocks.push({key: k, blk: el, h2, i: 1e5 + j, s: byKey[k].sort});
+    } catch (e) { console.error("widget " + k, e); }
   });
   blocks.sort((a, b) => a.s - b.s || a.i - b.i);
   blocks.forEach(({key, blk, h2}) => {
@@ -69,7 +71,7 @@ function applyLayout() {
       if (r.size) { blk.className = blk.className.replace(SZ, "").trim() + " " + r.size; blk.dataset.size = r.size; }
       if (r.title && h2 && !h2.querySelector("*")) h2.textContent = r.title;
       blk.dataset.title = r.title || "";
-      if (!r.enabled) { if (S.layEdit) blk.classList.add("off"); else return; }
+      if (!r.enabled) { if (S.layEdit) blk.classList.add("off"); else { blk.remove(); return; } }
     }
     grid.appendChild(blk);
   });
@@ -138,7 +140,7 @@ async function resetLayout() {
   CFG.layouts = (CFG.layouts || []).filter(x => !(x.page === S.tab && x.role === S.layRole));
   set({layEdit: false});
 }
-document.addEventListener("input", e => { const t = e.target; if (t.id === "dq" && S.tab === "wifi") { applyWF(); return; } if (t.id === "dq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll("#dlist tbody tr").forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); return; } if (t.id === "mq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll(".mcard,.pcard").forEach(c => { c.hidden = !!q && !c.dataset.q.includes(q); }); return; } if (t.dataset && t.dataset.layTitle !== undefined) t.closest(".wblock").dataset.title = t.value; });
+document.addEventListener("input", e => { const t = e.target; if (t.id === "wpq") { applyWP(); return; } if (t.id === "dq" && S.tab === "wifi") { applyWF(); return; } if (t.id === "dq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll("#dlist tbody tr").forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); return; } if (t.id === "mq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll(".mcard,.pcard").forEach(c => { c.hidden = !!q && !c.dataset.q.includes(q); }); return; } if (t.dataset && t.dataset.layTitle !== undefined) t.closest(".wblock").dataset.title = t.value; });
 const set = (o, keepMsg) => { if (o.tab !== undefined && o.tab !== S.tab) Object.assign(o, {kind: "", grp: "", dtype: "", dstat: ""}); const re = Object.keys(o).some(k => RELOAD.includes(k) && o[k] !== S[k]); Object.assign(S, o); if (!keepMsg) S.msg = ""; render(re); };
 const refresh = (o, keepMsg) => { Object.assign(S, o || {}); if (!keepMsg) S.msg = ""; render(true); };
 async function reloadConfig() { applyConfig(await api("/api/config")); }
@@ -262,6 +264,7 @@ document.addEventListener("change", async e => {
   else if (t.dataset.rkind) set({rkind: t.dataset.rkind});
   else if (t.id === "layRole") set({layRole: t.value});
   else if (t.dataset.wf !== undefined) applyWF();
+  else if (t.dataset.wp !== undefined) applyWP();
   else if (t.dataset.wgroup !== undefined) {   // ganti filter group pada widget peta tanpa menambah widget baru
     const blk = t.closest(".wblock"), key = t.value ? "dev-map:" + encodeURIComponent(t.value) : "dev-map", w = widgetFind(key); if (!w) return;
     const {el} = widgetBlock(w), size = blk.dataset.size || w.size; el.className = el.className.replace(SZ, "").trim() + " " + size; el.dataset.size = size; el.dataset.title = blk.dataset.title || "";

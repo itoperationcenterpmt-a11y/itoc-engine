@@ -2,8 +2,12 @@
 "use strict";
 const wBytes = n => n == null ? "-" : n >= 1099511627776 ? (n / 1099511627776).toFixed(2) + " TB" : n >= 1073741824 ? (n / 1073741824).toFixed(2) + " GB" : n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
 const wSel = (id, label, items) => `<select id="${id}" data-wf aria-label="${label}"><option value="">${label}</option>${[...new Set(items.filter(x => x && x !== "-"))].sort().map(x => `<option>${esc(x)}</option>`).join("")}</select>`;
+function applyWP() {
+  const q = (($("wpq") || {}).value || "").trim().toLowerCase(), st = ($("wpSt") || {}).value || "";
+  document.querySelectorAll("#plist tbody tr").forEach(r => { r.hidden = (q && !r.textContent.toLowerCase().includes(q)) || (st && r.children[1].textContent.trim() !== st); });
+}
 function applyWF() {
-  const q = (($("dq") || {}).value || "").trim().toLowerCase(), f = {4: $("wfSsid"), 5: $("wfAp"), 6: $("wfZone"), 7: $("wfBand")};
+  const q = (($("dq") || {}).value || "").trim().toLowerCase(), f = {4: $("wfSsid"), 5: $("wfAp"), 6: $("wfZone"), 8: $("wfBand")};
   document.querySelectorAll("#dlist tbody tr").forEach(r => { r.hidden = (q && !r.textContent.toLowerCase().includes(q)) || Object.entries(f).some(([i, s]) => s && s.value && r.children[i].textContent.trim() !== s.value); });
 }
 async function wifiKill(mac, mode) {
@@ -26,6 +30,12 @@ function wifiPanels(W) {
     usage: () => panel("c4", "Usage per SSID", "total trafik sesi berjalan", hb(W.bySsidBytes, x => wBytes(x.n))),
     ap: () => panel("c4", "Client per AP", "10 teratas", hb(W.byAp, x => fmt(x.n) + " · " + wBytes(x.bytes))),
     zone: () => panel("c4", "Client per Zone", "", hb(W.byZone)),
+    loc: () => panel("c4", "Client per Lokasi", "menurut kode lokasi di nama AP", hb(W.byLoc)),
+    portal: () => {
+      const rows = W.portal.map(x => [x.user || "-", {h: x.status === "login" ? pill("good", "Login") : pill("idle", "Belum login")}, x.loc || "-", x.zone || "-", x.ap || "-", x.ssid || "-", x.ip || "-", x.mac, {h: x.rssi == null ? "-" : `<span class="${x.rssi < W.weakAt ? "crit-t" : ""}">${x.rssi} dBm</span>`}, x.since ? dtime(x.since) : "-", wBytes(x.tx), wBytes(x.rx)]
+        .concat(W.canKill ? [{h: `<button type="button" class="btn ghost sm" data-wkill="${esc(x.mac)}" data-mode="disconnect" title="Putus sesi user ini">Disconnect</button> <button type="button" class="btn ghost sm" data-wkill="${esc(x.mac)}" data-mode="deauth" title="Deauth: portal meminta login ulang">Deauth</button>`}] : []));
+      return panel("c12", "Portal Users", fmt(W.portalLogin) + " login dari " + fmt(W.portal.length) + " client portal", `<div class="dtool"><input type="search" id="wpq" class="msearch" placeholder="Cari username, lokasi, AP, IP, atau MAC" aria-label="Cari user portal"><select id="wpSt" data-wp aria-label="Status"><option value="">Semua status</option><option>Login</option><option>Belum login</option></select><span class="sub">Client di SSID portal (Hotspot/Guest). Lokasi mengikuti filter Location di atas</span></div><div id="plist">${tbl(["Username", "Status", "Lokasi", "Zone", "AP", "SSID", "IP", "MAC", "Sinyal", "Terhubung sejak", "Download", "Upload"].concat(W.canKill ? ["Aksi"] : []), rows, {tall: true, empty: "Belum ada client di SSID portal."})}</div>`);
+    },
     top: () => panel("c8", "Top Usage", "10 client dengan trafik terbesar (sesi berjalan)", tbl(["User / Host", "MAC", "SSID", "AP", "Download", "Upload", "Total"], W.top.map(x => [x.user || x.host || "-", x.mac, x.ssid || "-", x.ap || "-", wBytes(x.tx), wBytes(x.rx), wBytes(x.bytes)]), {r: [4, 5, 6], empty: "Belum ada data."})),
     apdown: () => panel("c4", "Access Point Tidak Online", fmt(W.apTotal - W.apOnline) + " dari " + fmt(W.apTotal), tbl(["AP", "Zone", "Status", "Terakhir terlihat"], W.apDown.slice(0, 10).map(x => [x.name || "-", x.zone || "-", x.status || "-", x.since ? dtime(x.since) : "-"]), {empty: "Semua AP online."}))
   };
@@ -38,13 +48,13 @@ function vWifi() {
   if (W.error) warns.push(`<li class="crit"><span><b>Sinkron vSZ gagal:</b> ${esc(W.error)}</span></li>`);
   else if (W.stale) warns.push(`<li class="warn"><span><b>Data belum diperbarui</b> sejak ${esc(dtime(W.updated))}. Cek konektor Ruckus vSZ.</span></li>`);
   if (W.apTotal && W.apTotal - W.apOnline) warns.push(`<li class="warn"><span><b>${W.apTotal - W.apOnline} Access Point tidak online</b> dari ${W.apTotal}.</span></li>`);
-  const kp = `<div class="kpis k6">${kpi("Client Aktif", fmt(W.total), "terhubung saat ini")}${kpi("User Login", fmt(W.users), fmt(W.named) + " client dengan username")}${kpi("Access Point", W.apTotal ? fmt(W.apOnline) + " / " + fmt(W.apTotal) : "-", "online", {cls: W.apTotal && W.apOnline < W.apTotal ? "warnv" : ""})}${kpi("Sinyal Lemah", fmt(W.weak), "di bawah " + W.weakAt + " dBm", {cls: W.weak ? "warnv" : ""})}${kpi("Download", wBytes(W.tx), "sesi berjalan, semua client")}${kpi("Upload", wBytes(W.rx), "sesi berjalan, semua client")}</div>`;
+  const kp = `<div class="kpis k6">${kpi("Client Aktif", fmt(W.total), "terhubung saat ini")}${kpi("Portal Login", fmt(W.portalLogin), "dari " + fmt(W.portal.length) + " client SSID portal")}${kpi("Access Point", W.apTotal ? fmt(W.apOnline) + " / " + fmt(W.apTotal) : "-", "online", {cls: W.apTotal && W.apOnline < W.apTotal ? "warnv" : ""})}${kpi("Sinyal Lemah", fmt(W.weak), "di bawah " + W.weakAt + " dBm", {cls: W.weak ? "warnv" : ""})}${kpi("Download", wBytes(W.tx), "sesi berjalan, semua client")}${kpi("Upload", wBytes(W.rx), "sesi berjalan, semua client")}</div>`;
   const P = wifiPanels(W);
-  const rows = W.list.map(x => [x.user || "-", x.host || "-", x.mac, x.ip || "-", x.ssid || "-", x.ap || "-", x.zone || "-", x.band, {h: x.rssi == null ? "-" : `<span class="${x.rssi < W.weakAt ? "crit-t" : ""}">${x.rssi} dBm</span>`}, x.since ? dtime(x.since) : "-", wBytes(x.tx), wBytes(x.rx)]
+  const rows = W.list.map(x => [x.user || "-", x.host || "-", x.mac, x.ip || "-", x.ssid || "-", x.ap || "-", x.zone || "-", x.loc || "-", x.band, {h: x.rssi == null ? "-" : `<span class="${x.rssi < W.weakAt ? "crit-t" : ""}">${x.rssi} dBm</span>`}, x.since ? dtime(x.since) : "-", wBytes(x.tx), wBytes(x.rx)]
     .concat(W.canKill ? [{h: `<button type="button" class="btn ghost sm" data-wkill="${esc(x.mac)}" data-mode="disconnect" title="Putus sesi client ini">Disconnect</button> <button type="button" class="btn ghost sm" data-wkill="${esc(x.mac)}" data-mode="deauth" title="Deauth: hapus status otorisasi (portal minta login ulang)">Deauth</button>`}] : []));
-  const heads = ["Username", "Host", "MAC", "IP", "SSID", "AP", "Zone", "Band", "Sinyal", "Terhubung sejak", "Download", "Upload"].concat(W.canKill ? ["Aksi"] : []);
+  const heads = ["Username", "Host", "MAC", "IP", "SSID", "AP", "Zone", "Lokasi", "Band", "Sinyal", "Terhubung sejak", "Download", "Upload"].concat(W.canKill ? ["Aksi"] : []);
   const L = W.list;
   return (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
-    P.trend() + P.band() + P.ssid() + P.usage() + P.ap() + P.zone() + P.top() + P.apdown() +
+    P.portal() + P.trend() + P.band() + P.ssid() + P.usage() + P.ap() + P.zone() + P.loc() + P.top() + P.apdown() +
     panel("c12", "Client List", W.total + " client" + (W.total > L.length ? ", menampilkan " + L.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari username, host, MAC, IP, SSID, atau AP" aria-label="Cari client">${wSel("wfSsid", "Semua SSID", L.map(x => x.ssid))}${wSel("wfAp", "Semua AP", L.map(x => x.ap))}${wSel("wfZone", "Semua zone", L.map(x => x.zone))}${wSel("wfBand", "Semua band", L.map(x => x.band))}<span class="sub">${W.canKill ? "Disconnect memutus sesi; Deauth meminta client login ulang" : "Akun Anda hanya bisa melihat"}</span></div><div id="dlist">${tbl(heads, rows, {tall: true, empty: "Tidak ada client aktif."})}</div>`));
 }
