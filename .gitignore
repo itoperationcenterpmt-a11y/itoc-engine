@@ -17,3 +17,6 @@ backend/assets/*.tmp
 Thumbs.db
 # editor/agent local settings
 .claude/settings.local.json
+
+# database dumps (contain personnel data and password hashes)
+backups/

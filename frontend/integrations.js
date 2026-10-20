@@ -24,12 +24,14 @@ function vIntegrations() {
         ${intField(f + "_en", "Status", `<select id="${f}_en" data-f="enabled">${intOpt([["true", "Aktif"], ["false", "Nonaktif"]], String(s.enabled))}</select>`)}
         ${intField(f + "_iv", "Interval (menit)", `<input id="${f}_iv" data-f="interval_min" type="number" min="1" max="1440" value="${esc(s.interval_min)}">`)}
         ${intField(f + "_tls", "Verifikasi TLS", `<select id="${f}_tls" data-f="verify_tls">${intOpt([["true", "Ya"], ["false", "Tidak (sertifikat internal)"]], String(s.verify_tls))}</select>`)}
-        ${intField(f + "_url", "Base URL", `<input id="${f}_url" data-f="base_url" type="url" placeholder="https://host:port" value="${esc(s.base_url)}">`, true)}
+        ${intField(f + "_url", "Base URL", `<input id="${f}_url" data-f="base_url" type="text" autocomplete="off" placeholder="mis. 10.181.1.224 atau https://host/zabbix" value="${esc(s.base_url)}">`, true)}
+        ${(s.extra || []).map(e => intField(f + "_x_" + e.key, e.label, `<textarea id="${f}_x_${e.key}" data-xlist="${esc(e.key)}" rows="3" spellcheck="false">${esc((e.value || []).join("\n"))}</textarea>`, true)).join("")}
         ${creds}
         <div class="acts wide"><button class="btn" type="submit" data-w>Save</button><button class="btn ghost" type="button" data-int="test" data-key="${esc(s.key)}" data-w>Test connection</button><button class="btn ghost" type="button" data-int="sync" data-key="${esc(s.key)}" data-w>Sync now</button></div></form>`
       : `<p class="sub">Sumber ini belum punya API. Data masuk lewat unggah RAW di menu Report → Data.</p>`;
     return `<article class="icard"><header><b>${esc(s.label)}</b><span class="tag ${s.enabled ? "on" : ""}">${s.enabled ? "Aktif" : "Nonaktif"}</span><span class="tag">${s.mode === "api" ? "API" : "Impor"}</span></header>
       <span class="sub">${esc(s.tip || "")}</span>
+      ${s.stats ? `<span class="sub">Perangkat: <b>${s.stats.total}</b> · up ${s.stats.up} · down <b class="${s.stats.down ? "errtx" : ""}">${s.stats.down}</b> · maintenance ${s.stats.maintenance} · nonaktif ${s.stats.disabled}</span>` : ""}
       <span class="sub">Sinkron terakhir OK: ${esc(intDt(s.last_ok_at))}${s.last_error ? ` · <b class="errtx">galat: ${esc(String(s.last_error).slice(0, 120))}</b>` : ""}</span>${body}</article>`;
   }).join("")}</div>`;
 }
@@ -85,6 +87,12 @@ function vWebhooks() {
 }
 
 const intVal = el => el.type === "checkbox" ? el.checked : el.value;
+async function intSaveIntegration(f) {
+  const k = f.dataset.intForm, v = intForm(f), secrets = {}, lists = {};
+  f.querySelectorAll("[data-secret]").forEach(el => { if (el.value.trim()) secrets[el.dataset.secret] = el.value; });
+  f.querySelectorAll("[data-xlist]").forEach(el => { lists[el.dataset.xlist] = el.value.split("\n"); });
+  await send("/api/admin/integrations/" + k, {mode: v.mode, enabled: v.enabled === "true", interval_min: +v.interval_min || 60, base_url: v.base_url, verify_tls: v.verify_tls === "true", secrets, config_lists: lists}, "PUT");
+}
 const intForm = f => Object.fromEntries([...f.querySelectorAll("[data-f]")].map(el => [el.dataset.f, intVal(el)]));
 const intDone = (name, ok, t) => { INT[name] = null; INT.msg = {ok, t}; render(false); };
 
@@ -92,6 +100,7 @@ document.addEventListener("click", async e => {
   const b = e.target.closest("[data-int]"); if (!b) return;
   const a = b.dataset.int, id = b.dataset.id, key = b.dataset.key;
   try {
+    if (a === "test" || a === "sync") { const fm = b.closest("form"); if (fm) { b.disabled = true; b.textContent = "Menyimpan…"; await intSaveIntegration(fm); } }
     if (a === "test") { b.disabled = true; b.textContent = "Menguji…"; const r = await send("/api/admin/integrations/" + key + "/test", {}).catch(er => ({ok: false, msg: er.message})); INT.msg = {ok: r.ok, t: r.msg || "Gagal"}; render(false); }
     else if (a === "sync") { b.disabled = true; b.textContent = "Menyinkron…"; const r = await send("/api/ingest/sync/" + key, {}).catch(er => ({ok: false, msg: er.message})); INT.integrations = null; INT.msg = {ok: r.ok !== false, t: r.ok === false ? r.msg : "Sinkron selesai: " + (r.rows ?? 0) + " baris"}; render(false); }
     else if (a === "clear") { if (!confirm("Hapus kredensial tersimpan?")) return; await send("/api/admin/integrations/" + key, {clear: [b.dataset.name]}, "PUT"); intDone("integrations", true, "Kredensial dihapus."); }
@@ -117,8 +126,7 @@ document.addEventListener("submit", async e => {
       await send(INT.hookEdit && INT.hookEdit.id ? "/api/admin/webhooks/" + INT.hookEdit.id : "/api/admin/webhooks", body, INT.hookEdit && INT.hookEdit.id ? "PUT" : "POST");
       INT.hookEdit = null; intDone("webhooks", true, "Webhook tersimpan.");
     } else {
-      const secrets = {}; f.querySelectorAll("[data-secret]").forEach(el => { if (el.value.trim()) secrets[el.dataset.secret] = el.value; });
-      await send("/api/admin/integrations/" + k, {mode: v.mode, enabled: v.enabled === "true", interval_min: +v.interval_min || 60, base_url: v.base_url, verify_tls: v.verify_tls === "true", secrets}, "PUT");
+      await intSaveIntegration(f);
       intDone("integrations", true, "Tersimpan.");
     }
   } catch (er) { INT.msg = {ok: false, t: (er && er.message) || String(er)}; render(false); }

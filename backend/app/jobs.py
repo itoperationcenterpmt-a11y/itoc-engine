@@ -7,10 +7,10 @@ from sqlalchemy import text
 from .db import session_scope
 from .models import DataSource, SyncLog
 from .store import load_config, bump_data, bump_config
-from .ingest import manageengine, prtg
+from .ingest import manageengine, prtg, zabbix
 
 log = logging.getLogger("itoc.jobs")
-SYNCERS = {"manageengine": manageengine.sync_api, "prtg": prtg.sync_api}
+SYNCERS = {"manageengine": manageengine.sync_api, "prtg": prtg.sync_api, "zabbix": zabbix.sync_api}
 _sched: BackgroundScheduler | None = None
 
 

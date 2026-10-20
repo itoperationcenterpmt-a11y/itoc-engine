@@ -363,3 +363,18 @@ class Webhook(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_status: Mapped[str | None] = mapped_column(String(200))
+
+class ZbxHost(Base):
+    """Perangkat dari Zabbix (host group CCTV-* dan OPERASIONAL-*): snapshot status terkini dari sinkron terakhir."""
+    __tablename__ = "zbx_host"
+    hostid: Mapped[str] = mapped_column(String(20), primary_key=True)
+    host: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[str] = mapped_column(String(40), default="")          # CCTV | OPERASIONAL (dari prefix host group)
+    code: Mapped[str] = mapped_column(String(40), default="")          # kode lokasi dari nama grup, mis. JNR
+    group_name: Mapped[str] = mapped_column(String(255), default="")
+    groups: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    status: Mapped[str] = mapped_column(String(20), default="up")      # up | down | maintenance | disabled
+    down_since: Mapped[datetime | None] = mapped_column(DateTime)
+    problem: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

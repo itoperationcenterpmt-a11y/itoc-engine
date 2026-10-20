@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from .. import mailer, notify, vault
 from ..db import get_db
-from ..models import ApiKey, DataSource, Role, User, Webhook
+from ..ingest import zabbix
+from ..models import ApiKey, DataSource, Role, User, Webhook, ZbxHost
 from ..security import require_admin, require_admin_area
 from ..store import audit, bump_config
 
@@ -19,7 +20,10 @@ router = APIRouter(prefix="/api/admin", tags=["integrations"], dependencies=[Dep
 CREDS = {
     "manageengine": [("me.token", "API token", "token_env", "ME_AUTHTOKEN")],
     "prtg": [("prtg.user", "Username", "user_env", "PRTG_USER"), ("prtg.passhash", "Passhash", "passhash_env", "PRTG_PASSHASH")],
+    "zabbix": [("zabbix.token", "API token", "token_env", "ZABBIX_TOKEN")],
 }
+# isian daftar tambahan per konektor (disimpan di config sumber data): (kunci, label)
+EXTRA = {"zabbix": [("group_prefixes", "Prefix host group (satu per baris)"), ("down_patterns", "Nama trigger yang berarti perangkat down (satu per baris, cocok sebagian)")]}
 
 
 def _cred_state(db: Session, src: DataSource):
@@ -31,6 +35,12 @@ def _cred_state(db: Session, src: DataSource):
     return out
 
 
+def _zbx_stats(db: Session):
+    from sqlalchemy import func
+    rows = dict(db.query(ZbxHost.status, func.count()).group_by(ZbxHost.status).all())
+    return {"total": sum(rows.values()), **{k: rows.get(k, 0) for k in ("up", "down", "maintenance", "disabled")}}
+
+
 @router.get("/integrations")
 def integrations(db: Session = Depends(get_db)):
     rows = []
@@ -38,7 +48,9 @@ def integrations(db: Session = Depends(get_db)):
         rows.append({"key": s.key, "label": s.label, "mode": s.mode, "enabled": s.enabled, "interval_min": s.interval_min, "tip": s.tip,
                      "base_url": (s.config or {}).get("base_url", ""), "verify_tls": (s.config or {}).get("verify_tls", True),
                      "last_ok_at": s.last_ok_at.isoformat() if s.last_ok_at else None, "last_error": s.last_error,
-                     "api_capable": s.key in CREDS, "creds": _cred_state(db, s)})
+                     "api_capable": s.key in CREDS, "creds": _cred_state(db, s),
+                     "extra": [{"key": k, "label": lb, "value": (s.config or {}).get(k) or []} for k, lb in EXTRA.get(s.key, [])],
+                     "stats": _zbx_stats(db) if s.key == "zabbix" else None})
     return {"rows": rows}
 
 
@@ -50,6 +62,7 @@ class IntegrationIn(BaseModel):
     verify_tls: bool | None = None
     secrets: dict[str, str] = {}
     clear: list[str] = []
+    config_lists: dict[str, list[str]] = {}
 
 
 @router.put("/integrations/{key}")
@@ -67,12 +80,12 @@ def integration_set(key: str, body: IntegrationIn, db: Session = Depends(get_db)
         s.interval_min = max(1, min(body.interval_min, 1440))
     cfg = dict(s.config or {})
     if body.base_url is not None:
-        u = body.base_url.strip()
-        if u and not u.startswith(("http://", "https://")):
-            raise HTTPException(422, "URL harus diawali http:// atau https://")
-        cfg["base_url"] = u.rstrip("/")
+        cfg["base_url"] = body.base_url.strip().rstrip("/")      # IP/host saja boleh; skema dan /zabbix dicari otomatis saat Test (Zabbix)
     if body.verify_tls is not None:
         cfg["verify_tls"] = body.verify_tls
+    for k, vals in body.config_lists.items():
+        if k in {e[0] for e in EXTRA.get(key, [])}:
+            cfg[k] = [x.strip() for x in vals if x.strip()]
     s.config = cfg
     allowed = {c[0] for c in CREDS.get(key, [])}
     for name, val in body.secrets.items():
@@ -96,6 +109,17 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
     if not c.get("base_url"):
         raise HTTPException(422, "Base URL belum diisi")
     try:
+        if key == "zabbix":
+            tok = vault.cred(db, "zabbix.token", c.get("token_env", "ZABBIX_TOKEN"))
+            if not tok:
+                raise HTTPException(422, "API token belum diisi")
+            with httpx.Client(timeout=15, verify=c.get("verify_tls", True)) as cl:
+                url = zabbix.resolve(cl, c["base_url"])
+                ver = zabbix.rpc(cl, url, "apiinfo.version", {})                      # method ini wajib tanpa token
+                g = zabbix.rpc(cl, url, "hostgroup.get", {"output": ["groupid"], "search": {"name": c.get("group_prefixes") or ["CCTV-"]}, "searchByAny": True, "startSearch": True}, tok)
+            s.config = {**c, "base_url": url[: -len("/api_jsonrpc.php")]}                  # simpan alamat yang terbukti benar
+            db.commit()
+            return {"ok": True, "msg": f"Terhubung ke Zabbix {ver} di {s.config['base_url']}, token valid, {len(g)} host group cocok prefix"}
         if key == "manageengine":
             tok = vault.cred(db, "me.token", c.get("token_env", "ME_AUTHTOKEN"))
             if not tok:
@@ -114,6 +138,8 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
         raise
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"Server menjawab HTTP {e.response.status_code}")
+    except RuntimeError as e:
+        raise HTTPException(502, str(e)[:200])
     except Exception as e:
         raise HTTPException(502, "Tidak bisa terhubung: " + str(e)[:160])
 

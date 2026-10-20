@@ -1,6 +1,6 @@
 /* IT PMT Dashboard — render, event, Admin (parameter & master data generik), login. */
 "use strict";
-const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
+const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
 const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset"];
@@ -35,7 +35,7 @@ async function downloadReport(kind, btn) {
   } finally { btn.innerHTML = old; btn.disabled = false; }
 }
 /* Tata letak halaman (widget): urutan, ukuran, judul, tampil/sembunyi per role. Admin mengatur lewat tombol Customize; tersimpan di tabel layout. */
-const LAYOUT_PAGES = ["ringkasan", "servicedesk", "noc", "soc"], SIZES = [["c3", "S"], ["c4", "M"], ["c6", "L"], ["c8", "XL"], ["c12", "Full"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
+const LAYOUT_PAGES = ["ringkasan", "servicedesk", "noc", "soc", "devices"], SIZES = [["c3", "S"], ["c4", "M"], ["c6", "L"], ["c8", "XL"], ["c12", "Full"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
 const slug = s => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const nearest = c => { const n = +(String(c).slice(1)) || 12; return SIZES.reduce((a, s) => Math.abs(+s[0].slice(1) - n) < Math.abs(+a[0].slice(1) - n) ? s : a)[0]; };
 function layoutRows(page, role) {
