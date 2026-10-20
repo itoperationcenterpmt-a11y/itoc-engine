@@ -15,7 +15,7 @@ async function render(reload) {
     finally { if (my === seq) $("view").classList.remove("loading"); }
     renderShell();
   }
-  try { $("view").innerHTML = VIEWS[S.tab](); if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Gagal menampilkan halaman: " + esc(e.message))}</section></div>`; }
+  try { $("view").innerHTML = VIEWS[S.tab](); if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); initDevMaps(); } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Gagal menampilkan halaman: " + esc(e.message))}</section></div>`; }
 }
 /* Admin hanya-baca (role dengan admin_view tanpa is_admin): semua kontrol ubah disembunyikan; server tetap menolak perubahan. */
 function lockAdmin() {
@@ -90,7 +90,7 @@ function toggleCatalog() { const c = $("laycat"); if (!c) return; c.hidden = !c.
 function addWidget(key) {
   const w = widgetFind(key), grid = document.querySelector(".grid.lay"); if (!w || !grid || grid.querySelector(`[data-wkey="${CSS.escape("w-" + w.key)}"]`)) return;
   const {el} = widgetBlock(w); el.className = el.className.replace(SZ, "").trim() + " " + w.size; el.dataset.size = w.size; el.dataset.title = "";
-  grid.appendChild(el); addTools(el); $("laycat").innerHTML = catalogHtml(); el.scrollIntoView({behavior: "smooth", block: "center"});
+  grid.appendChild(el); addTools(el); initDevMaps(); $("laycat").innerHTML = catalogHtml(); el.scrollIntoView({behavior: "smooth", block: "center"});
 }
 function renderOff() {
   const t = $("layoff"); if (!t) return;

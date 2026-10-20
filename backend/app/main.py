@@ -26,7 +26,7 @@ app = FastAPI(title="Dashboard IT Pelindo Multi Terminal API", version="1.0", li
 _origins = [o.strip() for o in settings().cors_origins.split(",") if o.strip() and o.strip() != "*"]
 if _origins:
     app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type", "X-API-Key"])
-CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 
 
 @app.middleware("http")
@@ -35,7 +35,7 @@ async def security_headers(request, call_next):
     h = resp.headers
     h["X-Content-Type-Options"] = "nosniff"
     h["X-Frame-Options"] = "DENY"
-    h["Referrer-Policy"] = "no-referrer"
+    h["Referrer-Policy"] = "strict-origin-when-cross-origin"   # origin saja ke situs lain (dibutuhkan OSM untuk tile peta)
     h["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     h["Content-Security-Policy"] = CSP
     if request.url.path.startswith("/api/"):

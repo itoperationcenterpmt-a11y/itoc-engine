@@ -24,32 +24,32 @@ const basemapPath = (B, X, Y) => (BASEMAP || []).filter(r => r.some(([lo, la]) =
 
 /* Peta lokasi (SVG mandiri, tanpa server peta): titik = lokasi dengan koordinat di master Lokasi; ukuran = jumlah perangkat; warna = availability.
    Batas peta menyesuaikan sebaran lokasi (dibatasi parameter dev.map_bounds); label hanya untuk titik yang tidak bertumpuk. */
+/* Peta lokasi perangkat memakai Leaflet + OpenStreetMap. Markup hanya menyiapkan wadah; peta dibuat oleh initDevMaps() setelah halaman dirender. */
+const DMAPS = {};
 function mapSvg(D) {
   if (!D.map.length) return empty("Belum ada lokasi berkoordinat. Isi lat dan lon di Admin → Master Data → Lokasi.");
-  const P = Object.assign({lat_min: -11, lat_max: 7, lon_min: 94, lon_max: 142}, CFG.params["dev.map_bounds"] || {}), pad = 2;
-  const la = D.map.map(p => p.lat), lo = D.map.map(p => p.lon);
-  const B = {lat_min: Math.max(P.lat_min, Math.min(...la) - pad), lat_max: Math.min(P.lat_max, Math.max(...la) + pad), lon_min: Math.max(P.lon_min, Math.min(...lo) - pad), lon_max: Math.min(P.lon_max, Math.max(...lo) + pad)};
-  const W = 960, H = Math.max(260, Math.min(620, Math.round(W * (B.lat_max - B.lat_min) / (B.lon_max - B.lon_min)))), X = v => (v - B.lon_min) / (B.lon_max - B.lon_min) * W, Y = v => (B.lat_max - v) / (B.lat_max - B.lat_min) * H;
-  let g = BASEMAP ? `<path class="land" d="${basemapPath(B, X, Y)}"/>` : "";
-  for (let v = Math.ceil(B.lon_min / 5) * 5; v <= B.lon_max; v += 5) g += `<line class="gl" x1="${X(v)}" x2="${X(v)}" y1="0" y2="${H}"/><text x="${X(v) + 4}" y="${H - 6}">${v}°E</text>`;
-  for (let v = Math.ceil(B.lat_min / 5) * 5; v <= B.lat_max; v += 5) g += `<line class="gl" y1="${Y(v)}" y2="${Y(v)}" x1="0" x2="${W}"/><text x="4" y="${Y(v) - 4}">${Math.abs(v)}°${v < 0 ? "S" : v > 0 ? "N" : ""}</text>`;
-  const pts = D.map.map(p => ({...p, cx: X(p.lon), cy: Y(p.lat), r: 7 + Math.sqrt(p.total) * 1.4})), boxes = [];
-  const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-  const label = new Map();
-  [...pts].sort((a, b) => b.down - a.down || b.total - a.total).forEach(p => {
-    const t = p.k.replace(/^Branch /, ""), w = t.length * 7.2 + 6;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1], [0, 1]]) {
-      const bx = dx > 0 ? p.cx + p.r + 3 : dx < 0 ? p.cx - p.r - 3 - w : p.cx - w / 2, by = dy < 0 ? p.cy - p.r - 16 : dy > 0 ? p.cy + p.r + 2 : p.cy - 8, bb = {x: bx, y: by, w, h: 14};
-      if (bx < 0 || bx + w > W || by < 0 || by + 14 > H) continue;
-      if (boxes.some(o => hit(o, bb)) || pts.some(q => q !== p && hit(bb, {x: q.cx - q.r, y: q.cy - q.r, w: q.r * 2, h: q.r * 2}))) continue;
-      boxes.push(bb); label.set(p.k, {x: bx + w / 2, y: by + 11, t, anchor: "middle"}); break;
-    }
+  const id = "dmap" + Object.keys(DMAPS).length + "x" + Math.random().toString(36).slice(2, 8);
+  DMAPS[id] = D.map;
+  return `<div class="dmapbox" id="${id}" role="img" aria-label="Peta lokasi perangkat"></div>` + (D.noCoord.length ? `<span class="sub">Belum punya koordinat: ${esc(D.noCoord.slice(0, 8).join(", "))}${D.noCoord.length > 8 ? ", …" : ""}</span>` : "");
+}
+function initDevMaps() {
+  if (typeof L === "undefined") return;
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || "#888";
+  const colour = {g: css("--good"), w: css("--warn"), c: css("--crit"), n: css("--low")};
+  document.querySelectorAll(".dmapbox:not([data-ready])").forEach(el => {
+    const pts = DMAPS[el.id] || []; el.dataset.ready = "1";
+    const map = L.map(el, {scrollWheelZoom: false, worldCopyJump: true, minZoom: 3, maxZoom: 18}).setView([-2.5, 118], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {subdomains: "abc", maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
+    const bounds = [];
+    [...pts].sort((a, b) => b.total - a.total).forEach(p => {
+      const cl = p.avail == null ? "n" : p.avail >= 0.99 ? "g" : p.avail >= 0.95 ? "w" : "c";
+      const m = L.circleMarker([p.lat, p.lon], {radius: 6 + Math.sqrt(p.total) * 1.2, color: p.down ? colour.c : "#ffffff", weight: p.down ? 3 : 1, fillColor: colour[cl], fillOpacity: 0.85}).addTo(map);
+      m.bindTooltip(`<b>${esc(p.k)}</b><br>${p.total} perangkat · ${p.down} down · ${p.deg || 0} interface<br>availability ${p.avail != null ? pc(p.avail, 1) : "-"}`);
+      bounds.push([p.lat, p.lon]);
+    });
+    if (bounds.length) map.fitBounds(bounds, {padding: [30, 30], maxZoom: 9});
+    new ResizeObserver(() => map.invalidateSize()).observe(el);
   });
-  const dots = [...pts].sort((a, b) => b.total - a.total).map(p => { const cl = p.avail == null ? "n" : p.avail >= 0.99 ? "g" : p.avail >= 0.95 ? "w" : "c", cx = p.cx.toFixed(1), cy = p.cy.toFixed(1);
-    const tip = esc(`${p.k}\n${p.total} perangkat · ${p.down} down · ${p.deg || 0} interface\navailability ${p.avail != null ? pc(p.avail, 1) : "-"}`);
-    return (p.down ? `<circle class="ring" cx="${cx}" cy="${cy}" r="${(p.r + 4).toFixed(1)}"/>` : "") + `<circle class="pt ${cl}" cx="${cx}" cy="${cy}" r="${p.r.toFixed(1)}" data-tip="${tip}"/>`; }).join("");
-  const txt = [...label.values()].map(l => `<text class="lb" x="${l.x.toFixed(1)}" y="${l.y.toFixed(1)}" text-anchor="${l.anchor}">${esc(l.t)}</text>`).join("");
-  return `<svg class="dmap" viewBox="0 0 ${W} ${H}" role="img" aria-label="Peta lokasi perangkat">${g}${dots}${txt}</svg>` + (D.noCoord.length ? `<span class="sub">Belum punya koordinat: ${esc(D.noCoord.slice(0, 8).join(", "))}${D.noCoord.length > 8 ? ", …" : ""}</span>` : "");
 }
 function vDevices() {
   const D = V.dev, grid = h => `<div class="grid">${h}</div>`;
