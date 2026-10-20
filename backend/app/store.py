@@ -11,7 +11,8 @@ from .timeutil import ShiftClock, now_local
 _lock = threading.Lock()
 _state = {"cfg_ver": 0, "data_ver": 0, "cfg": None, "cfg_at": 0.0}
 _results: dict = {}
-CFG_TTL = 60  # detik; proses lain (worker) ikut tersegarkan paling lambat selama ini
+CFG_TTL = 3   # detik; konfigurasi (layout, menu, parameter) di worker lain ikut tersegarkan paling lambat selama ini
+RES_TTL = 60  # detik; hasil hitungan view dihitung ulang paling lambat selama ini bila data berubah di proses lain
 
 
 def bump_config():
@@ -29,7 +30,7 @@ def bump_data():
 
 def cached(key: tuple, fn):
     # ember waktu 60 dtk: data baru dari proses worker ikut terbaca walau bump_data terjadi di proses lain
-    k = (_state["cfg_ver"], _state["data_ver"], int(time.time() // CFG_TTL)) + key
+    k = (_state["cfg_ver"], _state["data_ver"], int(time.time() // RES_TTL)) + key
     if k in _results:
         return _results[k]
     v = fn()

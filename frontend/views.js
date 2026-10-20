@@ -85,16 +85,19 @@ function renderShell() {
   $("fShift").innerHTML = SN.map((l, i) => `<button type="button" data-s="${i}" aria-pressed="${S.sf === i}" ${i ? `title="${shiftHours(i)}"` : ""}>${l}</button>`).join("");
   $("fSite").innerHTML = `<option value="">${CFG.me.site ? "Lokasi akun Anda" : "All lokasi"}</option>` + [...CFG.sites, ...(S.tab === "devices" && V.dev ? V.dev.unmapped.map(u => u.code) : [])].map(s => `<option ${s === S.site ? "selected" : ""}>${esc(s)}</option>`).join("");
   $("fFrom").value = S.from; $("fTo").value = S.to; $("fFrom").max = $("fTo").max = nowShift().today; $("fFrom").min = $("fTo").min = CFG.params.data_start; $("fCmp").checked = S.cmp;
-  const ap = APPLY[S.tab], anyF = !!(ap.p || ap.l || ap.k || ap.t), KL = CFG.params["dev.kind_labels"] || {}, SL = [["", "All"], ["down", "Down"], ["degraded", "Interface"], ["up", "Online"], ["maintenance", "Maintenance"], ["disabled", "Disabled"]];
-  $("fKind").innerHTML = [["", "All"], ...Object.entries(KL)].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
+  const ap = APPLY[S.tab], anyF = !!(ap.p || ap.l || ap.k || ap.t || ap.g), KL = CFG.params["dev.kind_labels"] || {}, SL = [["", "All"], ["down", "Down"], ["degraded", "Interface"], ["up", "Online"], ["maintenance", "Maintenance"], ["disabled", "Disabled"]];
+  const kinds = new Map(Object.entries(KL)); ((V.dev && V.dev.byKind) || []).forEach(k => kinds.set(k.key, KL[k.key] || k.k));
+  const gl = ((V.dev && V.dev.groups) || []).filter(g => !S.kind || g.kind === S.kind);
+  $("fGrp").innerHTML = `<option value="">All groups</option>` + gl.map(g => `<option value="${esc(g.name)}" ${g.name === S.grp ? "selected" : ""}>${esc(g.name)} (${g.n})</option>`).join("");
+  $("fKind").innerHTML = [["", "All"], ...kinds].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
   $("fStat").innerHTML = SL.map(([k, l]) => `<button type="button" data-st="${k}" aria-pressed="${S.dstat === k}">${l}</button>`).join("");
-  $("gKind").hidden = !ap.k; $("gStat").hidden = !ap.t;
+  $("gKind").hidden = !ap.k; $("gStat").hidden = !ap.t; $("gGrp").hidden = !ap.g;
   $("fwrap").hidden = !anyF;
   $("fbar").classList.toggle("off", !anyF);
   [["gPeriode", ap.p], ["gShift", ap.s], ["gSite", ap.l], ["gCmp", ap.p && ap.c]].forEach(([id, on]) => { const el = $(id); el.classList.toggle("na", !on); el.querySelectorAll("button,select,input").forEach(x => x.disabled = !on); });
   if (CFG.me.site) { $("fSite").disabled = true; $("gSite").classList.add("na"); }
   const chips = [], active = [];
-  if (ap.p) active.push(rangeTxt()); if (ap.s && S.sf) active.push("shift " + SN[S.sf] + " (" + shiftHours(S.sf) + ")"); if (ap.l && S.site) active.push(S.site); if (ap.k && S.kind) active.push(KL[S.kind] || S.kind); if (ap.t && S.dstat) active.push(SL.find(x => x[0] === S.dstat)[1]); if (S.cmp && $("gCmp").querySelector("input:not(:disabled)")) active.push("dibanding " + dmon(prevRange().from) + " – " + dmon(prevRange().to));
+  if (ap.p) active.push(rangeTxt()); if (ap.s && S.sf) active.push("shift " + SN[S.sf] + " (" + shiftHours(S.sf) + ")"); if (ap.l && S.site) active.push(S.site); if (ap.k && S.kind) active.push(KL[S.kind] || S.kind); if (ap.g && S.grp) active.push(S.grp); if (ap.t && S.dstat) active.push(SL.find(x => x[0] === S.dstat)[1]); if (S.cmp && $("gCmp").querySelector("input:not(:disabled)")) active.push("dibanding " + dmon(prevRange().from) + " – " + dmon(prevRange().to));
   if (anyF) { chips.push(`<span class="on">Active filter: <b>${esc(active.join(" · ") || "Semua")}</b></span>`);
     if (!ap.s && S.sf || !ap.l && S.site) chips.push(`<span class="na-txt">${(!ap.s && S.sf ? "Shift" : "") + (!ap.s && S.sf && !ap.l && S.site ? " dan " : "") + (!ap.l && S.site ? "lokasi" : "")} tidak berlaku di halaman ini</span>`); }
   $("fApplies").innerHTML = chips.join("");

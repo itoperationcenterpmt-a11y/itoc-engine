@@ -11,9 +11,9 @@ from .security import can_see
 
 
 class Filt:
-    def __init__(self, d_from: date, d_to: date, shift: int, site: str, cmp: bool, sensor: str = "", kind: str = "", dstat: str = ""):
+    def __init__(self, d_from: date, d_to: date, shift: int, site: str, cmp: bool, sensor: str = "", kind: str = "", dstat: str = "", grp: str = ""):
         self.d_from, self.d_to, self.shift, self.site, self.cmp, self.sensor = d_from, d_to, shift, site, cmp, sensor
-        self.kind, self.dstat = kind, dstat       # filter kategori dan status (menu Devices)
+        self.kind, self.dstat, self.grp = kind, dstat, grp       # filter kategori dan status (menu Devices)
 
     @property
     def prev(self):
@@ -132,7 +132,7 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
                 q = q.where(M.Handover.site == st)
             V["ho_open"] = [ho_json(h) for h in db.scalars(q.order_by(M.Handover.created_at.desc()))]
     if tab == "devices" or (tab == "ringkasan" and ok("devices")):
-        V["dev"] = DEV.build(db, cfg, st, f.kind, f.dstat, full=(tab == "devices"))
+        V["dev"] = DEV.build(db, cfg, st, f.kind, f.dstat, full=(tab == "devices"), grp=f.grp)
     if tab == "noc":
         nb = _net_base(db, cfg, a, b, sh, st)
         sens = nb["N"]["sensors"]

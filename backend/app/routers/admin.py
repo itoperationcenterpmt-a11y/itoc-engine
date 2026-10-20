@@ -160,16 +160,18 @@ def layout_set(body: LayoutIn, db: Session = Depends(get_db), user: User = Depen
     if body.role and not db.get(Role, body.role):
         raise HTTPException(404, "Role tidak dikenal")
     db.query(Layout).filter_by(page=body.page, role=body.role).delete()
-    seen = set()
+    seen, rows = set(), []
     for b in body.blocks:
         if b.key in seen or b.size not in ("", "c3", "c4", "c6", "c8", "c12"):
             continue
         seen.add(b.key)
-        db.add(Layout(page=body.page, role=body.role, key=b.key[:80], title=b.title.strip()[:120], size=b.size, enabled=b.enabled, sort=len(seen)))
+        r = {"page": body.page, "role": body.role, "key": b.key[:80], "title": b.title.strip()[:120], "size": b.size, "enabled": b.enabled, "sort": len(seen)}
+        rows.append(r)
+        db.add(Layout(**r))
     audit(db, user.username, f"Mengatur tata letak {body.page}" + (f" untuk role {body.role}" if body.role else " (semua role)"))
     db.commit()
     bump_config()
-    return {"ok": True, "n": len(seen)}
+    return {"ok": True, "n": len(seen), "rows": rows}
 
 
 @router.delete("/layout/{page}")

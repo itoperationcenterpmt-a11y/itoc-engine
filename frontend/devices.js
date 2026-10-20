@@ -8,6 +8,20 @@ const devPill = s => { const x = DEV_STAT[s] || ["idle", s]; return pill(x[0], x
 const devLegend = () => `<div class="legend"><span><b style="background:var(--good)"></b>Online</span><span><b style="background:var(--serious)"></b>Interface</span><span><b style="background:var(--warn)"></b>Maintenance</span><span><b style="background:var(--crit)"></b>Down</span></div>`;
 const mapLegend = () => `<div class="legend"><span><b style="background:var(--good)"></b>Availability 99% atau lebih</span><span><b style="background:var(--warn)"></b>95 sampai 99%</span><span><b style="background:var(--crit)"></b>di bawah 95%</span><span>Ukuran = jumlah perangkat, cincin merah = ada yang down</span></div>`;
 
+/* Lapisan peta dasar (garis pantai): berkas GeoJSON atau {"rings": [[[lon, lat], ...]]} di alamat parameter dev.basemap_url (mis. assets/id-map.json). Kosong = titik di atas grid saja. */
+let BASEMAP = null;
+async function loadBasemap() {
+  const u = (CFG.params["dev.basemap_url"] || "").trim(); if (!u || BASEMAP) return;
+  try {
+    const j = await (await fetch(u)).json(), rings = [];
+    const poly = c => c.forEach((r, i) => rings.push(r));
+    (j.features || [j]).forEach(f => { const g = f.geometry || f; if (g.type === "Polygon") poly(g.coordinates); else if (g.type === "MultiPolygon") g.coordinates.forEach(poly); else if (f.rings) f.rings.forEach(r => rings.push(r)); });
+    BASEMAP = rings.length ? rings : null;
+  } catch (_) { BASEMAP = null; }
+}
+const basemapPath = (B, X, Y) => (BASEMAP || []).filter(r => r.some(([lo, la]) => lo >= B.lon_min - 5 && lo <= B.lon_max + 5 && la >= B.lat_min - 5 && la <= B.lat_max + 5))
+  .map(r => "M" + r.map(([lo, la]) => X(lo).toFixed(1) + " " + Y(la).toFixed(1)).join("L") + "Z").join("");
+
 /* Peta lokasi (SVG mandiri, tanpa server peta): titik = lokasi dengan koordinat di master Lokasi; ukuran = jumlah perangkat; warna = availability.
    Batas peta menyesuaikan sebaran lokasi (dibatasi parameter dev.map_bounds); label hanya untuk titik yang tidak bertumpuk. */
 function mapSvg(D) {
@@ -16,7 +30,7 @@ function mapSvg(D) {
   const la = D.map.map(p => p.lat), lo = D.map.map(p => p.lon);
   const B = {lat_min: Math.max(P.lat_min, Math.min(...la) - pad), lat_max: Math.min(P.lat_max, Math.max(...la) + pad), lon_min: Math.max(P.lon_min, Math.min(...lo) - pad), lon_max: Math.min(P.lon_max, Math.max(...lo) + pad)};
   const W = 960, H = Math.max(260, Math.min(620, Math.round(W * (B.lat_max - B.lat_min) / (B.lon_max - B.lon_min)))), X = v => (v - B.lon_min) / (B.lon_max - B.lon_min) * W, Y = v => (B.lat_max - v) / (B.lat_max - B.lat_min) * H;
-  let g = "";
+  let g = BASEMAP ? `<path class="land" d="${basemapPath(B, X, Y)}"/>` : "";
   for (let v = Math.ceil(B.lon_min / 5) * 5; v <= B.lon_max; v += 5) g += `<line class="gl" x1="${X(v)}" x2="${X(v)}" y1="0" y2="${H}"/><text x="${X(v) + 4}" y="${H - 6}">${v}°E</text>`;
   for (let v = Math.ceil(B.lat_min / 5) * 5; v <= B.lat_max; v += 5) g += `<line class="gl" y1="${Y(v)}" y2="${Y(v)}" x1="0" x2="${W}"/><text x="4" y="${Y(v) - 4}">${Math.abs(v)}°${v < 0 ? "S" : v > 0 ? "N" : ""}</text>`;
   const pts = D.map.map(p => ({...p, cx: X(p.lon), cy: Y(p.lat), r: 7 + Math.sqrt(p.total) * 1.4})), boxes = [];

@@ -27,7 +27,7 @@ def _agg(items):
     return {"total": len(items), "up": up, "down": down, "deg": c["degraded"], "maint": c["maintenance"], "off": c["disabled"], "avail": up / (up + down) if up + down else None}
 
 
-def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str = "", full: bool = False) -> dict:
+def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str = "", full: bool = False, grp: str = "") -> dict:
     labels = cfg.p("dev.kind_labels", {}) or {}
     chronic_h = 24 * int(cfg.p("dev.chronic_days", 30) or 30)
     amap = _alias_map(db)
@@ -44,7 +44,7 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
             unmapped[loc] = unmapped.get(loc, 0) + 1
         allrows.append((h, loc))
     by_site = [r for r in allrows if not site or r[1] == site]
-    rows = [r for r in by_site if not kind or r[0].kind == kind]
+    rows = [r for r in by_site if (not kind or r[0].kind == kind) and (not grp or grp in (r[0].groups or []))]
 
     def age(h):
         return round((now - h.down_since).total_seconds() / 3600, 1) if h.down_since else None
@@ -75,6 +75,21 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
             mp.append({"k": k, "lat": s.lat, "lon": s.lon, **a})
         else:
             nocoord.append(k)
+    # daftar group (untuk filter) dan data peta per group (untuk widget peta yang dikhususkan, mis. Network-SDWAN); mengikuti filter lokasi saja
+    gcount, gmaps = {}, {}
+    for h, loc in by_site:
+        for gname in (h.groups or []):
+            gcount.setdefault(gname, [h.kind or "-", 0])[1] += 1
+            gmaps.setdefault(gname, {}).setdefault(loc, []).append((h, loc))
+    groups = sorted(({"name": n, "kind": v[0], "n": v[1]} for n, v in gcount.items()), key=lambda x: x["name"])
+    group_maps = {}
+    for gname, lg in gmaps.items():
+        pts = []
+        for loc, v in lg.items():
+            s = sites.get(loc)
+            if s is not None and s.lat is not None and s.lon is not None:
+                pts.append({"k": loc, "lat": s.lat, "lon": s.lon, **_agg(v)})
+        group_maps[gname] = pts
     kind_loc, kind_down = {}, {}
     for key, v in kinds.items():
         lg = {}
@@ -94,6 +109,6 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
     stale = bool(last) and (datetime.utcnow() - last).total_seconds() > every * 60 * 3
     return {"all": _agg(rows), "chronic": sum(1 for d in down if d["ageH"] is not None and d["ageH"] > chronic_h), "chronicDays": cdays,
             "byKind": by_kind, "byLoc": by_loc, "down": down[:200], "downN": len(down), "ageDist": age_dist, "map": mp, "noCoord": sorted(nocoord),
-            "unmapped": [{"code": c, "n": n} for c, n in sorted(unmapped.items(), key=lambda x: -x[1])], "kindLoc": kind_loc, "kindDown": kind_down,
+            "groups": groups, "groupMaps": group_maps, "unmapped": [{"code": c, "n": n} for c, n in sorted(unmapped.items(), key=lambda x: -x[1])], "kindLoc": kind_loc, "kindDown": kind_down,
             "list": lst, "listN": list_n, "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": stale,
             "configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled), "error": src.last_error if src else None}

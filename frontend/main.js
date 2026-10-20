@@ -3,12 +3,12 @@
 const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
-const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat"];
+const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp"];
 let seq = 0;
 async function render(reload) {
   writeHash(); renderShell();
   if (reload) {
-    const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset, kind: S.kind, dstat: S.dstat}), my = ++seq;
+    const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset, kind: S.kind, dstat: S.dstat, grp: S.grp}), my = ++seq;
     $("view").classList.add("loading");
     try { const v = await api(`/api/view/${S.tab}?${q}`); if (my !== seq) return; V = v; }
     catch (e) { if (my === seq) $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty(esc(e.message))}</section></div>`; return; }
@@ -59,7 +59,7 @@ function applyLayout() {
     return {key, blk, h2, i, s: byKey[key] ? byKey[key].sort : 1e6 + i};
   }).sort((a, b) => a.s - b.s || a.i - b.i);
   Object.keys(byKey).filter(k => k.startsWith("w-")).forEach((k, j) => {         // widget dari katalog yang dipasang di layout ini
-    const w = widgetList().find(x => "w-" + x.key === k); if (!w || !widgetOk(w)) return;
+    const w = widgetFind(k.slice(2)); if (!w || !widgetOk(w)) return;
     const {el, h2} = widgetBlock(w); blocks.push({key: k, blk: el, h2, i: 1e5 + j, s: byKey[k].sort});
   });
   blocks.sort((a, b) => a.s - b.s || a.i - b.i);
@@ -77,9 +77,9 @@ function applyLayout() {
   v.querySelectorAll(":scope > .grid:not(.lay)").forEach(g => { g.querySelectorAll(".stack").forEach(s => { if (!s.children.length) s.remove(); }); if (!g.children.length) g.remove(); });
   if (!S.layEdit) return;
   grid.querySelectorAll(".wblock").forEach(addTools);
-  $("laybar").innerHTML = LAYBAR();
+  $("laybar").innerHTML = LAYBAR(); renderOff();
 }
-const LAYBAR = () => `<div class="laybar"><b>Customize</b><label>Apply to <select id="layRole"><option value="">All roles</option>${Object.values(CFG.roles).map(r => `<option value="${esc(r.key)}" ${r.key === S.layRole ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="layAdd">+ Add widget</button><button class="btn" type="button" id="laySave">Save</button><button class="btn ghost" type="button" id="layReset">Reset</button><button class="btn ghost" type="button" id="layCancel">Cancel</button></div><div class="laycat" id="laycat" hidden></div>`;
+const LAYBAR = () => `<div class="laybar"><b>Customize</b><label>Apply to <select id="layRole"><option value="">All roles</option>${Object.values(CFG.roles).map(r => `<option value="${esc(r.key)}" ${r.key === S.layRole ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="layAdd">+ Add widget</button><button class="btn" type="button" id="laySave">Save</button><button class="btn ghost" type="button" id="layReset">Reset</button><button class="btn ghost" type="button" id="layCancel">Cancel</button></div><div class="layoff" id="layoff"></div><div class="laycat" id="laycat" hidden></div>`;
 function addTools(blk) {
     const t = document.createElement("div"), cur = nearest(blk.dataset.size || blk.dataset.dsize); t.className = "wtools";
     t.innerHTML = `<span class="wdrag" title="Drag to move">⠿ Move</span><button type="button" data-lay="up" title="Move up">▲</button><button type="button" data-lay="down" title="Move down">▼</button><select data-lay-size aria-label="Size">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Title" value="${esc(blk.dataset.title || "")}" aria-label="Title"><button type="button" data-lay="eye">${blk.classList.contains("off") ? "Show" : "Hide"}</button>${blk.dataset.added ? `<button type="button" data-lay="rm" title="Remove widget">Remove</button>` : ""}`;
@@ -88,14 +88,19 @@ function addTools(blk) {
 }
 function toggleCatalog() { const c = $("laycat"); if (!c) return; c.hidden = !c.hidden; if (!c.hidden) c.innerHTML = catalogHtml(); }
 function addWidget(key) {
-  const w = widgetList().find(x => x.key === key), grid = document.querySelector(".grid.lay"); if (!w || !grid || grid.querySelector(`[data-wkey="w-${key}"]`)) return;
+  const w = widgetFind(key), grid = document.querySelector(".grid.lay"); if (!w || !grid || grid.querySelector(`[data-wkey="${CSS.escape("w-" + w.key)}"]`)) return;
   const {el} = widgetBlock(w); el.className = el.className.replace(SZ, "").trim() + " " + w.size; el.dataset.size = w.size; el.dataset.title = "";
   grid.appendChild(el); addTools(el); $("laycat").innerHTML = catalogHtml(); el.scrollIntoView({behavior: "smooth", block: "center"});
 }
+function renderOff() {
+  const t = $("layoff"); if (!t) return;
+  const off = [...document.querySelectorAll(".grid.lay > .wblock.off")];
+  t.innerHTML = off.length ? `<span class="lbl">Disembunyikan</span>` + off.map(b => `<button type="button" class="btn ghost sm" data-lay-show="${esc(b.dataset.wkey)}" title="Tampilkan lagi">${esc(b.dataset.title || b.dataset.dtitle || b.dataset.wkey)} · Show</button>`).join("") : "";
+}
 function moveBlock(b, dir) {
   const blk = b.closest(".wblock");
-  if (dir === "eye") { const off = blk.classList.toggle("off"); b.textContent = off ? "Show" : "Hide"; }
-  else if (dir === "rm") { blk.remove(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); }
+  if (dir === "eye") { const off = blk.classList.toggle("off"); b.textContent = off ? "Show" : "Hide"; renderOff(); }
+  else if (dir === "rm") { blk.remove(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); renderOff(); }
   else if (dir === "up" && blk.previousElementSibling) blk.parentNode.insertBefore(blk, blk.previousElementSibling);
   else if (dir === "down" && blk.nextElementSibling) blk.parentNode.insertBefore(blk.nextElementSibling, blk);
 }
@@ -103,29 +108,35 @@ function moveBlock(b, dir) {
 let LDRAG = null;
 document.addEventListener("pointerdown", e => {
   const t = e.target.closest && e.target.closest(".wdrag,.wresize"); if (!t || !S.layEdit) return;
-  const blk = t.closest(".wblock"); LDRAG = {mode: t.classList.contains("wdrag") ? "move" : "size", blk}; blk.classList.add("lifting"); e.preventDefault();
+  const blk = t.closest(".wblock"); LDRAG = {mode: t.classList.contains("wdrag") ? "move" : "size", blk}; blk.classList.add("lifting"); document.body.classList.add("dragging"); e.preventDefault();
+  try { t.setPointerCapture(e.pointerId); } catch (_) {}
 });
 document.addEventListener("pointermove", e => {
-  if (!LDRAG) return; const {blk, mode} = LDRAG, grid = blk.parentNode;
+  if (!LDRAG) return;
+  if (e.buttons === 0) { endDrag(); return; }            // tombol sudah dilepas di luar jendela: akhiri agar tidak "nyangkut"
+  const {blk, mode} = LDRAG, grid = blk.parentNode;
   if (mode === "size") {
     const g = grid.getBoundingClientRect(), b = blk.getBoundingClientRect(), size = nearest("c" + Math.round((e.clientX - b.left) / g.width * 12));
     if (blk.dataset.size !== size) { blk.className = blk.className.replace(SZ, "").trim() + " " + size; blk.dataset.size = size; const sel = blk.querySelector("[data-lay-size]"); if (sel) sel.value = size; }
   } else {
     const over = document.elementsFromPoint(e.clientX, e.clientY).map(x => x.closest && x.closest(".grid.lay > .wblock")).find(x => x && x !== blk);
-    if (over) { const r = over.getBoundingClientRect(), bb = blk.getBoundingClientRect(), sameRow = Math.abs(r.top - bb.top) < 40, after = sameRow ? e.clientX > r.left + r.width / 2 : e.clientY > r.top + r.height / 2; grid.insertBefore(blk, after ? over.nextSibling : over); }
+    if (over && performance.now() - (LDRAG.t0 || 0) > 90) { LDRAG.t0 = performance.now(); const r = over.getBoundingClientRect(), bb = blk.getBoundingClientRect(), sameRow = Math.abs(r.top - bb.top) < 40, after = sameRow ? e.clientX > r.left + r.width / 2 : e.clientY > r.top + r.height / 2; grid.insertBefore(blk, after ? over.nextSibling : over); }
   }
 });
-const endDrag = () => { if (LDRAG) { LDRAG.blk.classList.remove("lifting"); LDRAG = null; } };
-document.addEventListener("pointerup", endDrag); document.addEventListener("pointercancel", endDrag);
+const endDrag = () => { if (LDRAG) { LDRAG.blk.classList.remove("lifting"); LDRAG = null; } document.body.classList.remove("dragging"); };
+document.addEventListener("pointerup", endDrag); document.addEventListener("pointercancel", endDrag); document.addEventListener("lostpointercapture", endDrag); window.addEventListener("blur", endDrag);
+document.addEventListener("dragstart", e => { if (LDRAG) e.preventDefault(); });
 async function saveLayout() {
   const blocks = [...$("view").querySelectorAll(".grid.lay > .wblock")].map(b => { const t = (b.dataset.title || "").trim(); return {key: b.dataset.wkey, title: t === (b.dataset.dtitle || "") ? "" : t, size: b.dataset.size || "", enabled: !b.classList.contains("off")}; });
-  await send("/api/admin/layout", {page: S.tab, role: S.layRole, blocks}, "PUT");
-  await reloadConfig(); set({layEdit: false});
+  const r = await send("/api/admin/layout", {page: S.tab, role: S.layRole, blocks}, "PUT");
+  CFG.layouts = (CFG.layouts || []).filter(x => !(x.page === S.tab && x.role === S.layRole)).concat(r.rows || []);   // langsung dipakai, tanpa menunggu worker lain
+  set({layEdit: false});
 }
 async function resetLayout() {
   if (!confirm("Reset this page layout to default?")) return;
   await api("/api/admin/layout/" + S.tab + "?role=" + encodeURIComponent(S.layRole), {method: "DELETE"});
-  await reloadConfig(); set({layEdit: false});
+  CFG.layouts = (CFG.layouts || []).filter(x => !(x.page === S.tab && x.role === S.layRole));
+  set({layEdit: false});
 }
 document.addEventListener("input", e => { const t = e.target; if (t.id === "dq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll("#dlist tbody tr").forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); return; } if (t.id === "mq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll(".mcard,.pcard").forEach(c => { c.hidden = !!q && !c.dataset.q.includes(q); }); return; } if (t.dataset && t.dataset.layTitle !== undefined) t.closest(".wblock").dataset.title = t.value; });
 const set = (o, keepMsg) => { const re = Object.keys(o).some(k => RELOAD.includes(k) && o[k] !== S[k]); Object.assign(S, o); if (!keepMsg) S.msg = ""; render(re); };
@@ -203,14 +214,15 @@ document.addEventListener("click", async e => {
     else if (b.id === "laySave") await saveLayout();
     else if (b.id === "layReset") await resetLayout();
     else if (b.id === "layAdd") toggleCatalog();
-    else if (d.wadd) addWidget(d.wadd);
+    else if (d.wadd) { const sel = b.closest(".catw").querySelector("[data-wparam]"); addWidget(sel && sel.value ? d.wadd + ":" + encodeURIComponent(sel.value) : d.wadd); }
     else if (b.id === "layCancel") set({layEdit: false});
+    else if (d.layShow) { const blk = document.querySelector(`.grid.lay > .wblock[data-wkey="${CSS.escape(d.layShow)}"]`); if (blk) { blk.classList.remove("off"); const eye = blk.querySelector('[data-lay="eye"]'); if (eye) eye.textContent = "Hide"; renderOff(); } }
     else if (d.lay) moveBlock(b, d.lay);
     else if (b.id === "moreBtn") { openSheet(true); }
     else if (d.closeSheet !== undefined) { openSheet(false); }
     else if (d.tab) { openSheet(false); set({tab: d.tab, hoForm: false, closing: null}); window.scrollTo({top: 0}); }
     else if (d.go) { set({tab: d.go}); window.scrollTo({top: 0}); }
-    else if (b.closest("#fKind")) set({kind: d.k});
+    else if (b.closest("#fKind")) set({kind: d.k, grp: ""});
     else if (b.closest("#fStat")) set({dstat: d.st});
     else if (d.p) { setPreset(d.p); render(true); }
     else if (d.s != null && b.closest("#fShift")) set({sf: +d.s});
@@ -232,7 +244,7 @@ document.addEventListener("click", async e => {
     else if (d.medit) { S.msg = ""; set({medit: d.medit === "x" ? null : d.medit === "new" ? {} : Object.assign({__i: +d.medit}, S.mdata.rows[+d.medit])}, true); }
     else if (d.mdel !== undefined) { if (!confirm("Hapus baris ini?")) return; await api(`/api/admin/master/${S.mkey}/${encodeURIComponent(pkOf(S.medit))}`, {method: "DELETE"}).catch(err => { $("mMsg").textContent = err.message; throw null; }); await reloadConfig(); S.mdata = null; refresh({medit: null}); }
     else if (d.sync) { b.disabled = true; b.textContent = "Menyinkron…"; await send("/api/ingest/sync/" + d.sync, {}).catch(err => { alert(err.message); }); refresh(); }
-    else if (b.id === "fReset") { S.kind = ""; S.dstat = ""; S.sf = 0; S.site = CFG.me.site || ""; S.cmp = false; setPreset(CFG.params["ui.default_preset"]); render(true); }
+    else if (b.id === "fReset") { S.kind = ""; S.dstat = ""; S.grp = ""; S.sf = 0; S.site = CFG.me.site || ""; S.cmp = false; setPreset(CFG.params["ui.default_preset"]); render(true); }
     else if (b.id === "fToggle") { const w = $("fwrap").classList.toggle("open"); b.setAttribute("aria-expanded", w); }
     else if (b.id === "logout" || b.id === "logoutM" || b.id === "logoutS") logout();
     else if (b.id === "theme" || b.id === "themeM" || b.id === "themeS" || b.id === "themeL") { const r = document.documentElement, dark = (r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark"; r.dataset.theme = dark ? "light" : "dark"; }
@@ -242,6 +254,7 @@ document.addEventListener("change", async e => {
   const t = e.target;
   if (t.id === "fFrom" || t.id === "fTo") { let f = $("fFrom").value, to = $("fTo").value; if (!f || !to) return; if (f > to) [f, to] = [to, f]; set({preset: "", from: f, to}); }
   else if (t.id === "fSite") set({site: t.value});
+  else if (t.id === "fGrp") set({grp: t.value});
   else if (t.id === "fCmp") set({cmp: t.checked});
   else if (t.dataset.rkind) set({rkind: t.dataset.rkind});
   else if (t.id === "layRole") set({layRole: t.value});
@@ -344,6 +357,7 @@ async function boot() {
   await loadPublic();
   if (!API.token) return showLogin();
   try { await reloadConfig(); } catch (e) { return showLogin(e.message); }
+  loadBasemap().then(() => { if (BASEMAP && ["devices", "ringkasan"].includes(S.tab)) render(false); });
   if (CFG.me.must_change_pw) return showLogin("", true);
   if (!TABS.length) return showLogin("Role Anda belum punya akses ke halaman mana pun.");
   $("login").hidden = true; $("app").hidden = false;

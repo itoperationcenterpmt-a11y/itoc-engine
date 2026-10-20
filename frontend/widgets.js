@@ -50,6 +50,14 @@ function widgetList() {
   }
   return WIDGETS.concat(extra);
 }
+/* Widget berparameter: "dev-map:<group>" = peta khusus satu host group Zabbix (mis. Network-SDWAN). Boleh dipasang lebih dari satu. */
+const mapWidget = g => ({key: "dev-map:" + encodeURIComponent(g), mod: "devices", need: "dev", title: "Devices Map · " + g, desc: "Peta group " + g, size: "c8",
+  html: () => panel("c8", "Devices Map · " + g, "group " + g, mapLegend() + mapSvg({map: (V.dev.groupMaps || {})[g] || [], noCoord: []}))});
+function widgetFind(key) {
+  const i = key.indexOf(":");
+  if (i > 0 && key.slice(0, i) === "dev-map") return mapWidget(decodeURIComponent(key.slice(i + 1)));
+  return widgetList().find(x => x.key === key);
+}
 const widgetOk = w => !!V[w.need] && (w.need !== "dev" || V.dev.all.total > 0) && (CFG.me.role === "superadmin" || (CFG.modules || []).some(m => m.key === w.mod));
 const widgetEl = w => { const t = document.createElement("div"); t.innerHTML = w.html(); return t.firstElementChild; };
 function widgetBlock(w) {
@@ -64,5 +72,5 @@ function catalogHtml() {
   if (!list.length) return `<div class="empty sm">Tidak ada widget tambahan untuk halaman ini.</div>`;
   const groups = {};
   list.forEach(w => (groups[mods[w.mod] || w.mod] = groups[mods[w.mod] || w.mod] || []).push(w));
-  return Object.entries(groups).map(([g, ws]) => `<div class="catg"><span class="lbl">${esc(g)}</span><div class="catl">${ws.map(w => `<div class="catw"><div><b>${esc(w.title)}</b><span class="sub">${esc(w.desc)}</span></div>${present.has("w-" + w.key) ? `<span class="tag">Ditambahkan</span>` : `<button class="btn ghost" type="button" data-wadd="${esc(w.key)}">Add</button>`}</div>`).join("")}</div></div>`).join("");
+  return Object.entries(groups).map(([g, ws]) => `<div class="catg"><span class="lbl">${esc(g)}</span><div class="catl">${ws.map(w => `<div class="catw"><div><b>${esc(w.title)}</b><span class="sub">${esc(w.desc)}</span></div>${w.key === "dev-map" ? `<span class="catp"><select data-wparam aria-label="Group"><option value="">Semua group</option>${((V.dev && V.dev.groups) || []).map(g => `<option value="${esc(g.name)}">${esc(g.name)}</option>`).join("")}</select><button class="btn ghost" type="button" data-wadd="dev-map">Add</button></span>` : present.has("w-" + w.key) ? `<span class="tag">Ditambahkan</span>` : `<button class="btn ghost" type="button" data-wadd="${esc(w.key)}">Add</button>`}</div>`).join("")}</div></div>`).join("");
 }
