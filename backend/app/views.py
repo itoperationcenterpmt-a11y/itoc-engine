@@ -134,7 +134,7 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
     if tab == "devices" or (tab == "ringkasan" and ok("devices")):
         V["dev"] = DEV.build(db, cfg, st, f.kind, f.dstat, full=(tab == "devices"), grp=f.grp, dtype=f.dtype)
     if tab == "wifi":
-        V["wifi"] = WIFI.build(db, cfg)
+        V["wifi"] = WIFI.build(db, cfg, user)
     if tab == "noc":
         nb = _net_base(db, cfg, a, b, sh, st)
         sens = nb["N"]["sensors"]

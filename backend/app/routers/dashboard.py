@@ -7,6 +7,7 @@ from ..models import User, Handover, MASTER
 from ..security import current_user, can_see, require_write, effective_site
 from ..store import load_config, audit, bump_data
 from .. import views
+from ..calc import wifi as wifi_calc
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
@@ -33,7 +34,7 @@ def config(user: User = Depends(current_user), db: Session = Depends(get_db)):
     P = c.params
     return {
         "me": {"username": user.username, "name": user.full_name, "role": user.role_key, "site": effective_site(user, db), "is_admin": user.role.is_admin, "admin_view": user.role.admin_view,
-               "can_write": user.role.can_write, "must_change_pw": user.must_change_pw,
+               "can_write": user.role.can_write, "must_change_pw": user.must_change_pw, "wifi_kill": wifi_calc.can_kill(user, c),
                "uploads": ["*"] if user.role.is_admin else (user.role.uploads or [])},
         "modules": [m for m in c.modules if can_see(user, m["key"])],
         "roles": c.roles if (user.role.is_admin or user.role.admin_view) else {user.role_key: c.roles.get(user.role_key)},

@@ -7,7 +7,7 @@ import httpx
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from .. import vault
-from ..models import DataSource, WifiClient
+from ..models import DataSource, WifiAp, WifiClient, WifiStat
 from ..store import Config
 
 FALLBACK = ["v9_1", "v9_0", "v8_2", "v8_1", "v8_0", "v7_1"]
@@ -58,10 +58,10 @@ def logout(cl, rt, ver, ticket):
         pass
 
 
-def fetch_clients(cl: httpx.Client, rt: str, ver: str, ticket: str, limit: int = 1000, max_rows: int = 20000) -> tuple[list[dict], int]:
+def fetch_clients(cl: httpx.Client, rt: str, ver: str, ticket: str, limit: int = 1000, max_rows: int = 20000, path: str = "query/client") -> tuple[list[dict], int]:
     out, page, total = [], 1, 0
     while len(out) < max_rows:
-        r = cl.post(f"{rt}/{ver}/query/client", params={"serviceTicket": ticket},
+        r = cl.post(f"{rt}/{ver}/{path}", params={"serviceTicket": ticket},
                     json={"filters": [], "fullTextSearch": {"type": "AND", "value": ""}, "attributes": ["*"], "limit": limit, "page": page})
         r.raise_for_status()
         j = r.json()
@@ -87,17 +87,32 @@ def _int(v):
         return None
 
 
-def to_row(d: dict, tz: float) -> dict | None:
+def _local(ms_, tz):
+    return datetime.utcfromtimestamp(ms_ / 1000 if ms_ > 1e11 else ms_) + timedelta(hours=tz) if ms_ else None
+
+
+def to_ap(d: dict, tz: float) -> dict | None:
+    mac = (pick(d, "apMac", "mac") or "").upper()
+    if not mac:
+        return None
+    return {"mac": mac, "name": pick(d, "deviceName", "name"), "zone": pick(d, "zoneName"), "ap_group": pick(d, "apGroupName"), "status": pick(d, "status", "connectionStatus"),
+            "model": pick(d, "model"), "ip": pick(d, "ip"), "clients": _int(pick(d, "numClients")), "firmware": pick(d, "firmwareVersion"),
+            "location": pick(d, "location"), "last_seen": _local(_int(pick(d, "lastSeen")), tz)}
+
+
+def to_row(d: dict, tz: float, ap_zone: dict | None = None) -> dict | None:
     mac = (pick(d, "clientMac", "mac", "macAddress") or "").upper()
     if not mac:
         return None
     st = _int(pick(d, "sessionStartTime", "firstConnectTime", "connectedTime", "startTime"))
-    return {"mac": mac, "ip": pick(d, "ipAddress", "ip", "clientIp"), "username": pick(d, "userName", "username", "user"),
+    user = pick(d, "userName", "username", "user")
+    ap_mac = (pick(d, "apMac", "apMacAddress") or "").upper() or None
+    return {"mac": mac, "ip": pick(d, "ipAddress", "ip", "clientIp"), "username": None if str(user).strip().upper() in ("N/A", "NA", "-") else user,
             "hostname": pick(d, "hostname", "hostName", "deviceName"), "ssid": pick(d, "ssid", "wlanName", "wlan"),
-            "ap_name": pick(d, "apName", "ap"), "ap_mac": pick(d, "apMac", "apMacAddress"), "zone": pick(d, "zoneName", "zone"),
-            "os": pick(d, "osType", "deviceType", "os", "osVendorType"), "rssi": _int(pick(d, "rssi", "receivedSignalStrength")),
+            "ap_name": pick(d, "apName", "ap"), "ap_mac": ap_mac, "zone": pick(d, "zoneName", "zone") or (ap_zone or {}).get(ap_mac),
+            "os": " · ".join(dict.fromkeys(x for x in (pick(d, "deviceType"), pick(d, "osVendorType")) if x and x != "Unknown")) or pick(d, "osType", "os"), "rssi": _int(pick(d, "rssi", "receivedSignalStrength")),
             "vlan": _int(pick(d, "vlan", "vlanId")),
-            "started_at": datetime.utcfromtimestamp(st / 1000 if st > 1e11 else st) + timedelta(hours=tz) if st else None,
+            "started_at": _local(st, tz),
             "rx_bytes": _int(pick(d, "rxBytes", "trafficRx", "rxTotalBytes")), "tx_bytes": _int(pick(d, "txBytes", "trafficTx", "txTotalBytes")), "raw": d}
 
 
@@ -111,11 +126,45 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         ver, ticket = login(cl, rt, user, pw)
         try:
             raw, total = fetch_clients(cl, rt, ver, ticket)
+            try:
+                aps_raw, _ = fetch_clients(cl, rt, ver, ticket, limit=500, path="query/ap")
+            except Exception:                      # akun tanpa hak melihat AP: client tetap disinkron, zone dan status AP kosong
+                aps_raw = []
         finally:
             logout(cl, rt, ver, ticket)
-    rows = {r["mac"]: r for r in (to_row(d, tz) for d in raw) if r}
+    aps = {a["mac"]: a for a in (to_ap(d, tz) for d in aps_raw) if a}
+    rows = {r["mac"]: r for r in (to_row(d, tz, {m: a["zone"] for m, a in aps.items()}) for d in raw) if r}
+    if aps:
+        ia = insert(WifiAp).values(list(aps.values()))
+        db.execute(ia.on_conflict_do_update(index_elements=["mac"], set_={k: getattr(ia.excluded, k) for k in next(iter(aps.values())) if k != "mac"} | {"updated_at": datetime.utcnow()}))
+        db.query(WifiAp).filter(~WifiAp.mac.in_(list(aps))).delete(synchronize_session=False)
+    now = cfg.now()
+    db.merge(WifiStat(at=now, clients=len(rows), users=len({r["username"] for r in rows.values() if r["username"]}), rx_bytes=sum(r["rx_bytes"] or 0 for r in rows.values()),
+                      tx_bytes=sum(r["tx_bytes"] or 0 for r in rows.values()), ap_online=sum(1 for a in aps.values() if str(a["status"] or "").lower().startswith("online")), ap_total=len(aps)))
+    db.query(WifiStat).filter(WifiStat.at < now - timedelta(days=int(cfg.p("wifi.history_days", 30)))).delete(synchronize_session=False)
     if rows:
         ins = insert(WifiClient).values(list(rows.values()))
         db.execute(ins.on_conflict_do_update(index_elements=["mac"], set_={k: getattr(ins.excluded, k) for k in next(iter(rows.values())) if k != "mac"} | {"updated_at": datetime.utcnow()}))
     db.query(WifiClient).filter(~WifiClient.mac.in_(list(rows))).delete(synchronize_session=False)
-    return len(rows), f"{len(rows)} client WiFi (vSZ API {ver})"
+    return len(rows), f"{len(rows)} client WiFi, {len(aps)} AP (vSZ API {ver})"
+
+
+def disconnect(db: Session, mode: str, mac: str, ap_mac: str) -> None:
+    """Putus sesi client (mode: disconnect | deauth). Memakai akun putus-sesi bila diisi, selain itu akun utama."""
+    src = db.get(DataSource, "ruckus")
+    c = (src.config if src else None) or {}
+    user = vault.cred(db, "vsz.kill_user", c.get("kill_user_env", "VSZ_KILL_USER")) or vault.cred(db, "vsz.user", c.get("user_env", "VSZ_USER"))
+    pw = vault.cred(db, "vsz.kill_pass", c.get("kill_pass_env", "VSZ_KILL_PASS")) if vault.cred(db, "vsz.kill_user", c.get("kill_user_env", "VSZ_KILL_USER")) else vault.cred(db, "vsz.pass", c.get("pass_env", "VSZ_PASS"))
+    if not c.get("base_url") or not user or not pw:
+        raise RuntimeError("Akun vSZ belum diatur")
+    rt = root(c["base_url"])
+    with httpx.Client(timeout=30, verify=c.get("verify_tls", True)) as cl:
+        ver, ticket = login(cl, rt, user, pw)
+        try:
+            r = cl.post(f"{rt}/{ver}/clients/{mode}", params={"serviceTicket": ticket}, json={"mac": mac, "apMac": ap_mac})
+        finally:
+            logout(cl, rt, ver, ticket)
+    if r.status_code == 403:
+        raise RuntimeError("Akun vSZ tidak punya hak memutus client. Isi akun putus-sesi dengan role yang boleh melakukannya.")
+    if r.status_code not in (200, 204):
+        raise RuntimeError(f"vSZ menjawab HTTP {r.status_code}: {r.text[:160]}")

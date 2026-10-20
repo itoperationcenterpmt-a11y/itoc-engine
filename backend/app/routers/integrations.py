@@ -21,7 +21,8 @@ CREDS = {
     "manageengine": [("me.token", "API token", "token_env", "ME_AUTHTOKEN")],
     "prtg": [("prtg.user", "Username", "user_env", "PRTG_USER"), ("prtg.passhash", "Passhash", "passhash_env", "PRTG_PASSHASH")],
     "zabbix": [("zabbix.token", "API token", "token_env", "ZABBIX_TOKEN")],
-    "ruckus": [("vsz.user", "Username API vSZ", "user_env", "VSZ_USER"), ("vsz.pass", "Password API vSZ", "pass_env", "VSZ_PASS")],
+    "ruckus": [("vsz.user", "Username API vSZ", "user_env", "VSZ_USER"), ("vsz.pass", "Password API vSZ", "pass_env", "VSZ_PASS"),
+              ("vsz.kill_user", "Username akun putus-sesi (opsional, role dengan hak disconnect)", "kill_user_env", "VSZ_KILL_USER"), ("vsz.kill_pass", "Password akun putus-sesi", "kill_pass_env", "VSZ_KILL_PASS")],
 }
 # isian daftar tambahan per konektor (disimpan di config sumber data): (kunci, label)
 EXTRA = {"zabbix": [("group_prefixes", "Prefix host group (satu per baris)"), ("down_patterns", "Nama trigger yang berarti perangkat down (satu per baris, cocok sebagian)")]}

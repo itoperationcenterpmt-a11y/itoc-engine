@@ -422,3 +422,31 @@ class WifiClient(Base):
     tx_bytes: Mapped[int | None] = mapped_column(BigInteger)
     raw: Mapped[dict | None] = mapped_column(JSONB)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+class WifiAp(Base):
+    """Access Point dari Ruckus vSZ: snapshot status terkini."""
+    __tablename__ = "wifi_ap"
+    mac: Mapped[str] = mapped_column(String(20), primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(160))
+    zone: Mapped[str | None] = mapped_column(String(120))
+    ap_group: Mapped[str | None] = mapped_column(String(120))
+    status: Mapped[str | None] = mapped_column(String(40))
+    model: Mapped[str | None] = mapped_column(String(60))
+    ip: Mapped[str | None] = mapped_column(String(64))
+    clients: Mapped[int | None] = mapped_column(Integer)
+    firmware: Mapped[str | None] = mapped_column(String(60))
+    location: Mapped[str | None] = mapped_column(String(200))
+    last_seen: Mapped[datetime | None] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class WifiStat(Base):
+    """Riwayat per sinkron untuk grafik tren client dan trafik WiFi."""
+    __tablename__ = "wifi_stat"
+    at: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
+    clients: Mapped[int] = mapped_column(Integer, default=0)
+    users: Mapped[int] = mapped_column(Integer, default=0)
+    rx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    tx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    ap_online: Mapped[int] = mapped_column(Integer, default=0)
+    ap_total: Mapped[int] = mapped_column(Integer, default=0)

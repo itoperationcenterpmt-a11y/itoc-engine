@@ -35,7 +35,7 @@ async function downloadReport(kind, btn) {
   } finally { btn.innerHTML = old; btn.disabled = false; }
 }
 /* Tata letak halaman (widget): urutan, ukuran, judul, tampil/sembunyi per role. Admin mengatur lewat tombol Customize; tersimpan di tabel layout. */
-const LAYOUT_PAGES = ["ringkasan", "servicedesk", "noc", "soc", "devices"], SIZES = [["c3", "S"], ["c4", "M"], ["c6", "L"], ["c8", "XL"], ["c12", "Full"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
+const LAYOUT_PAGES = ["ringkasan", "servicedesk", "noc", "soc", "devices", "wifi"], SIZES = [["c3", "S"], ["c4", "M"], ["c6", "L"], ["c8", "XL"], ["c12", "Full"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
 const slug = s => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const nearest = c => { const n = +(String(c).slice(1)) || 12; return SIZES.reduce((a, s) => Math.abs(+s[0].slice(1) - n) < Math.abs(+a[0].slice(1) - n) ? s : a)[0]; };
 function layoutRows(page, role) {
@@ -138,7 +138,7 @@ async function resetLayout() {
   CFG.layouts = (CFG.layouts || []).filter(x => !(x.page === S.tab && x.role === S.layRole));
   set({layEdit: false});
 }
-document.addEventListener("input", e => { const t = e.target; if (t.id === "dq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll("#dlist tbody tr").forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); return; } if (t.id === "mq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll(".mcard,.pcard").forEach(c => { c.hidden = !!q && !c.dataset.q.includes(q); }); return; } if (t.dataset && t.dataset.layTitle !== undefined) t.closest(".wblock").dataset.title = t.value; });
+document.addEventListener("input", e => { const t = e.target; if (t.id === "dq" && S.tab === "wifi") { applyWF(); return; } if (t.id === "dq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll("#dlist tbody tr").forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); return; } if (t.id === "mq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll(".mcard,.pcard").forEach(c => { c.hidden = !!q && !c.dataset.q.includes(q); }); return; } if (t.dataset && t.dataset.layTitle !== undefined) t.closest(".wblock").dataset.title = t.value; });
 const set = (o, keepMsg) => { const re = Object.keys(o).some(k => RELOAD.includes(k) && o[k] !== S[k]); Object.assign(S, o); if (!keepMsg) S.msg = ""; render(re); };
 const refresh = (o, keepMsg) => { Object.assign(S, o || {}); if (!keepMsg) S.msg = ""; render(true); };
 async function reloadConfig() { applyConfig(await api("/api/config")); }
@@ -218,6 +218,7 @@ document.addEventListener("click", async e => {
     else if (b.id === "layCancel") set({layEdit: false});
     else if (d.layShow) { const blk = document.querySelector(`.grid.lay > .wblock[data-wkey="${CSS.escape(d.layShow)}"]`); if (blk) { blk.classList.remove("off"); delete blk.dataset.gone; const eye = blk.querySelector('[data-lay="eye"]'); if (eye) eye.textContent = "Hide"; renderOff(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); } }
     else if (d.layHide) { const blk = document.querySelector(`.grid.lay > .wblock[data-wkey="${CSS.escape(d.layHide)}"]`); if (blk) { blk.classList.add("off"); const eye = blk.querySelector('[data-lay="eye"]'); if (eye) eye.textContent = "Show"; renderOff(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); } }
+    else if (d.wkill) await wifiKill(d.wkill, d.mode);
     else if (d.lay) moveBlock(b, d.lay);
     else if (b.id === "moreBtn") { openSheet(true); }
     else if (d.closeSheet !== undefined) { openSheet(false); }
@@ -260,6 +261,7 @@ document.addEventListener("change", async e => {
   else if (t.id === "fCmp") set({cmp: t.checked});
   else if (t.dataset.rkind) set({rkind: t.dataset.rkind});
   else if (t.id === "layRole") set({layRole: t.value});
+  else if (t.dataset.wf !== undefined) applyWF();
   else if (t.dataset.wgroup !== undefined) {   // ganti filter group pada widget peta tanpa menambah widget baru
     const blk = t.closest(".wblock"), key = t.value ? "dev-map:" + encodeURIComponent(t.value) : "dev-map", w = widgetFind(key); if (!w) return;
     const {el} = widgetBlock(w), size = blk.dataset.size || w.size; el.className = el.className.replace(SZ, "").trim() + " " + size; el.dataset.size = size; el.dataset.title = blk.dataset.title || "";
