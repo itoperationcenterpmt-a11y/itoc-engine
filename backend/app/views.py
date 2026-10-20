@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from . import models as M
 from .store import Config, cached
 from .timeutil import ms
-from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV
+from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI
 from .calc.common import iso
 from .security import can_see
 
@@ -133,6 +133,8 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
             V["ho_open"] = [ho_json(h) for h in db.scalars(q.order_by(M.Handover.created_at.desc()))]
     if tab == "devices" or (tab == "ringkasan" and ok("devices")):
         V["dev"] = DEV.build(db, cfg, st, f.kind, f.dstat, full=(tab == "devices"), grp=f.grp, dtype=f.dtype)
+    if tab == "wifi":
+        V["wifi"] = WIFI.build(db, cfg)
     if tab == "noc":
         nb = _net_base(db, cfg, a, b, sh, st)
         sens = nb["N"]["sensors"]

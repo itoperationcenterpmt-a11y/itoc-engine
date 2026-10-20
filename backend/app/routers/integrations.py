@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from .. import mailer, notify, vault
 from ..db import get_db
-from ..ingest import zabbix
+from ..ingest import zabbix, ruckus
 from ..models import ApiKey, DataSource, Role, User, Webhook, ZbxHost
 from ..security import require_admin, require_admin_area
 from ..store import audit, bump_config
@@ -21,6 +21,7 @@ CREDS = {
     "manageengine": [("me.token", "API token", "token_env", "ME_AUTHTOKEN")],
     "prtg": [("prtg.user", "Username", "user_env", "PRTG_USER"), ("prtg.passhash", "Passhash", "passhash_env", "PRTG_PASSHASH")],
     "zabbix": [("zabbix.token", "API token", "token_env", "ZABBIX_TOKEN")],
+    "ruckus": [("vsz.user", "Username API vSZ", "user_env", "VSZ_USER"), ("vsz.pass", "Password API vSZ", "pass_env", "VSZ_PASS")],
 }
 # isian daftar tambahan per konektor (disimpan di config sumber data): (kunci, label)
 EXTRA = {"zabbix": [("group_prefixes", "Prefix host group (satu per baris)"), ("down_patterns", "Nama trigger yang berarti perangkat down (satu per baris, cocok sebagian)")]}
@@ -120,6 +121,18 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
             s.config = {**c, "base_url": url[: -len("/api_jsonrpc.php")]}                  # simpan alamat yang terbukti benar
             db.commit()
             return {"ok": True, "msg": f"Terhubung ke Zabbix {ver} di {s.config['base_url']}, token valid, {len(g)} host group cocok prefix"}
+        if key == "ruckus":
+            u, pw = vault.cred(db, "vsz.user", c.get("user_env", "VSZ_USER")), vault.cred(db, "vsz.pass", c.get("pass_env", "VSZ_PASS"))
+            if not u or not pw:
+                raise HTTPException(422, "Username/password API vSZ belum diisi")
+            with httpx.Client(timeout=20, verify=c.get("verify_tls", True)) as cl:
+                rt = ruckus.root(c["base_url"])
+                ver, tk = ruckus.login(cl, rt, u, pw)
+                try:
+                    lst, total = ruckus.fetch_clients(cl, rt, ver, tk, limit=1, max_rows=1)
+                finally:
+                    ruckus.logout(cl, rt, ver, tk)
+            return {"ok": True, "msg": f"Terhubung ke vSZ (API {ver}), login valid, {total} client WiFi aktif"}
         if key == "manageengine":
             tok = vault.cred(db, "me.token", c.get("token_env", "ME_AUTHTOKEN"))
             if not tok:

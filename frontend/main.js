@@ -1,6 +1,6 @@
 /* IT PMT Dashboard — render, event, Admin (parameter & master data generik), login. */
 "use strict";
-const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
+const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, wifi: vWifi, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
 const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype"];

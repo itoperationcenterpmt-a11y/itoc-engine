@@ -403,3 +403,22 @@ class DevCode(Base):
 
 
 MASTER["dev_code"] = (DevCode, "Zabbix: kode perangkat")
+class WifiClient(Base):
+    """Client WiFi yang sedang terhubung menurut Ruckus SmartZone (vSZ): snapshot dari sinkron terakhir."""
+    __tablename__ = "wifi_client"
+    mac: Mapped[str] = mapped_column(String(20), primary_key=True)
+    ip: Mapped[str | None] = mapped_column(String(64))
+    username: Mapped[str | None] = mapped_column(String(160))
+    hostname: Mapped[str | None] = mapped_column(String(160))
+    ssid: Mapped[str | None] = mapped_column(String(120))
+    ap_name: Mapped[str | None] = mapped_column(String(160))
+    ap_mac: Mapped[str | None] = mapped_column(String(20))
+    zone: Mapped[str | None] = mapped_column(String(120))
+    os: Mapped[str | None] = mapped_column(String(120))
+    rssi: Mapped[int | None] = mapped_column(Integer)
+    vlan: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    rx_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    tx_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    raw: Mapped[dict | None] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
