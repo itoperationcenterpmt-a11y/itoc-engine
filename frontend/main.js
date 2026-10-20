@@ -58,6 +58,11 @@ function applyLayout() {
     blk.classList.add("wblock"); blk.dataset.wkey = key; blk.dataset.dsize = dsize; blk.dataset.dtitle = h2 && !h2.querySelector("*") ? h2.textContent : "";
     return {key, blk, h2, i, s: byKey[key] ? byKey[key].sort : 1e6 + i};
   }).sort((a, b) => a.s - b.s || a.i - b.i);
+  Object.keys(byKey).filter(k => k.startsWith("w-")).forEach((k, j) => {         // widget dari katalog yang dipasang di layout ini
+    const w = WIDGETS.find(x => "w-" + x.key === k); if (!w || !widgetOk(w)) return;
+    const {el, h2} = widgetBlock(w); blocks.push({key: k, blk: el, h2, i: 1e5 + j, s: byKey[k].sort});
+  });
+  blocks.sort((a, b) => a.s - b.s || a.i - b.i);
   blocks.forEach(({key, blk, h2}) => {
     const r = byKey[key];
     if (r) {
@@ -71,17 +76,26 @@ function applyLayout() {
   v.prepend(grid);
   v.querySelectorAll(":scope > .grid:not(.lay)").forEach(g => { g.querySelectorAll(".stack").forEach(s => { if (!s.children.length) s.remove(); }); if (!g.children.length) g.remove(); });
   if (!S.layEdit) return;
-  grid.querySelectorAll(".wblock").forEach(blk => {
+  grid.querySelectorAll(".wblock").forEach(addTools);
+  $("laybar").innerHTML = LAYBAR();
+}
+const LAYBAR = () => `<div class="laybar"><b>Customize</b><label>Apply to <select id="layRole"><option value="">All roles</option>${Object.values(CFG.roles).map(r => `<option value="${esc(r.key)}" ${r.key === S.layRole ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="layAdd">+ Add widget</button><button class="btn" type="button" id="laySave">Save</button><button class="btn ghost" type="button" id="layReset">Reset</button><button class="btn ghost" type="button" id="layCancel">Cancel</button></div><div class="laycat" id="laycat" hidden></div>`;
+function addTools(blk) {
     const t = document.createElement("div"), cur = nearest(blk.dataset.size || blk.dataset.dsize); t.className = "wtools";
-    t.innerHTML = `<span class="wdrag" title="Drag to move">⠿ Move</span><button type="button" data-lay="up" title="Move up">▲</button><button type="button" data-lay="down" title="Move down">▼</button><select data-lay-size aria-label="Size">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Title" value="${esc(blk.dataset.title || "")}" aria-label="Title"><button type="button" data-lay="eye">${blk.classList.contains("off") ? "Show" : "Hide"}</button>`;
+    t.innerHTML = `<span class="wdrag" title="Drag to move">⠿ Move</span><button type="button" data-lay="up" title="Move up">▲</button><button type="button" data-lay="down" title="Move down">▼</button><select data-lay-size aria-label="Size">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Title" value="${esc(blk.dataset.title || "")}" aria-label="Title"><button type="button" data-lay="eye">${blk.classList.contains("off") ? "Show" : "Hide"}</button>${blk.dataset.added ? `<button type="button" data-lay="rm" title="Remove widget">Remove</button>` : ""}`;
     blk.appendChild(t);
     const rz = document.createElement("span"); rz.className = "wresize"; rz.title = "Drag sideways to resize"; blk.appendChild(rz);
-  });
-  $("laybar").innerHTML = `<div class="laybar"><b>Customize</b><label>Apply to <select id="layRole"><option value="">All roles</option>${Object.values(CFG.roles).map(r => `<option value="${esc(r.key)}" ${r.key === S.layRole ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label><button class="btn" type="button" id="laySave">Save</button><button class="btn ghost" type="button" id="layReset">Reset</button><button class="btn ghost" type="button" id="layCancel">Cancel</button></div>`;
+}
+function toggleCatalog() { const c = $("laycat"); if (!c) return; c.hidden = !c.hidden; if (!c.hidden) c.innerHTML = catalogHtml(); }
+function addWidget(key) {
+  const w = WIDGETS.find(x => x.key === key), grid = document.querySelector(".grid.lay"); if (!w || !grid || grid.querySelector(`[data-wkey="w-${key}"]`)) return;
+  const {el} = widgetBlock(w); el.className = el.className.replace(SZ, "").trim() + " " + w.size; el.dataset.size = w.size; el.dataset.title = "";
+  grid.appendChild(el); addTools(el); $("laycat").innerHTML = catalogHtml(); el.scrollIntoView({behavior: "smooth", block: "center"});
 }
 function moveBlock(b, dir) {
   const blk = b.closest(".wblock");
   if (dir === "eye") { const off = blk.classList.toggle("off"); b.textContent = off ? "Show" : "Hide"; }
+  else if (dir === "rm") { blk.remove(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); }
   else if (dir === "up" && blk.previousElementSibling) blk.parentNode.insertBefore(blk, blk.previousElementSibling);
   else if (dir === "down" && blk.nextElementSibling) blk.parentNode.insertBefore(blk.nextElementSibling, blk);
 }
@@ -188,6 +202,8 @@ document.addEventListener("click", async e => {
     if (b.id === "layBtn") set({layEdit: !S.layEdit, layRole: ""});
     else if (b.id === "laySave") await saveLayout();
     else if (b.id === "layReset") await resetLayout();
+    else if (b.id === "layAdd") toggleCatalog();
+    else if (d.wadd) addWidget(d.wadd);
     else if (b.id === "layCancel") set({layEdit: false});
     else if (d.lay) moveBlock(b, d.lay);
     else if (b.id === "moreBtn") { openSheet(true); }

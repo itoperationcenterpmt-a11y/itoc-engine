@@ -103,7 +103,7 @@ function renderShell() {
 
 /* ---------- Ringkasan ---------- */
 function vRingkasan() {
-  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V;
+  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total);
   const T = hasT ? tkR() : null, N = hasN ? netR() : null, R = hasS ? socR() : null, chk = hasS ? socCheck() : [], okDays = chk.filter(x => x.s === "ok" || x.s === "dup").length, now = nowShift();
   const P = S.cmp ? prevRange() : null, Tp = P && tkR(P), Np = P && netR(P), Rp = P && socR(P);
   const openOld = V.open_old || [], oldD = CFG.params["sd.open_alert_days"];
@@ -115,6 +115,8 @@ function vRingkasan() {
   if (R && R.chAlert) att.push(["warn", `<b>${fmt(R.chAlert)} event critical/high hanya alert</b>, tidak diblokir firewall.`, "soc"]);
   if (R && R.unknown && Object.keys(R.unknown).length) att.push(["warn", `<b>Cyber Security: nilai baru di luar daftar parameter</b> (${Object.entries(R.unknown).map(([k, r]) => ({type: "tipe", action: "tindakan", severity: "severity"}[k]) + ": " + r.map(x => esc(x[0])).join(", ")).join("; ")})`, "soc"]);
   if (N && (N.unmappedIsp || []).length) att.push(["warn", `<b>${N.unmappedIsp.length} link belum cocok dengan ISP mana pun</b>: ${N.unmappedIsp.slice(0, 3).map(esc).join(", ")}`, "noc"]);
+  if (hasD && D.all.down) att.push(["warn", `<b>${fmt(D.all.down)} perangkat down</b> (CCTV dan Gate System), ${fmt(D.chronic)} di antaranya lebih dari 30 hari.`, "devices"]);
+  if (hasD && (D.error || D.stale)) att.push(["warn", `<b>Data Zabbix ${D.error ? "gagal disinkron" : "belum diperbarui"}</b>, cek konektor di Admin.`, "devices"]);
   const bad = chk.filter(x => x.s === "bad" || x.s === "miss"); if (bad.length) att.push(["warn", `<b>Data SOC belum lengkap</b>: ${bad.length} dari ${chk.length} hari tidak terbaca atau belum diunggah.`, "kelengkapan"]);
   const hoOpen = V.ho_open || []; if (hoOpen.some(h => prTone(h.prio) === "crit")) att.push(["crit", `<b>${hoOpen.filter(h => prTone(h.prio) === "crit").length} handover prioritas tinggi</b> belum ditutup.`, "serahterima"]);
   const s1 = hasT ? [{name: "Tickets In", c: "--s1", v: T.daily.map(x => x.in)}, {name: "Tickets Closed", c: "--s2", v: T.daily.map(x => x.done)}] : [];
@@ -125,6 +127,7 @@ function vRingkasan() {
   return `<div class="grid">
   ${!hasT ? "" : dom("Ticketing", "servicedesk", ``, kpi("Tickets In", fmt(T.n), fx(T.perDay, 1) + "/hari", {tip: RUMUS.tkIn, dl: Tp ? delta(T.n, Tp.n) : ""}) + kpi("Close", pc(T.doneRate), fmt(T.open) + " open", {tip: RUMUS.tkDone, dl: Tp ? delta(T.doneRate, Tp.doneRate, {up: true, pct: 1}) : ""}) + kpi("Within SLA Target", pc(T.slaPct), fmt(T.slaOut) + " melewati", {tip: RUMUS.tkSla, dl: Tp ? delta(T.slaPct, Tp.slaPct, {up: true, pct: 1}) : "", cls: T.slaPct != null && T.slaPct < CFG.params["sd.sla_warn"] ? "warnv" : ""}) + kpi("Median Duration", fx(T.medMin, 0) + " mnt", "P90 " + fx(T.p90, 1) + " jam", {tip: RUMUS.tkMed, dl: Tp ? delta(T.medMin, Tp.medMin, {up: false}) : ""}))}
   ${!hasN ? "" : dom("Networking", "noc", ``, N ? kpi("Availability", pc(N.avail, 2), "target " + pc(PAR.target, 1), {tip: RUMUS.av, dl: Np ? delta(N.avail, Np.avail, {up: true, pct: 1}) : "", cls: N.avail < PAR.target ? "warnv" : ""}) + kpi("Links Meeting SLA", N.ok + "/" + (N.ok + N.bad), N.bad + " tidak, " + N.nodata + " data kurang", {tip: RUMUS.link}) + kpi("Total Downtime", fx(N.downH, 1) + " jam", N.events + " kejadian", {tip: RUMUS.down, dl: Np ? delta(N.downH, Np.downH, {up: false}) : ""}) + kpi("High Utilization", fmt(N.utilHigh), "link puncak ≥ " + pc(PAR.utilPeak, 0), {tip: RUMUS.util}) : empty())}
+  ${!hasD ? "" : dom("Devices", "devices", ``, kpi("Devices", fmt(D.all.total), "CCTV dan Gate System") + kpi("Availability Now", D.all.avail != null ? pc(D.all.avail, 1) : "-", "online ÷ (online + down)", {cls: D.all.avail != null && D.all.avail < 0.95 ? "warnv" : ""}) + kpi("Down", fmt(D.all.down), fmt(D.chronic) + " lebih dari 30 hari", {cls: D.all.down ? "warnv" : ""}) + kpi("Interface Issue", fmt(D.all.deg || 0), "ping normal, SNMP tidak tersedia"))}
   ${!hasS ? "" : dom("Cyber Security", "soc", ``, kpi("Critical + High Blocked", R.ch ? pc(R.chBlkPct) : "–", fmt(R.chAlert) + " hanya alert", {tip: RUMUS.socCH, dl: Rp && Rp.ch ? delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : ""}) + kpi("Total Events", R.total ? fmt(R.total) : "–", fmt(R.ch) + " critical/high", {tip: RUMUS.socTot}) + kpi("Validated Days", okDays + "/" + chk.length, okDays < chk.length ? "sisanya tidak dihitung" : "lengkap", {cls: okDays < chk.length ? "warnv" : ""}) + kpi("Internal Source", pc(R.internalPct), "dari total event", {tip: RUMUS.socInt}))}
   ${panel("c8", "Attention", ctxTxt(), att.length ? `<ul class="att">${att.map(a => `<li class="${a[0]}"><span>${a[1]}</span>${go(a[2], "Lihat")}</li>`).join("")}</ul>` : `<div class="empty sm">Tidak ada yang perlu ditindaklanjuti.</div>`)}
   ${panel("c4", "On Duty", dlong(now.date) + " · " + shiftHours(now.shift), onDuty(now))}
