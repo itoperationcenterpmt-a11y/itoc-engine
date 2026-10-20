@@ -83,21 +83,24 @@ function renderShell() {
   $("psub").textContent = APPLY[S.tab] && APPLY[S.tab].p ? rangeTxt() : "";
   $("fPreset").innerHTML = PRESETS.map(([k, l]) => `<button type="button" data-p="${k}" aria-pressed="${S.preset === k}">${l}</button>`).join("");
   $("fShift").innerHTML = SN.map((l, i) => `<button type="button" data-s="${i}" aria-pressed="${S.sf === i}" ${i ? `title="${shiftHours(i)}"` : ""}>${l}</button>`).join("");
-  $("fSite").innerHTML = `<option value="">${CFG.me.site ? "Lokasi akun Anda" : "All lokasi"}</option>` + CFG.sites.map(s => `<option ${s === S.site ? "selected" : ""}>${esc(s)}</option>`).join("");
+  $("fSite").innerHTML = `<option value="">${CFG.me.site ? "Lokasi akun Anda" : "All lokasi"}</option>` + [...CFG.sites, ...(S.tab === "devices" && V.dev ? V.dev.unmapped.map(u => u.code) : [])].map(s => `<option ${s === S.site ? "selected" : ""}>${esc(s)}</option>`).join("");
   $("fFrom").value = S.from; $("fTo").value = S.to; $("fFrom").max = $("fTo").max = nowShift().today; $("fFrom").min = $("fTo").min = CFG.params.data_start; $("fCmp").checked = S.cmp;
-  const ap = APPLY[S.tab];
-  $("fwrap").hidden = !ap.p;
-  $("fbar").classList.toggle("off", !ap.p);
+  const ap = APPLY[S.tab], anyF = !!(ap.p || ap.l || ap.k || ap.t), KL = CFG.params["dev.kind_labels"] || {}, SL = [["", "All"], ["down", "Down"], ["degraded", "Interface"], ["up", "Online"], ["maintenance", "Maintenance"], ["disabled", "Disabled"]];
+  $("fKind").innerHTML = [["", "All"], ...Object.entries(KL)].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
+  $("fStat").innerHTML = SL.map(([k, l]) => `<button type="button" data-st="${k}" aria-pressed="${S.dstat === k}">${l}</button>`).join("");
+  $("gKind").hidden = !ap.k; $("gStat").hidden = !ap.t;
+  $("fwrap").hidden = !anyF;
+  $("fbar").classList.toggle("off", !anyF);
   [["gPeriode", ap.p], ["gShift", ap.s], ["gSite", ap.l], ["gCmp", ap.p && ap.c]].forEach(([id, on]) => { const el = $(id); el.classList.toggle("na", !on); el.querySelectorAll("button,select,input").forEach(x => x.disabled = !on); });
   if (CFG.me.site) { $("fSite").disabled = true; $("gSite").classList.add("na"); }
   const chips = [], active = [];
-  if (ap.p) active.push(rangeTxt()); if (ap.s && S.sf) active.push("shift " + SN[S.sf] + " (" + shiftHours(S.sf) + ")"); if (ap.l && S.site) active.push(S.site); if (S.cmp && $("gCmp").querySelector("input:not(:disabled)")) active.push("dibanding " + dmon(prevRange().from) + " – " + dmon(prevRange().to));
-  if (ap.p) { chips.push(`<span class="on">Active filter: <b>${esc(active.join(" · "))}</b></span>`);
+  if (ap.p) active.push(rangeTxt()); if (ap.s && S.sf) active.push("shift " + SN[S.sf] + " (" + shiftHours(S.sf) + ")"); if (ap.l && S.site) active.push(S.site); if (ap.k && S.kind) active.push(KL[S.kind] || S.kind); if (ap.t && S.dstat) active.push(SL.find(x => x[0] === S.dstat)[1]); if (S.cmp && $("gCmp").querySelector("input:not(:disabled)")) active.push("dibanding " + dmon(prevRange().from) + " – " + dmon(prevRange().to));
+  if (anyF) { chips.push(`<span class="on">Active filter: <b>${esc(active.join(" · ") || "Semua")}</b></span>`);
     if (!ap.s && S.sf || !ap.l && S.site) chips.push(`<span class="na-txt">${(!ap.s && S.sf ? "Shift" : "") + (!ap.s && S.sf && !ap.l && S.site ? " dan " : "") + (!ap.l && S.site ? "lokasi" : "")} tidak berlaku di halaman ini</span>`); }
   $("fApplies").innerHTML = chips.join("");
   const n = nowShift(), tm = teamOn(n.date, n.shift);
   $("duty").innerHTML = `<i></i><span>On duty: Team ${tm} · ${SN[n.shift]}<small>${n.clock} WIB</small></span>`; $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]}`;
-  $("fSum").textContent = ap.p ? active.join(" · ") : "Tidak berlaku di halaman ini";
+  $("fSum").textContent = anyF ? (active.join(" · ") || "Semua") : "Tidak berlaku di halaman ini";
 
 }
 

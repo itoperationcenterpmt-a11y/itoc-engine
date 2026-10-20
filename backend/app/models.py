@@ -77,6 +77,8 @@ class Site(Base):
     aliases: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort: Mapped[int] = mapped_column(Integer, default=0)
+    lat: Mapped[float | None] = mapped_column(Float)    # koordinat untuk peta Devices (opsional)
+    lon: Mapped[float | None] = mapped_column(Float)
 
 
 class Shift(Base):
@@ -378,3 +380,13 @@ class ZbxHost(Base):
     down_since: Mapped[datetime | None] = mapped_column(DateTime)
     problem: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+class ZbxLocMap(Base):
+    """Pemetaan kode lokasi di nama host group Zabbix (mis. TJE, BLW) ke nama lokasi di master Lokasi. Kode baru terisi otomatis saat sinkron; Admin tinggal mengisi lokasinya."""
+    __tablename__ = "zbx_loc_map"
+    code: Mapped[str] = mapped_column(String(40), primary_key=True)
+    site: Mapped[str | None] = mapped_column(String(120))
+    note: Mapped[str | None] = mapped_column(String(200))
+
+
+MASTER["zbx_loc"] = (ZbxLocMap, "Zabbix: kode ke lokasi")

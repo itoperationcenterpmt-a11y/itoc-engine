@@ -3,12 +3,12 @@
 const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
-const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset"];
+const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat"];
 let seq = 0;
 async function render(reload) {
   writeHash(); renderShell();
   if (reload) {
-    const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset}), my = ++seq;
+    const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset, kind: S.kind, dstat: S.dstat}), my = ++seq;
     $("view").classList.add("loading");
     try { const v = await api(`/api/view/${S.tab}?${q}`); if (my !== seq) return; V = v; }
     catch (e) { if (my === seq) $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty(esc(e.message))}</section></div>`; return; }
@@ -59,7 +59,7 @@ function applyLayout() {
     return {key, blk, h2, i, s: byKey[key] ? byKey[key].sort : 1e6 + i};
   }).sort((a, b) => a.s - b.s || a.i - b.i);
   Object.keys(byKey).filter(k => k.startsWith("w-")).forEach((k, j) => {         // widget dari katalog yang dipasang di layout ini
-    const w = WIDGETS.find(x => "w-" + x.key === k); if (!w || !widgetOk(w)) return;
+    const w = widgetList().find(x => "w-" + x.key === k); if (!w || !widgetOk(w)) return;
     const {el, h2} = widgetBlock(w); blocks.push({key: k, blk: el, h2, i: 1e5 + j, s: byKey[k].sort});
   });
   blocks.sort((a, b) => a.s - b.s || a.i - b.i);
@@ -88,7 +88,7 @@ function addTools(blk) {
 }
 function toggleCatalog() { const c = $("laycat"); if (!c) return; c.hidden = !c.hidden; if (!c.hidden) c.innerHTML = catalogHtml(); }
 function addWidget(key) {
-  const w = WIDGETS.find(x => x.key === key), grid = document.querySelector(".grid.lay"); if (!w || !grid || grid.querySelector(`[data-wkey="w-${key}"]`)) return;
+  const w = widgetList().find(x => x.key === key), grid = document.querySelector(".grid.lay"); if (!w || !grid || grid.querySelector(`[data-wkey="w-${key}"]`)) return;
   const {el} = widgetBlock(w); el.className = el.className.replace(SZ, "").trim() + " " + w.size; el.dataset.size = w.size; el.dataset.title = "";
   grid.appendChild(el); addTools(el); $("laycat").innerHTML = catalogHtml(); el.scrollIntoView({behavior: "smooth", block: "center"});
 }
@@ -127,7 +127,7 @@ async function resetLayout() {
   await api("/api/admin/layout/" + S.tab + "?role=" + encodeURIComponent(S.layRole), {method: "DELETE"});
   await reloadConfig(); set({layEdit: false});
 }
-document.addEventListener("input", e => { const t = e.target; if (t.id === "mq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll(".mcard,.pcard").forEach(c => { c.hidden = !!q && !c.dataset.q.includes(q); }); return; } if (t.dataset && t.dataset.layTitle !== undefined) t.closest(".wblock").dataset.title = t.value; });
+document.addEventListener("input", e => { const t = e.target; if (t.id === "dq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll("#dlist tbody tr").forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); return; } if (t.id === "mq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll(".mcard,.pcard").forEach(c => { c.hidden = !!q && !c.dataset.q.includes(q); }); return; } if (t.dataset && t.dataset.layTitle !== undefined) t.closest(".wblock").dataset.title = t.value; });
 const set = (o, keepMsg) => { const re = Object.keys(o).some(k => RELOAD.includes(k) && o[k] !== S[k]); Object.assign(S, o); if (!keepMsg) S.msg = ""; render(re); };
 const refresh = (o, keepMsg) => { Object.assign(S, o || {}); if (!keepMsg) S.msg = ""; render(true); };
 async function reloadConfig() { applyConfig(await api("/api/config")); }
@@ -210,6 +210,8 @@ document.addEventListener("click", async e => {
     else if (d.closeSheet !== undefined) { openSheet(false); }
     else if (d.tab) { openSheet(false); set({tab: d.tab, hoForm: false, closing: null}); window.scrollTo({top: 0}); }
     else if (d.go) { set({tab: d.go}); window.scrollTo({top: 0}); }
+    else if (b.closest("#fKind")) set({kind: d.k});
+    else if (b.closest("#fStat")) set({dstat: d.st});
     else if (d.p) { setPreset(d.p); render(true); }
     else if (d.s != null && b.closest("#fShift")) set({sf: +d.s});
     else if (d.pers) set({pers: d.pers});
@@ -230,7 +232,7 @@ document.addEventListener("click", async e => {
     else if (d.medit) { S.msg = ""; set({medit: d.medit === "x" ? null : d.medit === "new" ? {} : Object.assign({__i: +d.medit}, S.mdata.rows[+d.medit])}, true); }
     else if (d.mdel !== undefined) { if (!confirm("Hapus baris ini?")) return; await api(`/api/admin/master/${S.mkey}/${encodeURIComponent(pkOf(S.medit))}`, {method: "DELETE"}).catch(err => { $("mMsg").textContent = err.message; throw null; }); await reloadConfig(); S.mdata = null; refresh({medit: null}); }
     else if (d.sync) { b.disabled = true; b.textContent = "Menyinkron…"; await send("/api/ingest/sync/" + d.sync, {}).catch(err => { alert(err.message); }); refresh(); }
-    else if (b.id === "fReset") { S.sf = 0; S.site = CFG.me.site || ""; S.cmp = false; setPreset(CFG.params["ui.default_preset"]); render(true); }
+    else if (b.id === "fReset") { S.kind = ""; S.dstat = ""; S.sf = 0; S.site = CFG.me.site || ""; S.cmp = false; setPreset(CFG.params["ui.default_preset"]); render(true); }
     else if (b.id === "fToggle") { const w = $("fwrap").classList.toggle("open"); b.setAttribute("aria-expanded", w); }
     else if (b.id === "logout" || b.id === "logoutM" || b.id === "logoutS") logout();
     else if (b.id === "theme" || b.id === "themeM" || b.id === "themeS" || b.id === "themeL") { const r = document.documentElement, dark = (r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark"; r.dataset.theme = dark ? "light" : "dark"; }

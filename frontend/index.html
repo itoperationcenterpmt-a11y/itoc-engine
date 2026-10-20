@@ -422,6 +422,13 @@ tbody tr:hover td{background:var(--wash)}
 .stbar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--sunken);min-width:90px}.stbar i{display:block;height:100%}.stbar .u{background:var(--good)}.stbar .m{background:var(--warn)}.stbar .g{background:var(--serious)}.stbar .d{background:var(--crit)}
 .strow{display:grid;grid-template-columns:minmax(90px,140px) 1fr 150px;gap:14px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}.strow:last-of-type{border-bottom:0}.strow b{font-family:var(--f-display)}.strow .num{text-align:right}
 .laycat{background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:14px;margin-bottom:12px;display:flex;flex-direction:column;gap:12px}.laycat[hidden]{display:none}.catl{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;margin-top:6px}.catw{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--sunken);border-radius:10px;padding:10px 12px}.catw>div{display:flex;flex-direction:column;min-width:0}.catw b{font-size:14px}.catw .btn{padding:3px 12px}
+.fg[hidden]{display:none}
+.dmap{width:100%;height:auto;display:block;border-radius:10px;background:var(--sunken)}
+.dmap text{fill:var(--muted);font-size:11px}.dmap .gl{stroke:var(--line);stroke-width:1;stroke-dasharray:3 4}
+.dmap circle.pt{stroke:var(--surface);stroke-width:1.5;cursor:default;transition:opacity .15s}.dmap circle.pt:hover{opacity:.8}
+.dmap .g{fill:var(--good)}.dmap .w{fill:var(--warn)}.dmap .c{fill:var(--crit)}.dmap .n{fill:var(--low)}.dmap .ring{fill:none;stroke:var(--crit);stroke-width:2;opacity:.35}
+.dmap text.lb{fill:var(--ink);font-size:13px;font-weight:600;paint-order:stroke;stroke:var(--sunken);stroke-width:3px}
+.dtool{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .lg-form .loginbox{background:none;border:0;box-shadow:none;padding:0;width:100%}
 .lg-form .loginbox .lhead{display:none}
 .lg-form .loginbox .fld label{font-weight:600;font-size:14px;color:var(--ink)}
@@ -460,6 +467,8 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
         <div class="fg" id="gPeriode"><span class="k">Period</span><div class="seg" id="fPreset"></div><span class="dates"><input type="date" id="fFrom" aria-label="From date"> – <input type="date" id="fTo" aria-label="To date"></span></div>
         <div class="fg" id="gShift"><span class="k">Shift</span><div class="seg" id="fShift"></div></div>
         <div class="fg" id="gSite"><span class="k">Location</span><select id="fSite" aria-label="Location"></select></div>
+        <div class="fg" id="gKind" hidden><span class="k">Category</span><div class="seg" id="fKind"></div></div>
+        <div class="fg" id="gStat" hidden><span class="k">Status</span><div class="seg" id="fStat"></div></div>
         <div class="fg" id="gCmp"><label class="chk"><input type="checkbox" id="fCmp"> Compare with previous period</label></div>
         <button class="btn ghost" id="fReset" type="button">Reset</button><button class="btn ghost" id="layBtn" type="button" hidden>Customize</button>
       </div>

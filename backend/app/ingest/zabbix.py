@@ -4,10 +4,11 @@ import re
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 import httpx
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from .. import vault
-from ..models import DataSource, ZbxHost
+from ..models import DataSource, ZbxHost, ZbxLocMap
 from ..store import Config
 
 LABEL = {"CCTV-": "CCTV", "OPERASIONAL-": "OPERASIONAL"}
@@ -126,6 +127,12 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     for part in _chunks(rows, 500):
         st_ = insert(ZbxHost).values(part)
         db.execute(st_.on_conflict_do_update(index_elements=["hostid"], set_={k: st_.excluded[k] for k in part[0] if k != "hostid"}))
+    codes = sorted({r["code"] for r in rows if r["code"]})        # kode lokasi baru muncul di Admin > Master Data > Zabbix: kode ke lokasi
+    if codes:
+        from ..calc.devices import _alias_map                    # isi awal dari alias lokasi bila sudah cocok; yang diisi Admin tidak ditimpa
+        amap = _alias_map(db)
+        st_ = insert(ZbxLocMap).values([{"code": c, "site": amap.get(c.lower())} for c in codes])
+        db.execute(st_.on_conflict_do_update(index_elements=["code"], set_={"site": func.coalesce(ZbxLocMap.site, st_.excluded.site)}))
     ids = [r["hostid"] for r in rows]
     db.query(ZbxHost).filter(~ZbxHost.hostid.in_(ids)).delete(synchronize_session=False) if ids else db.query(ZbxHost).delete()
     down = sum(1 for r in rows if r["status"] == "down")

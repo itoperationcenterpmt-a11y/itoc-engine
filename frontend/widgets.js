@@ -30,6 +30,26 @@ const WIDGETS = [
   {key: "dev-down", mod: "devices", need: "dev", title: "Devices Down (top 10)", desc: "Perangkat down terlama", size: "c12",
     html: () => panel("c12", "Devices Down (top 10)", V.dev.downN + " perangkat", tbl(["Perangkat", "Lokasi", "Down sejak", "Lama"], V.dev.down.slice(0, 10).map(x => [x.name, x.loc, x.since ? dtime(x.since) : "-", {h: `<span class="${x.ageH != null && x.ageH > 24 ? "crit-t" : ""}">${durTxt(x.ageH)}</span>`}]), {empty: "Semua perangkat online."}))},
 ];
+/* Widget Devices dibuat dinamis dari kategori yang ada (prefix host group Zabbix): satu set per kategori, selain widget gabungan di atas. */
+function widgetList() {
+  const extra = [], D = V.dev;
+  if (D && D.byKind) {
+    extra.push({key: "dev-map", mod: "devices", need: "dev", title: "Devices Map", desc: "Peta lokasi: warna = availability, ukuran = jumlah perangkat", size: "c8",
+      html: () => panel("c8", "Devices Map", V.dev.map.length + " lokasi", mapLegend() + mapSvg(V.dev))});
+    extra.push({key: "dev-age", mod: "devices", need: "dev", title: "Devices Down Duration", desc: "Sebaran lama perangkat down", size: "c4",
+      html: () => panel("c4", "Down Duration", V.dev.downN + " perangkat down", hbars(V.dev.ageDist.map(x => [x.k, x.n, 0, fmt(x.n)])))});
+    D.byKind.forEach(k => {
+      const s = slug(k.key) || "x", get = () => V.dev.byKind.find(x => x.key === k.key) || k;
+      extra.push({key: "dev-k-" + s, mod: "devices", need: "dev", title: "Devices · " + k.k, desc: "Ringkasan " + k.k + " (perangkat, availability, down)", size: "c4",
+        html: () => { const q = get(); return `<section class="panel c4 dom"><header><h2>Devices · ${esc(q.k)}</h2></header><div class="mini">${kpi("Devices", fmt(q.total), "")}${kpi("Availability", q.avail != null ? pc(q.avail, 1) : "-", "online ÷ (online + down)", {cls: q.avail != null && q.avail < 0.95 ? "warnv" : ""})}${kpi("Down", fmt(q.down), "", {cls: q.down ? "warnv" : ""})}${kpi("Interface Issue", fmt(q.deg || 0), "")}</div>${go("devices")}</section>`; }});
+      extra.push({key: "dev-kl-" + s, mod: "devices", need: "dev", title: "Per Location · " + k.k, desc: "Lokasi dengan perangkat " + k.k + " down terbanyak", size: "c6",
+        html: () => panel("c6", "Per Location · " + k.k, "", tbl(["Lokasi", "Perangkat", "Down", "Availability"], (V.dev.kindLoc[k.key] || []).map(r => [r.k, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}]), {r: [1, 2, 3], empty: "Belum ada data."}))});
+      extra.push({key: "dev-kd-" + s, mod: "devices", need: "dev", title: "Devices Down · " + k.k, desc: "Perangkat " + k.k + " yang down terlama", size: "c6",
+        html: () => panel("c6", "Devices Down · " + k.k, "", tbl(["Perangkat", "Lokasi", "Lama"], (V.dev.kindDown[k.key] || []).map(x => [x.name, x.loc, {h: `<span class="${x.ageH != null && x.ageH > 24 ? "crit-t" : ""}">${durTxt(x.ageH)}</span>`}]), {empty: "Semua perangkat online."}))});
+    });
+  }
+  return WIDGETS.concat(extra);
+}
 const widgetOk = w => !!V[w.need] && (w.need !== "dev" || V.dev.all.total > 0) && (CFG.me.role === "superadmin" || (CFG.modules || []).some(m => m.key === w.mod));
 const widgetEl = w => { const t = document.createElement("div"); t.innerHTML = w.html(); return t.firstElementChild; };
 function widgetBlock(w) {
@@ -40,7 +60,7 @@ function widgetBlock(w) {
 function catalogHtml() {
   const present = new Set([...document.querySelectorAll(".grid.lay > .wblock")].map(b => b.dataset.wkey));
   const mods = Object.fromEntries((CFG.modules || []).map(m => [m.key, m.label]));
-  const list = WIDGETS.filter(widgetOk);
+  const list = widgetList().filter(widgetOk);
   if (!list.length) return `<div class="empty sm">Tidak ada widget tambahan untuk halaman ini.</div>`;
   const groups = {};
   list.forEach(w => (groups[mods[w.mod] || w.mod] = groups[mods[w.mod] || w.mod] || []).push(w));

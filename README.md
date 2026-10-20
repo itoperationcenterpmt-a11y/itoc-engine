@@ -124,3 +124,9 @@ Semua tabel di atas bisa diubah dari **Admin → Master data** dan **Admin → P
 - **Dokumentasi API** (`/docs`) mati; nyalakan sementara dengan `ITOC_DOCS=true` hanya bila perlu.
 - **Backup:** jadwalkan `pg_dump` harian dan uji restore. Volume `pgdata` adalah satu-satunya tempat data.
 - **Akun uji:** nonaktifkan atau hapus semua akun `password123` sebelum dipakai pengguna sungguhan.
+## Devices (Zabbix: CCTV dan Gate System)
+- Konektor di Admin → Integrations → Zabbix: Base URL (IP atau host saja boleh), API token (terenkripsi), prefix host group, dan nama trigger yang berarti down. Sinkron tiap 5 menit.
+- Kategori = prefix host group; labelnya di parameter `dev.kind_labels`. Kategori baru muncul otomatis di filter, grafik, dan katalog widget.
+- Lokasi diambil dari kode di nama grup lewat Admin → Master Data → "Zabbix: kode ke lokasi" (kode baru terisi otomatis saat sinkron; isi lokasinya bila kosong).
+- Peta memakai kolom `lat` dan `lon` di Master Data → Lokasi (nilai awal perkiraan, mohon dikoreksi). Peta berupa SVG mandiri tanpa server peta.
+- Filter lokasi, kategori, dan status ada di bar filter halaman Devices. Widget Devices tersedia gabungan dan per kategori lewat Customize → Add widget.
