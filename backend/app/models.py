@@ -375,6 +375,9 @@ class ZbxHost(Base):
     kind: Mapped[str] = mapped_column(String(40), default="")          # CCTV | OPERASIONAL (dari prefix host group)
     code: Mapped[str] = mapped_column(String(40), default="")          # kode lokasi dari nama grup, mis. JNR
     group_name: Mapped[str] = mapped_column(String(255), default="")
+    zone: Mapped[str] = mapped_column(String(40), default="")          # dari nama host: Entitas-Cabang-Zona-SubZona-KodePerangkat-Urut
+    subzone: Mapped[str] = mapped_column(String(80), default="")
+    dev_code: Mapped[str] = mapped_column(String(20), default="")
     groups: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     status: Mapped[str] = mapped_column(String(20), default="up")      # up | down | maintenance | disabled
     down_since: Mapped[datetime | None] = mapped_column(DateTime)
@@ -390,3 +393,13 @@ class ZbxLocMap(Base):
 
 
 MASTER["zbx_loc"] = (ZbxLocMap, "Zabbix: kode ke lokasi")
+
+class DevCode(Base):
+    """Kamus kode perangkat pada nama host (mis. CFIX = CCTV Fixed). Kode baru terdaftar otomatis saat sinkron; Admin mengisi labelnya."""
+    __tablename__ = "dev_code"
+    code: Mapped[str] = mapped_column(String(20), primary_key=True)
+    label: Mapped[str | None] = mapped_column(String(80))
+    note: Mapped[str | None] = mapped_column(String(200))
+
+
+MASTER["dev_code"] = (DevCode, "Zabbix: kode perangkat")

@@ -36,6 +36,8 @@ function widgetList() {
   if (D && D.byKind) {
     extra.push({key: "dev-map", mod: "devices", need: "dev", title: "Devices Map", desc: "Peta lokasi: warna = availability, ukuran = jumlah perangkat", size: "c8",
       html: () => panel("c8", "Devices Map", V.dev.map.length + " lokasi", mapLegend() + mapSvg(V.dev))});
+    extra.push({key: "dev-type", mod: "devices", need: "dev", title: "Devices by Type", desc: "Ringkasan per tipe perangkat (AP, CCTV, switch, dan lain-lain)", size: "c6",
+      html: () => panel("c6", "Devices by Type", V.dev.byType.length + " tipe", tbl(["Tipe", "Perangkat", "Down", "Availability"], V.dev.byType.slice(0, 10).map(r => [r.k, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}]), {r: [1, 2, 3], empty: "Belum ada data."}))});
     extra.push({key: "dev-age", mod: "devices", need: "dev", title: "Devices Down Duration", desc: "Sebaran lama perangkat down", size: "c4",
       html: () => panel("c4", "Down Duration", V.dev.downN + " perangkat down", hbars(V.dev.ageDist.map(x => [x.k, x.n, 0, fmt(x.n)])))});
     D.byKind.forEach(k => {

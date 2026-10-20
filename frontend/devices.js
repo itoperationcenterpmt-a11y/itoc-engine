@@ -48,6 +48,17 @@ function initDevMaps() {
       bounds.push([p.lat, p.lon]);
     });
     if (bounds.length) map.fitBounds(bounds, {padding: [30, 30], maxZoom: 9});
+    // Ctrl + scroll (atau pinch di trackpad) zoom peta, bukan halaman; scroll biasa tetap menggulir halaman
+    let hint;
+    el.addEventListener("wheel", ev => {
+      if (ev.ctrlKey || ev.metaKey) {
+        ev.preventDefault();
+        const d = ev.deltaY < 0 ? 1 : -1;
+        map.setZoomAround(map.mouseEventToContainerPoint(ev), map.getZoom() + d * (ev.deltaMode ? 1 : Math.min(1, Math.abs(ev.deltaY) / 40 || 1)), {animate: true});
+      } else {
+        el.classList.add("hint"); clearTimeout(hint); hint = setTimeout(() => el.classList.remove("hint"), 1200);
+      }
+    }, {passive: false});
     new ResizeObserver(() => map.invalidateSize()).observe(el);
   });
 }
@@ -65,12 +76,13 @@ function vDevices() {
   const kinds = D.byKind.map(r => `<div class="strow"><b>${esc(r.k)}</b>${stBar(r)}<span class="num">${fmt(r.up)} / ${fmt(r.total)} · <span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span></span></div>`).join("");
   const locs = D.byLoc.map(r => [r.k, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, r.deg || 0, r.maint, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}, {h: stBar(r)}]);
   const downByLoc = D.byLoc.filter(r => r.down).slice(0, 12).map(r => [r.k, r.down, 0, r.down + " / " + r.total]);
-  const rows = D.list.map(x => [x.name, x.kindLabel, x.loc, {h: devPill(x.status)}, x.since ? dtime(x.since) : "-", {h: `<span class="${x.ageH != null && x.ageH > 24 ? "crit-t" : ""}">${durTxt(x.ageH)}</span>`}, x.problem]);
+  const rows = D.list.map(x => [x.name, x.typeLabel, x.loc, {h: devPill(x.status)}, x.since ? dtime(x.since) : "-", {h: `<span class="${x.ageH != null && x.ageH > 24 ? "crit-t" : ""}">${durTxt(x.ageH)}</span>`}, x.problem]);
   return (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
     panel("c7", "Site Map", D.map.length + " lokasi", mapLegend() + mapSvg(D)) +
     panel("c5", "Status by Category", "Pembaruan " + dtime(D.updated), devLegend() + kinds) +
     panel("c4", "Down Duration", D.downN + " perangkat down", hbars(D.ageDist.map(x => [x.k, x.n, 0, fmt(x.n)]))) +
     panel("c8", "Down by Location", "perangkat down / total", hbars(downByLoc)) +
+    panel("c12", "By Device Type", D.byType.length + " tipe", tbl(["Tipe", "Kode", "Perangkat", "Down", "Interface", "Availability", "Status"], D.byType.map(r => [r.k, r.code === "-" ? "-" : r.code, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, r.deg || 0, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}, {h: stBar(r)}]), {r: [2, 3, 4, 5], tall: true, empty: "Belum ada data."})) +
     panel("c12", "Per Location", D.byLoc.length + " lokasi", tbl(["Lokasi", "Perangkat", "Down", "Interface", "Maintenance", "Availability", "Status"], locs, {r: [1, 2, 3, 4, 5], tall: true, empty: "Belum ada data."})) +
-    panel("c12", "Device List", D.listN + " perangkat" + (D.listN > D.list.length ? ", menampilkan " + D.list.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari nama, lokasi, atau masalah" aria-label="Cari perangkat"><span class="sub">Filter lokasi, kategori, dan status di bar filter atas</span></div><div id="dlist">${tbl(["Perangkat", "Kategori", "Lokasi", "Status", "Down sejak", "Lama", "Masalah"], rows, {tall: true, empty: "Tidak ada perangkat untuk filter ini."})}</div>`));
+    panel("c12", "Device List", D.listN + " perangkat" + (D.listN > D.list.length ? ", menampilkan " + D.list.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari nama, lokasi, atau masalah" aria-label="Cari perangkat"><span class="sub">Filter lokasi, kategori, dan status di bar filter atas</span></div><div id="dlist">${tbl(["Perangkat", "Tipe", "Lokasi", "Status", "Down sejak", "Lama", "Masalah"], rows, {tall: true, empty: "Tidak ada perangkat untuk filter ini."})}</div>`));
 }

@@ -3,12 +3,12 @@
 const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
-const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp"];
+const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype"];
 let seq = 0;
 async function render(reload) {
   writeHash(); renderShell();
   if (reload) {
-    const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset, kind: S.kind, dstat: S.dstat, grp: S.grp}), my = ++seq;
+    const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset, kind: S.kind, dstat: S.dstat, grp: S.grp, dtype: S.dtype}), my = ++seq;
     $("view").classList.add("loading");
     try { const v = await api(`/api/view/${S.tab}?${q}`); if (my !== seq) return; V = v; }
     catch (e) { if (my === seq) $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty(esc(e.message))}</section></div>`; return; }
@@ -244,7 +244,7 @@ document.addEventListener("click", async e => {
     else if (d.medit) { S.msg = ""; set({medit: d.medit === "x" ? null : d.medit === "new" ? {} : Object.assign({__i: +d.medit}, S.mdata.rows[+d.medit])}, true); }
     else if (d.mdel !== undefined) { if (!confirm("Hapus baris ini?")) return; await api(`/api/admin/master/${S.mkey}/${encodeURIComponent(pkOf(S.medit))}`, {method: "DELETE"}).catch(err => { $("mMsg").textContent = err.message; throw null; }); await reloadConfig(); S.mdata = null; refresh({medit: null}); }
     else if (d.sync) { b.disabled = true; b.textContent = "Menyinkron…"; await send("/api/ingest/sync/" + d.sync, {}).catch(err => { alert(err.message); }); refresh(); }
-    else if (b.id === "fReset") { S.kind = ""; S.dstat = ""; S.grp = ""; S.sf = 0; S.site = CFG.me.site || ""; S.cmp = false; setPreset(CFG.params["ui.default_preset"]); render(true); }
+    else if (b.id === "fReset") { S.kind = ""; S.dstat = ""; S.grp = ""; S.dtype = ""; S.sf = 0; S.site = CFG.me.site || ""; S.cmp = false; setPreset(CFG.params["ui.default_preset"]); render(true); }
     else if (b.id === "fToggle") { const w = $("fwrap").classList.toggle("open"); b.setAttribute("aria-expanded", w); }
     else if (b.id === "logout" || b.id === "logoutM" || b.id === "logoutS") logout();
     else if (b.id === "theme" || b.id === "themeM" || b.id === "themeS" || b.id === "themeL") { const r = document.documentElement, dark = (r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark"; r.dataset.theme = dark ? "light" : "dark"; }
@@ -255,6 +255,7 @@ document.addEventListener("change", async e => {
   if (t.id === "fFrom" || t.id === "fTo") { let f = $("fFrom").value, to = $("fTo").value; if (!f || !to) return; if (f > to) [f, to] = [to, f]; set({preset: "", from: f, to}); }
   else if (t.id === "fSite") set({site: t.value});
   else if (t.id === "fGrp") set({grp: t.value});
+  else if (t.id === "fTyp") set({dtype: t.value});
   else if (t.id === "fCmp") set({cmp: t.checked});
   else if (t.dataset.rkind) set({rkind: t.dataset.rkind});
   else if (t.id === "layRole") set({layRole: t.value});

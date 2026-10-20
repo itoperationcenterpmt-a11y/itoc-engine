@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from .. import vault
-from ..models import DataSource, ZbxHost, ZbxLocMap
+from ..models import DataSource, DevCode, ZbxHost, ZbxLocMap
 from ..store import Config
 
 LABEL = {"CCTV-": "CCTV", "OPERASIONAL-": "OPERASIONAL"}
@@ -70,6 +70,19 @@ def parse_group(name: str, prefixes: list[str]) -> tuple[str, str]:
     return "", ""
 
 
+def parse_name(name: str) -> tuple[str, str, str]:
+    """Entitas-Cabang-Zona-SubZona-KodePerangkat-Urut, mis. PMT-MDN-LT5-RSVR-NGWF-001 -> (LT5, RSVR, NGWF). Sub zona dan nomor urut boleh tidak ada;
+    nama yang tidak berawalan PMT- tidak diuraikan (kode kosong = tidak terklasifikasi)."""
+    t = name.strip().split("-")
+    if len(t) < 4 or t[0].upper() != "PMT":
+        return "", "", ""
+    body = t[1:-1] if t[-1].isdigit() else t[1:]
+    if len(body) < 2:
+        return "", "", ""
+    mid = body[1:-1]
+    return (mid[0].upper() if mid else ""), "-".join(mid[1:]).upper(), body[-1].upper()
+
+
 def _chunks(seq, n):
     for i in range(0, len(seq), n):
         yield seq[i:i + n]
@@ -122,7 +135,8 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
             st, since, prob = ("down" if iface_down else "degraded"), None, "Interface tidak tersedia"
         else:
             st, since, prob = "up", None, None
-        rows.append({"hostid": h["hostid"], "host": h["host"][:255], "name": (h["name"] or h["host"])[:255], "kind": kind, "code": code,
+        zone, sub, dcode = parse_name(h["name"] or h["host"])
+        rows.append({"hostid": h["hostid"], "host": h["host"][:255], "name": (h["name"] or h["host"])[:255], "kind": kind, "code": code, "zone": zone[:40], "subzone": sub[:80], "dev_code": dcode[:20],
                      "group_name": (gnames[0] if gnames else "")[:255], "groups": gnames, "status": st, "down_since": since, "problem": prob, "updated_at": now})
     for part in _chunks(rows, 500):
         st_ = insert(ZbxHost).values(part)
@@ -133,6 +147,9 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         amap = _alias_map(db)
         st_ = insert(ZbxLocMap).values([{"code": c, "site": amap.get(c.lower())} for c in codes])
         db.execute(st_.on_conflict_do_update(index_elements=["code"], set_={"site": func.coalesce(ZbxLocMap.site, st_.excluded.site)}))
+    dcodes = sorted({r["dev_code"] for r in rows if r["dev_code"]})   # kode perangkat baru muncul di Admin > Master Data > Zabbix: kode perangkat
+    if dcodes:
+        db.execute(insert(DevCode).values([{"code": c} for c in dcodes]).on_conflict_do_nothing(index_elements=["code"]))
     ids = [r["hostid"] for r in rows]
     db.query(ZbxHost).filter(~ZbxHost.hostid.in_(ids)).delete(synchronize_session=False) if ids else db.query(ZbxHost).delete()
     down = sum(1 for r in rows if r["status"] == "down")

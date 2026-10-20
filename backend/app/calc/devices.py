@@ -27,12 +27,13 @@ def _agg(items):
     return {"total": len(items), "up": up, "down": down, "deg": c["degraded"], "maint": c["maintenance"], "off": c["disabled"], "avail": up / (up + down) if up + down else None}
 
 
-def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str = "", full: bool = False, grp: str = "") -> dict:
+def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str = "", full: bool = False, grp: str = "", dtype: str = "") -> dict:
     labels = cfg.p("dev.kind_labels", {}) or {}
     chronic_h = 24 * int(cfg.p("dev.chronic_days", 30) or 30)
     amap = _alias_map(db)
     cmap = {m.code.lower(): m.site for m in db.query(M.ZbxLocMap) if m.site}
     sites = {s.name: s for s in db.query(M.Site)}
+    dlabel = {d.code: (d.label or d.code) for d in db.query(M.DevCode)}
     now = cfg.now()
     unmapped: dict = {}
     allrows = []
@@ -44,15 +45,20 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
             unmapped[loc] = unmapped.get(loc, 0) + 1
         allrows.append((h, loc))
     by_site = [r for r in allrows if not site or r[1] == site]
-    rows = [r for r in by_site if (not kind or r[0].kind == kind) and (not grp or grp in (r[0].groups or []))]
+    base = [r for r in by_site if (not kind or r[0].kind == kind) and (not grp or grp in (r[0].groups or []))]      # sebelum filter tipe: dipakai untuk ringkasan per tipe
+    rows = [r for r in base if not dtype or (r[0].dev_code or "-") == dtype]
 
     def age(h):
         return round((now - h.down_since).total_seconds() / 3600, 1) if h.down_since else None
 
     def item(h, loc):
-        return {"name": h.name, "kind": h.kind, "kindLabel": labels.get(h.kind, h.kind), "loc": loc, "status": h.status,
+        return {"name": h.name, "kind": h.kind, "kindLabel": labels.get(h.kind, h.kind), "loc": loc, "type": h.dev_code or "", "typeLabel": dlabel.get(h.dev_code, h.dev_code) if h.dev_code else "Tidak terklasifikasi", "zone": h.zone or "", "subzone": h.subzone or "", "status": h.status,
                 "since": ms(h.down_since) if h.down_since else None, "ageH": age(h), "problem": h.problem or ""}
 
+    tg = {}
+    for r in base:
+        tg.setdefault(r[0].dev_code or "-", []).append(r)
+    by_type = sorted(({"code": c, "k": dlabel.get(c, c) if c != "-" else "Tidak terklasifikasi", **_agg(v)} for c, v in tg.items()), key=lambda x: (-x["total"], x["k"]))
     kinds, locs = {}, {}
     for r in by_site:
         kinds.setdefault(r[0].kind or "-", []).append(r)
@@ -109,6 +115,6 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
     stale = bool(last) and (datetime.utcnow() - last).total_seconds() > every * 60 * 3
     return {"all": _agg(rows), "chronic": sum(1 for d in down if d["ageH"] is not None and d["ageH"] > chronic_h), "chronicDays": cdays,
             "byKind": by_kind, "byLoc": by_loc, "down": down[:200], "downN": len(down), "ageDist": age_dist, "map": mp, "noCoord": sorted(nocoord),
-            "groups": groups, "groupMaps": group_maps, "unmapped": [{"code": c, "n": n} for c, n in sorted(unmapped.items(), key=lambda x: -x[1])], "kindLoc": kind_loc, "kindDown": kind_down,
+            "byType": by_type, "groups": groups, "groupMaps": group_maps, "unmapped": [{"code": c, "n": n} for c, n in sorted(unmapped.items(), key=lambda x: -x[1])], "kindLoc": kind_loc, "kindDown": kind_down,
             "list": lst, "listN": list_n, "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": stale,
             "configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled), "error": src.last_error if src else None}
