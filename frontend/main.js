@@ -82,7 +82,7 @@ function applyLayout() {
 const LAYBAR = () => `<div class="laybar"><b>Customize</b><label>Apply to <select id="layRole"><option value="">All roles</option>${Object.values(CFG.roles).map(r => `<option value="${esc(r.key)}" ${r.key === S.layRole ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="layAdd">+ Add widget</button><button class="btn" type="button" id="laySave">Save</button><button class="btn ghost" type="button" id="layReset">Reset</button><button class="btn ghost" type="button" id="layCancel">Cancel</button></div><div class="layoff" id="layoff"></div><div class="laycat" id="laycat" hidden></div>`;
 function addTools(blk) {
     const t = document.createElement("div"), cur = nearest(blk.dataset.size || blk.dataset.dsize); t.className = "wtools";
-    t.innerHTML = `<span class="wdrag" title="Drag to move">⠿ Move</span><button type="button" data-lay="up" title="Move up">▲</button><button type="button" data-lay="down" title="Move down">▼</button><select data-lay-size aria-label="Size">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Title" value="${esc(blk.dataset.title || "")}" aria-label="Title"><button type="button" data-lay="eye">${blk.classList.contains("off") ? "Show" : "Hide"}</button>${blk.dataset.added ? `<button type="button" data-lay="rm" title="Remove widget">Remove</button>` : ""}`;
+    t.innerHTML = `<span class="wdrag" title="Drag to move">⠿ Move</span><button type="button" data-lay="up" title="Move up">▲</button><button type="button" data-lay="down" title="Move down">▼</button><select data-lay-size aria-label="Size">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Title" value="${esc(blk.dataset.title || "")}" aria-label="Title"><button type="button" data-lay="eye">${blk.classList.contains("off") ? "Show" : "Hide"}</button>${blk.dataset.wkey.startsWith("w-dev-map") ? `<select data-wgroup aria-label="Filter group" title="Filter group"><option value="">Semua group</option>${((V.dev && V.dev.groups) || []).map(g => `<option value="${esc(g.name)}" ${blk.dataset.wkey === "w-dev-map:" + encodeURIComponent(g.name) ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>` : ""}<button type="button" data-lay="rm" title="${blk.dataset.added ? "Remove widget" : "Remove from dashboard (can be added again)"}">Remove</button>`;
     blk.appendChild(t);
     const rz = document.createElement("span"); rz.className = "wresize"; rz.title = "Drag sideways to resize"; blk.appendChild(rz);
 }
@@ -94,13 +94,13 @@ function addWidget(key) {
 }
 function renderOff() {
   const t = $("layoff"); if (!t) return;
-  const off = [...document.querySelectorAll(".grid.lay > .wblock.off")];
+  const off = [...document.querySelectorAll(".grid.lay > .wblock.off:not([data-gone])")];
   t.innerHTML = off.length ? `<span class="lbl">Disembunyikan</span>` + off.map(b => `<button type="button" class="btn ghost sm" data-lay-show="${esc(b.dataset.wkey)}" title="Tampilkan lagi">${esc(b.dataset.title || b.dataset.dtitle || b.dataset.wkey)} · Show</button>`).join("") : "";
 }
 function moveBlock(b, dir) {
   const blk = b.closest(".wblock");
   if (dir === "eye") { const off = blk.classList.toggle("off"); b.textContent = off ? "Show" : "Hide"; renderOff(); }
-  else if (dir === "rm") { blk.remove(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); renderOff(); }
+  else if (dir === "rm") { if (blk.dataset.added) blk.remove(); else { blk.classList.add("off"); blk.dataset.gone = "1"; } const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); renderOff(); }
   else if (dir === "up" && blk.previousElementSibling) blk.parentNode.insertBefore(blk, blk.previousElementSibling);
   else if (dir === "down" && blk.nextElementSibling) blk.parentNode.insertBefore(blk.nextElementSibling, blk);
 }
@@ -216,7 +216,8 @@ document.addEventListener("click", async e => {
     else if (b.id === "layAdd") toggleCatalog();
     else if (d.wadd) { const sel = b.closest(".catw").querySelector("[data-wparam]"); addWidget(sel && sel.value ? d.wadd + ":" + encodeURIComponent(sel.value) : d.wadd); }
     else if (b.id === "layCancel") set({layEdit: false});
-    else if (d.layShow) { const blk = document.querySelector(`.grid.lay > .wblock[data-wkey="${CSS.escape(d.layShow)}"]`); if (blk) { blk.classList.remove("off"); const eye = blk.querySelector('[data-lay="eye"]'); if (eye) eye.textContent = "Hide"; renderOff(); } }
+    else if (d.layShow) { const blk = document.querySelector(`.grid.lay > .wblock[data-wkey="${CSS.escape(d.layShow)}"]`); if (blk) { blk.classList.remove("off"); delete blk.dataset.gone; const eye = blk.querySelector('[data-lay="eye"]'); if (eye) eye.textContent = "Hide"; renderOff(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); } }
+    else if (d.layHide) { const blk = document.querySelector(`.grid.lay > .wblock[data-wkey="${CSS.escape(d.layHide)}"]`); if (blk) { blk.classList.add("off"); const eye = blk.querySelector('[data-lay="eye"]'); if (eye) eye.textContent = "Show"; renderOff(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); } }
     else if (d.lay) moveBlock(b, d.lay);
     else if (b.id === "moreBtn") { openSheet(true); }
     else if (d.closeSheet !== undefined) { openSheet(false); }
@@ -259,6 +260,11 @@ document.addEventListener("change", async e => {
   else if (t.id === "fCmp") set({cmp: t.checked});
   else if (t.dataset.rkind) set({rkind: t.dataset.rkind});
   else if (t.id === "layRole") set({layRole: t.value});
+  else if (t.dataset.wgroup !== undefined) {   // ganti filter group pada widget peta tanpa menambah widget baru
+    const blk = t.closest(".wblock"), key = t.value ? "dev-map:" + encodeURIComponent(t.value) : "dev-map", w = widgetFind(key); if (!w) return;
+    const {el} = widgetBlock(w), size = blk.dataset.size || w.size; el.className = el.className.replace(SZ, "").trim() + " " + size; el.dataset.size = size; el.dataset.title = blk.dataset.title || "";
+    blk.replaceWith(el); addTools(el); initDevMaps();
+  }
   else if (t.dataset.laySize !== undefined) { const blk = t.closest(".wblock"); blk.className = blk.className.replace(SZ, "").trim() + " " + t.value; blk.dataset.size = t.value; }
   else if (t.id === "dim") set({dim: t.value});
   else if (t.id === "sdim") set({sdim: t.value});
