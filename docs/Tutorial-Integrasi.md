@@ -72,6 +72,7 @@ Konektornya belum dibangun. Uji dulu langkah berikut.
 1. Panorama → Device → Admin Roles → Add, Role = **Panorama**.
 2. Tab **XML API**: aktifkan hanya **Report** dan **Log**; yang lain (Configuration, Operational Requests, Commit, User-ID Agent, IoT Agent, Export, Import) **Disable**.
 3. Tab **Web UI**: set semua **Disable** (klik ikon pada item paling atas hingga berubah silang merah, anak-anaknya ikut). Tab **REST API**: semua **Disable**. Tab **Plugins**: **Disable**. Tab **Command Line**: **None**.
+   Bila Test menjawab "Illegal value for parameter reportname" padahal nama report benar, report itu kemungkinan ada di lingkup Device Group. Set sementara tab **XML API → Configuration = Read Only** agar Test bisa menelusuri lokasi report di config.
    Bila nanti Panorama menjawab "permission denied" saat mengambil report, naikkan sementara Web UI → Monitor (Logs dan Reports) menjadi **Read Only**, tidak lebih.
 4. Device → Administrators → Add `dashboard-api`, Role = profil di atas, password kuat. Akun ini hanya dipakai API, jadi tidak bisa membuka Web UI.
 

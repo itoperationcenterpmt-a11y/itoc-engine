@@ -34,10 +34,10 @@ def keygen(cl: httpx.Client, base: str, user: str, pw: str) -> str:
     return key
 
 
-def run_report(cl: httpx.Client, base: str, key: str, name: str, wait_s: int = 90) -> tuple[list[str], list[dict]]:
+def run_report(cl: httpx.Client, base: str, key: str, name: str, wait_s: int = 90, extra: dict | None = None) -> tuple[list[str], list[dict]]:
     """Jalankan custom report secara asinkron lalu tunggu hasilnya. Mengembalikan (kolom, baris)."""
     h = {"X-PAN-KEY": key}
-    x = _parse(cl.post(api_url(base), headers=h, data={"type": "report", "reporttype": "custom", "reportname": name, "async": "yes"}))
+    x = _parse(cl.post(api_url(base), headers=h, data={"type": "report", "reporttype": "custom", "reportname": name, "async": "yes", **(extra or {})}))
     job = x.findtext(".//job")
     if not job:
         raise RuntimeError("Panorama tidak memberi job id untuk report " + name)
@@ -73,3 +73,26 @@ def run_log(cl: httpx.Client, base: str, key: str, log_type: str = "threat", nlo
         time.sleep(1)
     rows = [{c.tag: (c.text or "").strip() for c in e} for e in y.iter("entry") if len(e)]
     return (list(rows[0].keys()) if rows else []), rows
+
+def _names(x: ET.Element, path: str) -> list[str]:
+    n = x.find(path)
+    return [e.get("name") for e in (n if n is not None else []) if e.tag == "entry" and e.get("name")]
+
+
+def find_report(cl: httpx.Client, base: str, key: str, name: str) -> tuple[list[str], list[str]]:
+    """Cari di config Panorama di mana report itu didefinisikan (shared atau device group). Butuh hak XML API Configuration minimal Read Only.
+    Mengembalikan (lokasi, daftar device group)."""
+    h = {"X-PAN-KEY": key}
+    get = lambda xp: _parse(cl.post(api_url(base), headers=h, data={"type": "config", "action": "get", "xpath": xp}))
+    found = []
+    if name in _names(get("/config/shared/reports"), ".//reports"):
+        found.append("shared")
+    dgp = "/config/devices/entry[@name='localhost.localdomain']/device-group"
+    dgs = _names(get(dgp), ".//device-group")
+    for dg in dgs:
+        try:
+            if name in _names(get(f"{dgp}/entry[@name='{dg}']/reports"), ".//reports"):
+                found.append("device-group " + dg)
+        except RuntimeError:
+            continue
+    return found, dgs

@@ -143,6 +143,21 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
                         out.append(f"Report {name}: OK, {len(rows)} baris, kolom: {', '.join(cols[:10]) or '-'}.")
                     except RuntimeError as e:
                         out.append(f"Report {name}: gagal ({e}).")
+                        try:                                      # telusuri di mana report itu didefinisikan, lalu coba dengan konteks device group
+                            where, dgs = panorama_api.find_report(cl, c["base_url"], k, name)
+                            out.append("Lokasi report di config: " + (", ".join(where) or "tidak ditemukan di shared maupun %d device group" % len(dgs)) + ".")
+                            for w in where:
+                                if not w.startswith("device-group "):
+                                    continue
+                                for pname in ("dg", "vsys", "device-group"):
+                                    try:
+                                        cols, rows = panorama_api.run_report(cl, c["base_url"], k, name, wait_s=60, extra={pname: w[13:]})
+                                        out.append("Percobaan %s=%s: OK, %d baris, kolom: %s." % (pname, w[13:], len(rows), ", ".join(cols[:10]) or "-"))
+                                        break
+                                    except RuntimeError as e2:
+                                        out.append("Percobaan %s=%s: gagal (%s)." % (pname, w[13:], str(e2)[:90]))
+                        except RuntimeError as e3:
+                            out.append("Lokasi report tidak bisa ditelusuri (%s). Beri role XML API > Configuration = Read Only untuk menelusuri." % str(e3)[:100])
             return {"ok": True, "msg": " ".join(out)}
         if key == "ruckus":
             u, pw = vault.cred(db, "vsz.user", c.get("user_env", "VSZ_USER")), vault.cred(db, "vsz.pass", c.get("pass_env", "VSZ_PASS"))
