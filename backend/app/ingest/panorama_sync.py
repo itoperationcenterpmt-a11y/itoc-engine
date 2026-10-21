@@ -1,0 +1,143 @@
+"""Sinkron SOC dari Panorama lewat dynamic report API (tanpa custom report): ringkasan harian (ancaman, URL, aplikasi) menjadi satu batch per hari,
+dan laporan Top (sumber, host internal, high/critical, URL diblokir, trafik, ditolak) menjadi satu batch periode yang diperbarui berkala.
+Isinya sama dengan CSV custom report, dibentuk dari Panorama langsung, lalu masuk ke jalur impor yang sama (panorama._build). Impor CSV tetap bisa dipakai."""
+from datetime import date, datetime, timedelta
+import httpx
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from .. import vault
+from ..models import DataSource, SocBatch, SocDay
+from ..store import Config
+from . import panorama, panorama_api as PA
+
+BLOCK_URL = "( action eq block-url ) or ( action eq block-continue ) or ( action eq block-override )"
+DENIED = "( action eq deny ) or ( action eq drop ) or ( action eq reset-both ) or ( action eq reset-client ) or ( action eq reset-server )"
+PERIODS = [(7, "last-7-days"), (30, "last-30-days"), (60, "last-60-days"), (90, "last-90-days")]
+g = lambda r, k: r.get(k, "")
+
+# (kunci laporan, jenis, kelompok, nilai, filter, bentuk baris sesuai urutan kolom CSV)
+DAILY = [
+    ("threat_summary", "threat", ["severity", "threat-type", "thr_category", "action", "app", "srcloc", "dstloc"], ["repeatcnt"], "", 5000,
+     lambda r, d: [d, g(r, "severity"), g(r, "threat-type"), g(r, "thr_category"), g(r, "action"), g(r, "app"), g(r, "srcloc"), g(r, "dstloc"), g(r, "repeatcnt")]),
+    ("url_summary", "urlsum", ["category", "action", "app"], ["repeatcnt"], "", 5000, lambda r, d: [d, g(r, "category"), g(r, "action"), g(r, "app"), g(r, "repeatcnt")]),
+    ("appstats", "trsum", ["app"], ["bytes", "sessions"], "", 2000, lambda r, d: [d, g(r, "app"), g(r, "bytes"), g(r, "sessions")]),
+]
+TOP = [
+    ("top_source", "threat", ["src", "srcloc", "severity"], ["repeatcnt"], "( srcloc neq '{internal}' )", 500, lambda r: [g(r, "src"), "", g(r, "srcloc"), g(r, "severity"), g(r, "repeatcnt")]),
+    ("internal_host", "threat", ["src", "srcuser", "threatid", "threat-type", "severity", "action", "dst"], ["repeatcnt"], "( srcloc eq '{internal}' )", 500,
+     lambda r: [g(r, "src"), "", g(r, "srcuser"), g(r, "threatid"), g(r, "severity"), g(r, "action"), g(r, "dst"), "", g(r, "repeatcnt")]),
+    ("high_critical", "threat", ["src", "dst", "srcuser", "app", "from", "to", "action", "severity", "threat-type", "threatid", "thr_category"], ["repeatcnt"], "( severity geq high )", 1000,
+     lambda r: [g(r, "src"), "", g(r, "dst"), "", g(r, "srcuser"), g(r, "app"), g(r, "from"), g(r, "to"), g(r, "action"), g(r, "severity"), g(r, "threat-type"), g(r, "threatid"), g(r, "thr_category"), "", g(r, "repeatcnt")]),
+    ("url_blocked", "url", ["src", "dst", "app", "rule", "from", "to", "action", "category", "srcuser", "url"], ["repeatcnt"], BLOCK_URL, 500,
+     lambda r: [g(r, "src"), "", g(r, "dst"), "", g(r, "app"), g(r, "rule"), g(r, "from"), g(r, "to"), g(r, "action"), g(r, "category"), g(r, "srcuser"), g(r, "url"), g(r, "repeatcnt")]),
+    ("denied", "trsum", ["src", "srcloc", "dst", "to", "app", "rule", "action"], ["sessions", "bytes"], DENIED, 500,
+     lambda r: [g(r, "src"), "", g(r, "srcloc"), g(r, "dst"), "", g(r, "to"), g(r, "app"), g(r, "rule"), g(r, "action"), g(r, "sessions"), g(r, "bytes")]),
+    ("traffic_top", "trsum", ["src", "dst", "from", "to", "dstloc"], ["bytes", "sessions"], "", 500,
+     lambda r: [g(r, "src"), "", g(r, "dst"), "", g(r, "from"), g(r, "to"), g(r, "dstloc"), g(r, "bytes"), g(r, "sessions")]),
+    ("traffic_app", "trsum", ["app", "category-of-app"], ["bytes", "bytes_sent", "bytes_received"], "", 500,
+     lambda r: [g(r, "app"), g(r, "category-of-app"), g(r, "bytes"), g(r, "bytes_sent"), g(r, "bytes_received")]),
+    ("rule_zone", "trsum", ["rule", "from", "to"], ["bytes", "bytes_sent", "bytes_received"], "", 500,
+     lambda r: [g(r, "rule"), g(r, "from"), g(r, "to"), g(r, "bytes"), g(r, "bytes_sent"), g(r, "bytes_received")]),
+]
+NUMERIC = {"count", "bytes", "bytes sent", "bytes received", "sessions"}
+
+
+def _numeric(key: str, rows: list[list]) -> list[list]:
+    """Kolom angka diubah ke float seperti pada jalur CSV (panorama.read_csv_reports)."""
+    head = [h.strip().lower() for h in panorama.CSV_HEADERS[key]]
+    idx = [i for i, h in enumerate(head) if h in NUMERIC] + ([12] if key == "url_blocked" else [14] if key == "high_critical" else [])
+    for r in rows:
+        for i in idx:
+            if i < len(r):
+                r[i] = panorama.num(r[i])
+    return rows
+
+
+def _period_for(day: date, today: date) -> str | None:
+    age = (today - day).days
+    return next((p for n, p in PERIODS if age < n), None)
+
+
+def _day_query(day: date) -> str:
+    d = day.strftime("%Y/%m/%d")
+    return f"( receive_time geq '{d} 00:00:00' ) and ( receive_time leq '{d} 23:59:59' )"
+
+
+def _model(db: Session, cfg: Config, d: date, reports: dict, label: str, with_days: bool) -> SocBatch | None:
+    xc = cfg.sources["panorama"]["config"]["excel"]
+    by = {xc["reports"].get(k, k): rows for k, rows in reports.items()}
+    P = panorama._build(by, cfg, xc, cfg.p("soc.internal_range"), cfg.p("soc.internet_zone"))
+    if with_days and not P["days"]:
+        return None
+    b = SocBatch(file_name=label, uploaded_by="Panorama API", uploaded_at=cfg.now(), date_from=date.fromisoformat(P["from"]) if P["from"] else d, date_to=date.fromisoformat(P["to"]) if P["to"] else d,
+                 rows_read=P["read"], rows_skipped=P["skipped"], status="valid", issues=[], tables=P["tables"], kpi=P["K"])
+    for k, v in P["days"].items():
+        b.days.append(SocDay(day=date.fromisoformat(k), threats=v["th"], urls=v["url"], bytes=int(v["b"]), sessions=int(v["s"])))
+    db.add(b)
+    return b
+
+
+def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
+    c = src.config or {}
+    user, pw = vault.cred(db, "pano.user", c.get("user_env", "PANO_USER")), vault.cred(db, "pano.pass", c.get("pass_env", "PANO_PASS"))
+    if not c.get("base_url") or not user or not pw:
+        raise RuntimeError("Base URL / akun API Panorama belum diatur (Admin -> Integrations)")
+    cur = dict(src.cursor or {})
+    now = cfg.now()
+    today, yesterday = now.date(), now.date() - timedelta(days=1)
+    backfill = min(int(c.get("backfill_days", 14)), 90)
+    start = date.fromisoformat(cur["last_day"]) + timedelta(days=1) if cur.get("last_day") else yesterday - timedelta(days=backfill - 1)
+    have = {x for (x,) in db.execute(select(SocDay.day).join(SocBatch).where(SocBatch.status != "failed"))}      # hari yang sudah ada (impor CSV) tidak ditimpa
+    pending, d = [], start
+    while d <= yesterday and len(pending) < int(c.get("max_days_per_run", 4)):
+        pending.append(d)
+        d += timedelta(days=1)
+    top_due = not cur.get("top_at") or (now - datetime.fromisoformat(cur["top_at"])).total_seconds() > float(c.get("top_refresh_h", 12)) * 3600
+    if not pending and not top_due:
+        return 0, "Tidak ada hari baru dan laporan Top masih baru"
+    notes, n_days, n_rows = [], 0, 0
+    with httpx.Client(timeout=60, verify=c.get("verify_tls", False)) as cl:
+        key = PA.keygen(cl, c["base_url"], user, pw)
+        for d in pending:
+            if d in have:
+                cur["last_day"] = d.isoformat()
+                continue
+            per = _period_for(d, today)
+            if per is None:
+                cur["last_day"] = d.isoformat()                      # lebih tua dari 90 hari: di luar jangkauan dynamic report
+                continue
+            try:
+                reports = {}
+                for k, typ, aggs, vals, q, topn, fmt in DAILY:
+                    recs = PA.run_dynamic(cl, c["base_url"], key, typ, aggs, vals, per, _day_query(d), topn)
+                    reports[k] = _numeric(k, [fmt(r, d.strftime("%Y-%m-%d 00:00:00")) for r in recs])
+                b = _model(db, cfg, d, reports, f"Panorama API · {d.isoformat()}", True)
+                if b is not None:
+                    n_days += 1
+                    n_rows += b.rows_read
+                cur["last_day"] = d.isoformat()
+            except (RuntimeError, httpx.HTTPError) as e:
+                notes.append(f"hari {d.isoformat()} gagal: {str(e)[:120]}")
+                break
+        if top_due:
+            try:
+                per = c.get("top_period", "last-30-days")
+                days_n = {"last-7-days": 7, "last-30-days": 30, "last-60-days": 60, "last-90-days": 90}.get(per, 30)
+                reports = {}
+                for k, typ, aggs, vals, q, topn, fmt in TOP:
+                    q = q.replace("{internal}", str(cfg.p("soc.internal_range") or ""))
+                    recs = PA.run_dynamic(cl, c["base_url"], key, typ, aggs, vals, per, q, int(c.get("top_n", topn)) if topn <= 500 else topn)
+                    reports[k] = _numeric(k, [fmt(r) for r in recs])
+                for old in db.scalars(select(SocBatch).where(SocBatch.file_name.like("Panorama API · Top%"))):
+                    db.delete(old)
+                db.flush()
+                b = _model(db, cfg, yesterday, reports, f"Panorama API · Top {days_n} hari", False)
+                b.date_from, b.date_to = today - timedelta(days=days_n), yesterday
+                cur["top_at"] = now.isoformat()
+                n_rows += sum(len(v) for v in reports.values())
+            except (RuntimeError, httpx.HTTPError) as e:
+                notes.append("laporan Top gagal: " + str(e)[:120])
+    src.cursor = cur
+    if notes and not n_days and not cur.get("top_at"):
+        raise RuntimeError("; ".join(notes))
+    return n_rows, f"{n_days} hari ringkasan baru" + (", laporan Top diperbarui" if top_due and cur.get("top_at") == now.isoformat() else "") + ("; " + "; ".join(notes) if notes else "")

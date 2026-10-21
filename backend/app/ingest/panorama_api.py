@@ -96,3 +96,25 @@ def find_report(cl: httpx.Client, base: str, key: str, name: str) -> tuple[list[
         except RuntimeError:
             continue
     return found, dgs
+
+def run_dynamic(cl: httpx.Client, base: str, key: str, typ: str, aggs: list[str], vals: list[str], period: str, query: str = "", topn: int = 500, wait_s: int = 300) -> list[dict]:
+    """Dynamic report Panorama: agregat dari semua firewall terkelola, dihitung di Panorama. typ = threat | url | trsum | urlsum | appstat;
+    period = last-calendar-day, last-7-days, last-30-days, dan seterusnya; query = filter PAN-OS, mis. ( severity geq high )."""
+    h = {"X-PAN-KEY": key}
+    members = lambda xs: "".join(f"<member>{a}</member>" for a in xs)
+    cmd = (f"<type><{typ}><aggregate-by>{members(aggs)}</aggregate-by><values>{members(vals)}</values></{typ}></type><period>{period}</period>"
+           + (f"<query>{query}</query>" if query else "") + f"<topn>{topn}</topn><topm>10</topm><caption>soc</caption>")
+    x = _parse(cl.post(api_url(base), headers=h, data={"type": "report", "reporttype": "dynamic", "reportname": "custom-dynamic-report", "cmd": cmd, "async": "yes"}))
+    job = x.findtext(".//job")
+    if not job:
+        raise RuntimeError("Panorama tidak memberi job id untuk dynamic report " + typ)
+    t0 = time.time()
+    while True:
+        y = _parse(cl.post(api_url(base), headers=h, data={"type": "report", "action": "get", "job-id": job}))
+        if (y.findtext(".//job/status") or "FIN").upper() == "FIN":
+            break
+        if time.time() - t0 > wait_s:
+            raise RuntimeError("Dynamic report %s belum selesai dalam %d detik" % (typ, wait_s))
+        time.sleep(2)
+    rep = y.find(".//report")
+    return [{c.tag: (c.text or "").strip() for c in e} for e in (rep if rep is not None else []) if e.tag == "entry"]

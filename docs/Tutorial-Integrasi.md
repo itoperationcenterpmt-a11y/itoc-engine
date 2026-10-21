@@ -65,22 +65,24 @@ Catatan: nama channel harus sama dengan konfigurasi (`Traffic In (speed)(RAW)`, 
 
 ## 5. Panorama (Cyber Security)
 
-Panorama/PAN-OS **punya API**: XML API (dan REST API untuk konfigurasi). Log dan **custom report** bisa diambil lewat API. Karena data SOC saat ini berasal dari custom report (`SOC-Threat-Summary`, `SOC-URL-Summary`, `SOC-Traffic-Application`, dan seterusnya), kemungkinan besar laporan yang sama bisa ditarik otomatis tanpa impor Excel.
-Konektornya belum dibangun. Uji dulu langkah berikut.
+Panorama punya API (PAN-OS XML API). Dashboard memakainya lewat **dynamic report**: Panorama menghitung agregat dari semua firewall terkelola, jadi **tidak perlu custom report**. (Custom report yang dibuat langsung di firewall tidak terlihat dari Panorama, dan tidak dibutuhkan.)
 
 **Role dan akun API (hak minimum)**
 1. Panorama → Device → Admin Roles → Add, Role = **Panorama**.
-2. Tab **XML API**: aktifkan hanya **Report** dan **Log**; yang lain (Configuration, Operational Requests, Commit, User-ID Agent, IoT Agent, Export, Import) **Disable**.
-3. Tab **Web UI**: set semua **Disable** (klik ikon pada item paling atas hingga berubah silang merah, anak-anaknya ikut). Tab **REST API**: semua **Disable**. Tab **Plugins**: **Disable**. Tab **Command Line**: **None**.
-   Bila Test menjawab "Illegal value for parameter reportname" padahal nama report benar, report itu kemungkinan ada di lingkup Device Group. Set sementara tab **XML API → Configuration = Read Only** agar Test bisa menelusuri lokasi report di config.
-   Bila nanti Panorama menjawab "permission denied" saat mengambil report, naikkan sementara Web UI → Monitor (Logs dan Reports) menjadi **Read Only**, tidak lebih.
-4. Device → Administrators → Add `dashboard-api`, Role = profil di atas, password kuat. Akun ini hanya dipakai API, jadi tidak bisa membuka Web UI.
+2. Tab **XML API**: aktifkan **Report** dan **Log**; lainnya **Disable**. Tab **Web UI**, **REST API**, **Plugins**: **Disable**. Tab **Command Line**: **None**.
+3. Device → Administrators → Add `dashboard-api`, pakai role itu, password kuat.
 
-**Uji dari dashboard** (tanpa curl): Admin → Integrations → Panorama. Isi Base URL (IP atau nama Panorama), username dan password akun API, Verifikasi TLS = Tidak bila sertifikat internal, lalu klik **Test**. Test akan membuat key, menjalankan report `SOC-Threat-Summary`, dan menampilkan jumlah baris serta nama kolomnya.
-Sinkron otomatis belum ada; data SOC masih lewat impor Excel sampai hasil Test terkonfirmasi.
+**Di dashboard**: Admin → Integrations → Panorama: Base URL (IP Panorama), username dan password akun API, Verifikasi TLS = Tidak bila sertifikat internal, Mode = **API**, Status = Aktif. **Test connection** untuk menguji login dan log, lalu **Sync now**.
 
-**Uji manual (opsional)**
-`curl -k "https://PANORAMA/api/?type=keygen" -d "user=dashboard-api" -d "password=PASSWORD"`
-`curl -k -H "X-PAN-KEY: KEY" "https://PANORAMA/api/" -d type=report -d reporttype=custom -d reportname=SOC-Threat-Summary -d async=yes`
-Ambil hasilnya dengan `-d type=report -d action=get -d job-id=ID`.
-**Alternatif Syslog** (bila API tidak diizinkan): Device → Server Profiles → Syslog (alamat collector, format BSD/IETF), lalu Objects → Log Forwarding dan pasang di security rule. Di server dashboard jalankan penerima (rsyslog atau syslog-ng, UDP/TCP 514) yang menulis ke berkas atau database, lalu diagregasi per hari. Cara ini memberi data per sumber IP, aplikasi, dan kategori URL, sehingga "apa yang dominan diakses" per client WiFi bisa dihitung dengan menggabungkan IP dan waktu sesi WiFi.
+**Yang diambil dan disimpan** (di database dashboard, sama seperti impor CSV):
+- **Ringkasan harian** (ancaman, URL, aplikasi): satu batch per hari, mulai `backfill_days` hari ke belakang (bawaan 14, maksimal 90) sampai kemarin. Tiap sinkron memproses maksimal `max_days_per_run` hari (bawaan 4), sisanya di sinkron berikutnya. Hari yang sudah ada dari impor CSV tidak ditimpa.
+- **Laporan Top** (sumber serangan, host internal, high/critical, URL diblokir, aplikasi, rule/zone, trafik, ditolak): satu batch periode `top_period` (bawaan 30 hari terakhir), diperbarui tiap `top_refresh_h` jam (bawaan 12).
+- Batch dari API bernama "Panorama API · ...". Impor CSV (Admin → Upload RAW SOC) tetap berfungsi sebagai cadangan.
+
+**Batasan yang perlu diketahui**
+- Dynamic report meringkas alamat IP ke blok /24 (mis. `10.185.25.0/24`), tidak sampai IP host.
+- Kolom "host name" dan beberapa nama ancaman DNS tidak tersedia di agregat (tampil sebagai ID). Kolom URL hanya ada di laporan URL diblokir.
+- Riwayat harian dibatasi oleh retensi log di Panorama (praktisnya sekitar 90 hari).
+- Hasil bisa sedikit berbeda dari custom report di firewall karena sumbernya log yang dikumpulkan Panorama.
+
+**Alternatif Syslog** (bila API tidak diizinkan): Device → Server Profiles → Syslog, lalu Objects → Log Forwarding. Di server dashboard jalankan penerima (rsyslog atau syslog-ng) dan agregasi per hari. Cara ini memberi data per IP host, tetapi perlu pekerjaan tambahan.
