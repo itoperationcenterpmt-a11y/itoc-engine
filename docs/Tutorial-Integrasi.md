@@ -68,15 +68,18 @@ Catatan: nama channel harus sama dengan konfigurasi (`Traffic In (speed)(RAW)`, 
 Panorama/PAN-OS **punya API**: XML API (dan REST API untuk konfigurasi). Log dan **custom report** bisa diambil lewat API. Karena data SOC saat ini berasal dari custom report (`SOC-Threat-Summary`, `SOC-URL-Summary`, `SOC-Traffic-Application`, dan seterusnya), kemungkinan besar laporan yang sama bisa ditarik otomatis tanpa impor Excel.
 Konektornya belum dibangun. Uji dulu langkah berikut.
 
-**Uji API**
-1. Panorama → Device → Admin Roles → Add: tab **XML API** aktifkan hanya **Report** dan **Log** (read), tab lain nonaktif.
-2. Device → Administrators → Add `dashboard-api`, pakai role di atas.
-3. Ambil key (dari server dashboard):
-   `curl -k "https://PANORAMA/api/?type=keygen" -d "user=dashboard-api" -d "password=PASSWORD"`
-4. Ambil satu report:
-   `curl -k "https://PANORAMA/api/?type=report&async=yes&reporttype=custom&reportname=SOC-Threat-Summary&key=KEY"`
-   Jawaban berisi `job id`. Ambil hasilnya dengan:
-   `curl -k "https://PANORAMA/api/?type=report&action=get&job-id=ID&key=KEY"`
-5. Kirim potongan awal hasil XML-nya (tanpa key). Setelah bentuknya terkonfirmasi, konektor tinggal membaca report yang sama dengan impor Excel sekarang.
+**Role dan akun API (hak minimum)**
+1. Panorama → Device → Admin Roles → Add, Role = **Panorama**.
+2. Tab **XML API**: aktifkan hanya **Report** dan **Log**; yang lain (Configuration, Operational Requests, Commit, User-ID Agent, IoT Agent, Export, Import) **Disable**.
+3. Tab **Web UI**: set semua **Disable** (klik ikon pada item paling atas hingga berubah silang merah, anak-anaknya ikut). Tab **REST API**: semua **Disable**. Tab **Plugins**: **Disable**. Tab **Command Line**: **None**.
+   Bila nanti Panorama menjawab "permission denied" saat mengambil report, naikkan sementara Web UI → Monitor (Logs dan Reports) menjadi **Read Only**, tidak lebih.
+4. Device → Administrators → Add `dashboard-api`, Role = profil di atas, password kuat. Akun ini hanya dipakai API, jadi tidak bisa membuka Web UI.
 
+**Uji dari dashboard** (tanpa curl): Admin → Integrations → Panorama. Isi Base URL (IP atau nama Panorama), username dan password akun API, Verifikasi TLS = Tidak bila sertifikat internal, lalu klik **Test**. Test akan membuat key, menjalankan report `SOC-Threat-Summary`, dan menampilkan jumlah baris serta nama kolomnya.
+Sinkron otomatis belum ada; data SOC masih lewat impor Excel sampai hasil Test terkonfirmasi.
+
+**Uji manual (opsional)**
+`curl -k "https://PANORAMA/api/?type=keygen" -d "user=dashboard-api" -d "password=PASSWORD"`
+`curl -k -H "X-PAN-KEY: KEY" "https://PANORAMA/api/" -d type=report -d reporttype=custom -d reportname=SOC-Threat-Summary -d async=yes`
+Ambil hasilnya dengan `-d type=report -d action=get -d job-id=ID`.
 **Alternatif Syslog** (bila API tidak diizinkan): Device → Server Profiles → Syslog (alamat collector, format BSD/IETF), lalu Objects → Log Forwarding dan pasang di security rule. Di server dashboard jalankan penerima (rsyslog atau syslog-ng, UDP/TCP 514) yang menulis ke berkas atau database, lalu diagregasi per hari. Cara ini memberi data per sumber IP, aplikasi, dan kategori URL, sehingga "apa yang dominan diakses" per client WiFi bisa dihitung dengan menggabungkan IP dan waktu sesi WiFi.
