@@ -77,7 +77,7 @@ function subnav(parent) {
 }
 function renderShell() {
   const NAVT = TABS.filter(t => topOf(t[0]) === t[0]), curTop = topOf(S.tab);
-  $("tabs").innerHTML = NAVT.map(([k, l, bd]) => `<button role="tab" data-tab="${k}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></button>`).join("");
+  $("tabs").innerHTML = NAVT.map(([k, l, bd]) => `<button role="tab" data-tab="${k}" title="${esc(l)}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></button>`).join("");
   $("sheetGrid").innerHTML = NAVT.map(([k, l, bd]) => `<button type="button" data-tab="${k}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></button>`).join("");
   $("moreBtn").classList.toggle("on", NAVT.findIndex(t => t[0] === curTop) > 3);
   const cur = TABS.find(t => t[0] === S.tab); $("ptitle").textContent = cur ? cur[1] : "";
