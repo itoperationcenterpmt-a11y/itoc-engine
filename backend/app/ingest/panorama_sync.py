@@ -77,6 +77,31 @@ def _model(db: Session, cfg: Config, d: date, reports: dict, label: str, with_da
     return b
 
 
+def _month_end(d: date) -> date:
+    return (d.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+
+
+def _top_jobs(c: dict, cfg: Config, cur: dict, now: datetime, yesterday: date, lower: date) -> list[tuple[str, date, date, str]]:
+    """Batch Top yang perlu dibuat atau diperbarui: 30 hari dan 7 hari terakhir serta bulan berjalan (diperbarui tiap top_refresh_h jam), dan tiap bulan penuh
+    sejak batas riwayat (sekali saja). Filter periode di halaman memilih batch yang paling cocok."""
+    every = float(c.get("top_refresh_h", 12)) * 3600
+    age = lambda label: (now - datetime.fromisoformat(cur["top_at_k"][label])).total_seconds() if label in cur.get("top_at_k", {}) else 1e12
+    jobs = []
+    for label, n in (("Top 30 hari", 30), ("Top 7 hari", 7)):
+        if age(label) > every:
+            jobs.append((label, yesterday - timedelta(days=n - 1), yesterday, "roll"))
+    first = yesterday.replace(day=1)
+    if first <= yesterday and age(f"Top {first:%Y-%m} berjalan") > every:
+        jobs.insert(1, (f"Top {first:%Y-%m} berjalan", first, yesterday, "roll"))
+    done, m = set(cur.get("top_months", [])), first
+    while True:
+        m = (m - timedelta(days=1)).replace(day=1)
+        if _month_end(m) < lower:
+            break
+        if f"Top {m:%Y-%m}" not in done:
+            jobs.append((f"Top {m:%Y-%m}", max(m, lower), _month_end(m), "month"))
+    return jobs
+
 def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     c = src.config or {}
     user, pw = vault.cred(db, "pano.user", c.get("user_env", "PANO_USER")), vault.cred(db, "pano.pass", c.get("pass_env", "PANO_PASS"))
@@ -93,10 +118,10 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         if d not in have and d.isoformat() not in tried:
             pending.append(d)
         d += timedelta(days=1)
-    top_due = not cur.get("top_at") or (now - datetime.fromisoformat(cur["top_at"])).total_seconds() > float(c.get("top_refresh_h", 12)) * 3600
-    if not pending and not top_due:
+    top_jobs = _top_jobs(c, cfg, cur, now, yesterday, lower)
+    if not pending and not top_jobs:
         return 0, "Tidak ada hari baru dan laporan Top masih baru"
-    notes, n_days, n_rows = [], 0, 0
+    notes, n_days, n_rows, n_top = [], 0, 0, 0
     with httpx.Client(timeout=60, verify=c.get("verify_tls", False)) as cl:
         key = PA.keygen(cl, c["base_url"], user, pw)
         for d in pending:
@@ -114,26 +139,30 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
             except (RuntimeError, httpx.HTTPError) as e:
                 notes.append(f"hari {d.isoformat()} gagal: {str(e)[:120]}")
                 break
-        if top_due:
+        for label, d0, d1, kind in top_jobs[:int(c.get("max_top_per_run", 3))]:
             try:
-                per = c.get("top_period", "last-30-days")
-                days_n = {"last-7-days": 7, "last-30-days": 30, "last-60-days": 60, "last-90-days": 90}.get(per, 30)
+                rng = (d0.strftime("%Y/%m/%d 00:00:00"), d1.strftime("%Y/%m/%d 23:59:59"))
                 reports = {}
                 for k, typ, aggs, vals, q, topn, fmt in TOP:
                     q = q.replace("{internal}", str(cfg.p("soc.internal_range") or ""))
-                    recs = PA.run_dynamic(cl, c["base_url"], key, typ, aggs, vals, per, q, int(c.get("top_n", topn)) if topn <= 500 else topn)
+                    recs = PA.run_dynamic(cl, c["base_url"], key, typ, aggs, vals, "", q, int(c.get("top_n", topn)) if topn <= 500 else topn, rng=rng)
                     reports[k] = _numeric(k, [fmt(r) for r in recs])
-                for old in db.scalars(select(SocBatch).where(SocBatch.file_name.like("Panorama API · Top%"))):
-                    db.delete(old)
+                for old in db.scalars(select(SocBatch).where(SocBatch.file_name == "Panorama API · " + label)):
+                    db.delete(old)                                   # hanya batch API dengan label yang sama; impor manual tidak pernah dihapus
                 db.flush()
-                b = _model(db, cfg, yesterday, reports, f"Panorama API · Top {days_n} hari", False)
-                b.date_from, b.date_to = today - timedelta(days=days_n), yesterday
-                cur["top_at"] = now.isoformat()
+                b = _model(db, cfg, d1, reports, "Panorama API · " + label, False)
+                b.date_from, b.date_to = d0, d1
+                if kind == "month":
+                    cur["top_months"] = sorted(set(cur.get("top_months", [])) | {label})
+                else:
+                    cur.setdefault("top_at_k", {})[label] = now.isoformat()
+                n_top += 1
                 n_rows += sum(len(v) for v in reports.values())
             except (RuntimeError, httpx.HTTPError) as e:
-                notes.append("laporan Top gagal: " + str(e)[:120])
+                notes.append(f"Top {label} gagal: {str(e)[:100]}")
+                break
     cur["tried"] = sorted(tried)[-800:]
     src.cursor = cur
-    if notes and not n_days and not cur.get("top_at"):
+    if notes and not n_days and not n_top:
         raise RuntimeError("; ".join(notes))
-    return n_rows, f"{n_days} hari ringkasan baru" + (", laporan Top diperbarui" if top_due and cur.get("top_at") == now.isoformat() else "") + ("; " + "; ".join(notes) if notes else "")
+    return n_rows, f"{n_days} hari ringkasan baru, {n_top} laporan Top diperbarui" + ("; " + "; ".join(notes) if notes else "")
