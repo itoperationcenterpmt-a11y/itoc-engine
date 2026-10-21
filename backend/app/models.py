@@ -521,3 +521,36 @@ class XdrAlert(Base):
     techniques: Mapped[list | None] = mapped_column(JSONB)        # ID teknik MITRE ATT&CK
     rules: Mapped[list | None] = mapped_column(JSONB)             # nama aturan deteksi yang cocok
     fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CctvHardware(Base):
+    """Hardware di Milestone XProtect (NVR/interconnect per lokasi): inventaris dari RESTful API, bukan status real-time."""
+    __tablename__ = "cctv_hardware"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    address: Mapped[str | None] = mapped_column(String(300))
+    host: Mapped[str | None] = mapped_column(String(120))
+    model: Mapped[str | None] = mapped_column(String(80))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    recorder: Mapped[str | None] = mapped_column(String(120))
+    cameras: Mapped[int] = mapped_column(Integer, default=0)
+    cameras_enabled: Mapped[int] = mapped_column(Integer, default=0)
+    modified_at: Mapped[datetime | None] = mapped_column(DateTime)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CctvCamera(Base):
+    """Kamera di Milestone XProtect: satu baris per kamera, lokasi dan IP diurai dari nama kamera."""
+    __tablename__ = "cctv_camera"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(300))
+    location: Mapped[str | None] = mapped_column(String(160))
+    ip: Mapped[str | None] = mapped_column(String(45), index=True)
+    channel: Mapped[int | None] = mapped_column(Integer)
+    hardware_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    hardware: Mapped[str | None] = mapped_column(String(200))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    recording: Mapped[bool] = mapped_column(Boolean, default=False)
+    fps: Mapped[str | None] = mapped_column(String(10))
+    modified_at: Mapped[datetime | None] = mapped_column(DateTime)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

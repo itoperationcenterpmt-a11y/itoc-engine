@@ -59,6 +59,13 @@ function widgetList() {
     addx("models", "XDR Top Detection Models", "Model deteksi dengan alert terbanyak", "c6", "models");
     addx("impact", "XDR Impact Scope", "Jumlah desktop, server, akun, dan email yang terdampak", "c6", "impact");
   }
+  const Cc = V.cctv;
+  if (Cc && Cc.configured) {
+    const CP = cctvPanels(Cc), addc = (key, title, desc, size, fn) => extra.push({key: "cctv-" + key, mod: "cctv", need: "cctv", title, desc, size, html: CP[fn]});
+    addc("kpi", "CCTV Summary", "Kamera, diaktifkan, merekam di pusat, rekam di site", "c4", "kpi");
+    addc("hw", "CCTV per Hardware", "Kamera, diaktifkan, dan merekam per hardware Milestone", "c8", "hw");
+    addc("rec", "CCTV Recording per Hardware", "Kamera yang merekam dibanding yang aktif", "c4", "rec");
+  }
   const Wf = V.wifi;
   if (Wf) {
     const WP = wifiPanels(Wf), add = (key, title, desc, size, fn) => extra.push({key: "wifi-" + key, mod: "wifi", need: "wifi", title, desc, size, html: WP[fn]});

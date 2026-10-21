@@ -20,3 +20,6 @@ Thumbs.db
 
 # database dumps (contain personnel data and password hashes)
 backups/
+
+# file kunci Office
+~$*

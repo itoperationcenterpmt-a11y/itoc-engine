@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .. import mailer, notify, vault
 from ..db import get_db
 from ..netguard import check_url
-from ..ingest import zabbix, ruckus, panorama_api, trendmicro
+from ..ingest import zabbix, ruckus, panorama_api, trendmicro, milestone
 from ..models import ApiKey, DataSource, Role, User, Webhook, ZbxHost
 from ..security import rate_limit, require_admin, require_admin_area
 from ..store import audit, bump_config
@@ -23,6 +23,7 @@ CREDS = {
     "prtg": [("prtg.user", "Username", "user_env", "PRTG_USER"), ("prtg.passhash", "Passhash", "passhash_env", "PRTG_PASSHASH")],
     "zabbix": [("zabbix.token", "API token", "token_env", "ZABBIX_TOKEN")],
     "trendmicro": [("tm.token", "API key Vision One", "token_env", "TMV1_TOKEN")],
+    "milestone": [("ms.user", "Username Basic user Milestone (hak baca)", "user_env", "MS_USER"), ("ms.pass", "Password Basic user Milestone", "pass_env", "MS_PASS")],
     "panorama": [("pano.user", "Username akun API Panorama", "user_env", "PANO_USER"), ("pano.pass", "Password akun API Panorama", "pass_env", "PANO_PASS")],
     "ruckus": [("vsz.user", "Username API vSZ", "user_env", "VSZ_USER"), ("vsz.pass", "Password API vSZ", "pass_env", "VSZ_PASS"),
               ("vsz.kill_user", "Username akun putus-sesi (opsional, role dengan hak disconnect)", "kill_user_env", "VSZ_KILL_USER"), ("vsz.kill_pass", "Password akun putus-sesi", "kill_pass_env", "VSZ_KILL_PASS")],
@@ -187,6 +188,14 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
                         except RuntimeError as e3:
                             out.append("Lokasi report tidak bisa ditelusuri (%s). Beri role XML API > Configuration = Read Only untuk menelusuri." % str(e3)[:100])
             return {"ok": True, "msg": " ".join(out)}
+        if key == "milestone":
+            u, pw = vault.cred(db, "ms.user", c.get("user_env", "MS_USER")), vault.cred(db, "ms.pass", c.get("pass_env", "MS_PASS"))
+            if not u or not pw:
+                raise HTTPException(422, "Username/password Milestone belum diisi")
+            with httpx.Client(timeout=30, verify=c.get("verify_tls", False), follow_redirects=False) as cl:
+                tk = milestone.login(cl, c["base_url"], u, pw)
+                out = milestone.probe(cl, c["base_url"], tk)
+            return {"ok": True, "msg": "Login Milestone berhasil. " + " ".join(out)}
         if key == "ruckus":
             u, pw = vault.cred(db, "vsz.user", c.get("user_env", "VSZ_USER")), vault.cred(db, "vsz.pass", c.get("pass_env", "VSZ_PASS"))
             if not u or not pw:
