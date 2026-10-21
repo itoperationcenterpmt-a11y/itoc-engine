@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
 import secrets
+import threading
+import time
 import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, Request
@@ -24,9 +27,49 @@ def random_pw() -> str:
     return secrets.token_urlsafe(9)
 
 
+COOKIE = "itoc_session"
+SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+
+
+def _pv(user: User) -> str:
+    """Sidik jari password: token lama otomatis tidak berlaku setelah password diganti atau direset."""
+    return hashlib.sha256(user.password_hash.encode()).hexdigest()[:16]
+
+
 def make_token(user: User) -> str:
     exp = datetime.now(timezone.utc) + timedelta(minutes=settings().jwt_minutes)
-    return jwt.encode({"sub": user.username, "role": user.role_key, "exp": exp}, settings().jwt_secret, algorithm="HS256")
+    return jwt.encode({"sub": user.username, "role": user.role_key, "pv": _pv(user), "exp": exp}, settings().jwt_secret, algorithm="HS256")
+
+
+def is_https(request: Request) -> bool:
+    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").lower() == "https"
+
+
+def set_session(response, request: Request, token: str) -> None:
+    """Sesi browser = cookie HttpOnly + SameSite=Strict (tidak bisa dibaca JavaScript); Secure otomatis bila diakses lewat HTTPS."""
+    response.set_cookie(COOKIE, token, max_age=settings().jwt_minutes * 60, httponly=True, samesite="strict", secure=is_https(request), path="/")
+
+
+_RATE: dict[str, list[float]] = {}
+_RATE_LOCK = threading.Lock()
+
+
+def rate_limit(name: str, n: int, secs: int):
+    """Dependensi pembatas laju per pengguna (atau alamat bila belum login), per proses. Dipakai untuk aksi sensitif."""
+    def dep(request: Request) -> None:
+        who = request.headers.get("X-API-Key", "")[:12] or request.cookies.get(COOKIE, "")[-16:] or (request.client.host if request.client else "?")
+        key, now = f"{name}:{who}", time.time()
+        with _RATE_LOCK:
+            hits = [t for t in _RATE.get(key, []) if now - t < secs]
+            if len(hits) >= n:
+                _RATE[key] = hits
+                raise HTTPException(429, "Terlalu sering. Coba lagi sebentar lagi.")
+            hits.append(now)
+            _RATE[key] = hits
+            if len(_RATE) > 5000:
+                for k in [k for k, v in _RATE.items() if not v or now - v[-1] > secs]:
+                    _RATE.pop(k, None)
+    return dep
 
 
 class ApiUser:
@@ -62,15 +105,19 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     if raw:
         return _api_key_user(request, db, raw)
     auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
+    via_cookie = not auth.startswith("Bearer ")
+    token = request.cookies.get(COOKIE, "") if via_cookie else auth[7:]
+    if not token:
         raise HTTPException(401, "Belum login")
+    if via_cookie and request.method not in SAFE_METHODS and request.headers.get("X-Requested-With") != "itoc":
+        raise HTTPException(403, "Permintaan ditolak (header keamanan tidak ada)")      # perlindungan CSRF untuk sesi berbasis cookie
     try:
-        data = jwt.decode(auth[7:], settings().jwt_secret, algorithms=["HS256"])
+        data = jwt.decode(token, settings().jwt_secret, algorithms=["HS256"], options={"require": ["exp", "sub"]})
     except jwt.PyJWTError:
         raise HTTPException(401, "Sesi berakhir, silakan login ulang")
     u = db.query(User).filter_by(username=data["sub"]).one_or_none()
-    if not u or not u.active:
-        raise HTTPException(401, "Akun tidak aktif")
+    if not u or not u.active or not secrets.compare_digest(str(data.get("pv", "")), _pv(u)):
+        raise HTTPException(401, "Sesi tidak berlaku, silakan login ulang")
     return u
 
 

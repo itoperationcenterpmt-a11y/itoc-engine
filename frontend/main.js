@@ -29,7 +29,7 @@ async function downloadReport(kind, btn) {
   const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, kind: S.rkind || "full", preset: S.rpreset}), old = btn.innerHTML;
   btn.disabled = true; btn.textContent = "Menyiapkan…";
   try {
-    const r = await fetch(`/api/report/${kind}?${q}`, {headers: {Authorization: "Bearer " + API.token}});
+    const r = await fetch(`/api/report/${kind}?${q}`, {credentials: "same-origin"});
     if (!r.ok) { let msg = r.statusText; try { const j = await r.json(); if (typeof j.detail === "string") msg = j.detail; } catch (_) {} throw new Error(msg); }
     const blob = await r.blob(), a = document.createElement("a"), cd = r.headers.get("content-disposition") || "", nm = (cd.match(/filename="([^"]+)"/) || [])[1];
     a.href = URL.createObjectURL(blob); a.download = nm || "laporan." + kind; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -326,7 +326,7 @@ document.addEventListener("submit", async e => {
     catch (err) { $("mMsg").textContent = err.message; }
   }
   if (f.id === "loginF") {
-    try { const r = await send("/api/auth/login", {username: v("lU"), password: $("lP").value}); API.token = r.token; localStorage.setItem("itoc.token", r.token); boot(); }
+    try { const r = await send("/api/auth/login", {username: v("lU"), password: $("lP").value}); boot(); }
     catch (err) { $("lMsg").textContent = err.message; }
   }
   if (f.id === "pwF") {
@@ -359,7 +359,7 @@ function showLogin(msg, change) {
       ${LOGIN.points.length ? `<ul class="lg-pts">${LOGIN.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>
     <section class="lg-card lg-form"><img class="lg-logo lg-l" src="assets/logo-g2.png" alt="IT Operation Center"><img class="lg-logo lg-d" src="assets/logo-g2-dark.png" alt="">${form}<div class="loginfoot">${esc(footText())}</div></section></div></div>`;
   const first = $("login").querySelector("input"); if (first) first.focus();
-}function logout(msg) { API.token = ""; localStorage.removeItem("itoc.token"); CFG = null; showLogin(typeof msg === "string" ? msg : ""); }
+}function logout(msg) { fetch("/api/auth/logout", {method: "POST", credentials: "same-origin", headers: {"X-Requested-With": "itoc"}}).catch(() => {}); CFG = null; showLogin(typeof msg === "string" ? msg : ""); }
 const footText = () => FOOT.replace("{year}", new Date().getFullYear());
 /* Baris pertama nama utama (tidak dipotong), kata terakhir ("Dashboard") di baris kedua */
 /* Nama yang tampil di sidebar dan halaman login = BSPLIT kata pertama ("Dashboard IT"); nama lengkap dipakai di judul tab, laporan, dan email. */
@@ -369,7 +369,7 @@ let LOGIN = {tagline: "", points: [], place: "", eyebrow: ""};
 async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || ""}; } catch (_) {} applyBrand(); }
 async function boot() {
   await loadPublic();
-  if (!API.token) return showLogin();
+  try { if ((await fetch("/api/auth/me", {credentials: "same-origin"})).status === 401) return showLogin(); } catch (_) { return showLogin(); }
   try { await reloadConfig(); } catch (e) { return showLogin(e.message); }
   loadBasemap().then(() => { if (BASEMAP && ["devices", "ringkasan"].includes(S.tab)) render(false); });
   if (CFG.me.must_change_pw) return showLogin("", true);

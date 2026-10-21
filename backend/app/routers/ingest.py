@@ -15,12 +15,14 @@ router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 
 
 async def _read(f: UploadFile, exts: tuple[str, ...] = (".xlsx",)) -> bytes:
-    data = await f.read()
-    if len(data) > settings().upload_max_mb * 1024 * 1024:
-        raise HTTPException(413, f"File lebih dari {settings().upload_max_mb} MB")
     if not (f.filename or "").lower().endswith(exts):
         raise HTTPException(415, "Hanya file " + ", ".join(exts))
-    return data
+    cap, buf = settings().upload_max_mb * 1024 * 1024, bytearray()
+    while chunk := await f.read(1024 * 1024):                   # baca bertahap: berkas raksasa ditolak sebelum memenuhi memori
+        buf += chunk
+        if len(buf) > cap:
+            raise HTTPException(413, f"File lebih dari {settings().upload_max_mb} MB")
+    return bytes(buf)
 
 
 async def _bundle(files: list[UploadFile], inner: str) -> list[tuple[str, bytes]]:

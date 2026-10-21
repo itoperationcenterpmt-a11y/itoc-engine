@@ -3,14 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import User
-from ..security import require_module, effective_site
+from ..security import require_module, effective_site, rate_limit
 from ..store import load_config, audit
 from .. import report, report_export, views
 
 router = APIRouter(prefix="/api/report", tags=["report"])
 
 
-@router.get("/{fmt}")
+@router.get("/{fmt}", dependencies=[Depends(rate_limit("report", 20, 60))])
 def export(fmt: str, d_from: date = Query(alias="from"), d_to: date = Query(alias="to"), shift: int = 0, site: str = "", kind: str = "full", preset: str = "standar",
            user: User = Depends(require_module("report")), db: Session = Depends(get_db)):
     """Unduh laporan (xlsx | pdf | pptx). Filter sama dengan dashboard; bagian di luar izin role dibuang; lokasi terkunci menurut role."""

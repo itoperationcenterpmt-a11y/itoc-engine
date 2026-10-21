@@ -7,6 +7,7 @@
   clear-demo                 hapus data demo (tiket, sensor PRTG, batch SOC, serah terima, log); data nyata tidak disentuh
   seed-users [--reset]       buat satu akun per role (password123, tanpa wajib ganti password); --reset menimpa akun yang sudah ada. Hanya untuk uji/demo!
   sync SUMBER                jalankan sinkron sekali (manageengine | prtg)
+  security-check             periksa konfigurasi keamanan (password lemah, rahasia, TLS, dan lain-lain) tanpa menampilkan rahasia
 """
 import os
 import json
@@ -100,6 +101,13 @@ def main(argv):
         from . import demo
         with session_scope() as db:
             print(f"{demo.seed_itcare(db)} personel dummy IT Care ditambahkan")
+    elif cmd == "security-check":
+        from .secaudit import findings
+        with session_scope() as db:
+            fs = findings(db)
+        for f in fs:
+            print(f"[{f['level'].upper():8}] {f['title']}" + (f" -- {f['detail']}" if f["detail"] else ""))
+        print(f"{sum(1 for f in fs if f['level'] in ('critical', 'high'))} temuan critical/high")
     elif cmd == "sync":
         from .jobs import run_source
         print(run_source(args[0]))

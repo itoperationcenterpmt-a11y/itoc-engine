@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
@@ -13,8 +14,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings().jwt_secret in ("ganti-di-produksi", "ganti-dengan-string-acak-panjang") or len(settings().jwt_secret) < 24:
-        logging.getLogger("itoc").warning("ITOC_JWT_SECRET masih nilai contoh/pendek: token bisa dipalsukan. Isi dengan string acak panjang di .env.")
+    weak = settings().jwt_secret in ("ganti-di-produksi", "ganti-dengan-string-acak-panjang") or len(settings().jwt_secret) < 32
+    if weak and os.environ.get("ITOC_ENV", "").lower() == "production":
+        raise RuntimeError("ITOC_JWT_SECRET lemah (contoh atau kurang dari 32 karakter). Server produksi menolak start. Isi string acak panjang di .env.")
+    if weak:
+        logging.getLogger("itoc").warning("ITOC_JWT_SECRET masih nilai contoh/pendek: token bisa dipalsukan. Isi dengan string acak panjang (min. 32 karakter) di .env.")
     if settings().run_scheduler:
         jobs.start()
     yield
@@ -26,7 +30,7 @@ app = FastAPI(title="Dashboard IT Pelindo Multi Terminal API", version="1.0", li
 _origins = [o.strip() for o in settings().cors_origins.split(",") if o.strip() and o.strip() != "*"]
 if _origins:
     app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type", "X-API-Key"])
-CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+CSP = "default-src 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 
 
 @app.middleware("http")
@@ -38,8 +42,14 @@ async def security_headers(request, call_next):
     h["Referrer-Policy"] = "strict-origin-when-cross-origin"   # origin saja ke situs lain (dibutuhkan OSM untuk tile peta)
     h["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     h["Content-Security-Policy"] = CSP
+    h["Cross-Origin-Opener-Policy"] = "same-origin"
+    h["Cross-Origin-Resource-Policy"] = "same-origin"
+    h["X-Permitted-Cross-Domain-Policies"] = "none"
+    if request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").lower() == "https":
+        h["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     if request.url.path.startswith("/api/"):
         h["Cache-Control"] = "no-store"
+        h["Pragma"] = "no-cache"
     else:
         h["Cache-Control"] = "no-cache"      # file statis selalu divalidasi ulang (304 bila tidak berubah), supaya browser tidak memakai JS/CSS lama
     return resp

@@ -7,7 +7,7 @@ from ..calc import wifi as WIFI
 from ..db import get_db
 from ..ingest import ruckus
 from ..models import User, WifiClient
-from ..security import current_user, can_see
+from ..security import current_user, can_see, rate_limit
 from ..store import audit, load_config, bump_data
 
 router = APIRouter(prefix="/api/wifi", tags=["wifi"])
@@ -20,7 +20,7 @@ class KillIn(BaseModel):
     reason: str = ""
 
 
-@router.post("/disconnect")
+@router.post("/disconnect", dependencies=[Depends(rate_limit("wifikill", 20, 60))])
 def disconnect(body: KillIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     cfg = load_config(db)
     if not can_see(user, "wifi") or not WIFI.can_kill(user, cfg):

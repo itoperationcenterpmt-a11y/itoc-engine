@@ -204,6 +204,13 @@ def param_set(key: str, body: ParamIn, db: Session = Depends(get_db), user: User
     return {"ok": True}
 
 
+@router.get("/security-check")
+def security_check(db: Session = Depends(get_db)):
+    """Temuan konfigurasi keamanan (tanpa rahasia). Bisa dibaca role admin_view; hanya membaca."""
+    from ..secaudit import findings
+    return {"rows": findings(db)}
+
+
 # ---------------- pengguna ----------------
 class UserIn(BaseModel):
     username: str

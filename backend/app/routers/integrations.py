@@ -9,9 +9,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from .. import mailer, notify, vault
 from ..db import get_db
+from ..netguard import check_url
 from ..ingest import zabbix, ruckus, panorama_api
 from ..models import ApiKey, DataSource, Role, User, Webhook, ZbxHost
-from ..security import require_admin, require_admin_area
+from ..security import rate_limit, require_admin, require_admin_area
 from ..store import audit, bump_config
 
 router = APIRouter(prefix="/api/admin", tags=["integrations"], dependencies=[Depends(require_admin_area)])
@@ -83,6 +84,11 @@ def integration_set(key: str, body: IntegrationIn, db: Session = Depends(get_db)
         s.interval_min = max(1, min(body.interval_min, 1440))
     cfg = dict(s.config or {})
     if body.base_url is not None:
+        if body.base_url.strip():
+            try:
+                check_url(body.base_url, "Base URL")
+            except ValueError as e:
+                raise HTTPException(422, str(e))
         cfg["base_url"] = body.base_url.strip().rstrip("/")      # IP/host saja boleh; skema dan /zabbix dicari otomatis saat Test (Zabbix)
     if body.verify_tls is not None:
         cfg["verify_tls"] = body.verify_tls
@@ -103,7 +109,7 @@ def integration_set(key: str, body: IntegrationIn, db: Session = Depends(get_db)
     return {"ok": True}
 
 
-@router.post("/integrations/{key}/test")
+@router.post("/integrations/{key}/test", dependencies=[Depends(rate_limit("itest", 12, 60))])
 def integration_test(key: str, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     s = db.get(DataSource, key)
     if not s or key not in CREDS:
@@ -314,6 +320,11 @@ def _check_hook(body: HookIn, new: bool):
         raise HTTPException(422, "Peristiwa tidak dikenal")
     if (new or body.url) and not (body.url or "").startswith(("http://", "https://")):
         raise HTTPException(422, "URL harus diawali http:// atau https://")
+    if body.url:
+        try:
+            check_url(body.url, "URL webhook")
+        except ValueError as e:
+            raise HTTPException(422, str(e))
 
 
 @router.post("/webhooks")

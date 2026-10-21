@@ -18,10 +18,10 @@ const dtime = ms => { if (ms == null) return "–"; const d = new Date(ms); retu
 const hm = ms => { const d = new Date(ms); return pad(d.getUTCHours()) + "." + pad(d.getUTCMinutes()); };
 
 /* ---------- API ---------- */
-const API = {token: localStorage.getItem("itoc.token") || ""};
+/* Sesi = cookie HttpOnly dari server (tidak bisa dibaca JavaScript). Header X-Requested-With wajib untuk perubahan data (perlindungan CSRF). */
 async function api(path, o = {}) {
-  const h = Object.assign({}, o.body && !(o.body instanceof FormData) ? {"Content-Type": "application/json"} : {}, API.token ? {Authorization: "Bearer " + API.token} : {});
-  const r = await fetch(path, Object.assign({}, o, {headers: h}));
+  const h = Object.assign({"X-Requested-With": "itoc"}, o.body && !(o.body instanceof FormData) ? {"Content-Type": "application/json"} : {});
+  const r = await fetch(path, Object.assign({credentials: "same-origin"}, o, {headers: h}));
   const j = (r.headers.get("content-type") || "").includes("json") ? await r.json() : null;
   if (r.status === 401 && !path.startsWith("/api/auth/login")) { logout(j && j.detail); throw new Error("Sesi berakhir"); }
   if (!r.ok) throw new Error(j ? (typeof j.detail === "string" ? j.detail : (j.detail || []).map(x => x.msg || x).join("; ")) : r.statusText);

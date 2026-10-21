@@ -20,7 +20,9 @@ def _payload(kind: str, event: str, text: str, data: dict | None) -> dict:
 
 
 def post(kind: str, url: str, event: str, text: str, data: dict | None = None) -> str:
-    r = httpx.post(url, json=_payload(kind, event, text, data), timeout=10)
+    from .netguard import check_url
+    check_url(url, "URL webhook")                                  # cek ulang saat kirim (DNS bisa berubah sejak disimpan)
+    r = httpx.post(url, json=_payload(kind, event, text, data), timeout=10, follow_redirects=False)
     r.raise_for_status()
     return f"HTTP {r.status_code}"
 

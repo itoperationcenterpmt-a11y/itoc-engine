@@ -1,10 +1,11 @@
-import time
-from fastapi import APIRouter, Depends, HTTPException, Request
+from datetime import timedelta
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..db import get_db
-from ..models import User
-from ..security import check_pw, make_token, current_user, hash_pw
+from ..models import AuditLog, User
+from ..security import COOKIE, check_pw, make_token, current_user, hash_pw, set_session, rate_limit
 from ..store import load_config, audit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -20,52 +21,63 @@ class PwChange(BaseModel):
     new: str
 
 
-# Batas percobaan gagal (per proses): 5 per akun dan 40 per alamat dalam 10 menit.
-_FAILS: dict[str, list[float]] = {}
+# Batas percobaan gagal: 5 per akun dan 40 per alamat dalam 10 menit. Dihitung dari audit_log (satu sumber untuk semua proses), jadi berlaku walau ada banyak worker.
 _WINDOW, _MAX_USER, _MAX_IP = 600, 5, 40
 _DUMMY = hash_pw("dummy-password-for-timing")
+_WEAK = {"password", "password1", "password123", "12345678", "123456789", "1234567890", "qwerty123", "admin123", "itoc1234", "welcome123", "pelindo123"}
 
 
-def _recent(key: str) -> list[float]:
-    now = time.time()
-    v = [t for t in _FAILS.get(key, []) if now - t < _WINDOW]
-    if v:
-        _FAILS[key] = v
-    else:
-        _FAILS.pop(key, None)
-    return v
+def _locked(db: Session, cfg, name: str, ip: str) -> bool:
+    since = cfg.now() - timedelta(seconds=_WINDOW)
+    q = db.query(func.count(AuditLog.id)).filter(AuditLog.action == "Login gagal", AuditLog.at >= since)
+    return q.filter(AuditLog.username == name[:60]).scalar() >= _MAX_USER or q.filter(AuditLog.detail["ip"].astext == ip).scalar() >= _MAX_IP
 
 
 @router.post("/login")
-def login(body: Login, request: Request, db: Session = Depends(get_db)):
-    name = body.username.strip().lower()
+def login(body: Login, request: Request, response: Response, db: Session = Depends(get_db)):
+    cfg = load_config(db)
+    name = body.username.strip().lower()[:60]
     ip = request.client.host if request.client else "?"
-    ku, ki = "u:" + name, "i:" + ip
-    if len(_recent(ku)) >= _MAX_USER or len(_recent(ki)) >= _MAX_IP:
+    if _locked(db, cfg, name, ip):
         raise HTTPException(429, "Terlalu banyak percobaan login. Coba lagi dalam beberapa menit.")
     u = db.query(User).filter_by(username=name).one_or_none()
     ok = check_pw(body.password, u.password_hash if u else _DUMMY)   # waktu proses sama untuk akun yang tidak ada
     if not u or not u.active or not ok:
-        now = time.time()
-        _FAILS.setdefault(ku, []).append(now)
-        _FAILS.setdefault(ki, []).append(now)
+        audit(db, name, "Login gagal", {"ip": ip}, cfg.p("tz_offset_hours", 7))
+        db.commit()
         raise HTTPException(401, "Username atau password salah")
-    _FAILS.pop(ku, None)
-    cfg = load_config(db)
     u.last_login = cfg.now()
-    audit(db, u.username, "Login")
+    audit(db, u.username, "Login", {"ip": ip}, cfg.p("tz_offset_hours", 7))
     db.commit()
-    return {"token": make_token(u), "must_change_pw": u.must_change_pw}
+    set_session(response, request, make_token(u))
+    return {"must_change_pw": u.must_change_pw}
 
 
-@router.post("/password")
-def change_pw(body: PwChange, user: User = Depends(current_user), db: Session = Depends(get_db)):
+@router.get("/me")
+def me(user: User = Depends(current_user)):
+    return {"username": user.username}
+
+
+@router.post("/logout")
+def logout(request: Request, response: Response):
+    response.delete_cookie(COOKIE, path="/")
+    return {"ok": True}
+
+
+@router.post("/password", dependencies=[Depends(rate_limit("pw", 5, 600))])
+def change_pw(body: PwChange, request: Request, response: Response, user: User = Depends(current_user), db: Session = Depends(get_db)):
     cfg = load_config(db)
     if not check_pw(body.old, user.password_hash):
         raise HTTPException(400, "Password lama salah")
-    if len(body.new) < cfg.p("auth.min_password", 10):
-        raise HTTPException(400, f"Password minimal {cfg.p('auth.min_password', 10)} karakter")
+    n = cfg.p("auth.min_password", 10)
+    if len(body.new) < n:
+        raise HTTPException(400, f"Password minimal {n} karakter")
+    if len(body.new.encode()) > 72:
+        raise HTTPException(400, "Password maksimal 72 byte")
+    if body.new == body.old or body.new.lower() in _WEAK or user.username in body.new.lower():
+        raise HTTPException(400, "Password terlalu mudah ditebak atau sama dengan yang lama")
     user.password_hash, user.must_change_pw = hash_pw(body.new), False
-    audit(db, user.username, "Mengganti password")
+    audit(db, user.username, "Mengganti password", None, cfg.p("tz_offset_hours", 7))
     db.commit()
+    set_session(response, request, make_token(user))                # token lama gugur; sesi ini tetap berjalan
     return {"ok": True}
