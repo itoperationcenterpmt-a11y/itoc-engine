@@ -143,7 +143,8 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
                         out.append(f"Report {name}: OK, {len(rows)} baris, kolom: {', '.join(cols[:10]) or '-'}.")
                     except RuntimeError as e:
                         out.append(f"Report {name}: gagal ({e}).")
-            return {"ok": True, "msg": " ".join(out)}        if key == "ruckus":
+            return {"ok": True, "msg": " ".join(out)}
+        if key == "ruckus":
             u, pw = vault.cred(db, "vsz.user", c.get("user_env", "VSZ_USER")), vault.cred(db, "vsz.pass", c.get("pass_env", "VSZ_PASS"))
             if not u or not pw:
                 raise HTTPException(422, "Username/password API vSZ belum diisi")
