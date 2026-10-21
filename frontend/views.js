@@ -112,7 +112,7 @@ function renderShell() {
     if (!ap.s && S.sf || !ap.l && S.site) chips.push(`<span class="na-txt">${(!ap.s && S.sf ? "Shift" : "") + (!ap.s && S.sf && !ap.l && S.site ? " dan " : "") + (!ap.l && S.site ? "lokasi" : "")} tidak berlaku di halaman ini</span>`); }
   $("fApplies").innerHTML = chips.join("");
   const n = nowShift(), tm = teamOn(n.date, n.shift);
-  $("duty").innerHTML = `<i></i><span>On duty: Team ${tm} · ${SN[n.shift]}<small>${n.clock} WIB</small></span>`; $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]}`;
+  $("duty").innerHTML = `<i></i><span>On duty: Team ${tm} · ${SN[n.shift]}<small>${n.clock} WIB</small></span>`; $("dutyH").innerHTML = `<i></i><span>On duty: Team ${tm} · ${SN[n.shift]}<small>${n.clock} WIB</small></span>`; $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]}`;
   $("fSum").textContent = anyF ? (active.join(" · ") || "Semua") : "Tidak berlaku di halaman ini";
 
 }
