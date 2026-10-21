@@ -52,3 +52,24 @@ def run_report(cl: httpx.Client, base: str, key: str, name: str, wait_s: int = 9
     rows = [{c.tag: (c.text or "").strip() for c in e} for e in y.iter("entry") if len(e)]
     cols = list(rows[0].keys()) if rows else []
     return cols, rows
+
+def run_log(cl: httpx.Client, base: str, key: str, log_type: str = "threat", nlogs: int = 5, query: str = "", wait_s: int = 60) -> tuple[list[str], list[dict]]:
+    """Ambil beberapa baris log (traffic, threat, url, ...) lewat job asinkron. Untuk uji hak Log dan melihat nama kolom."""
+    h = {"X-PAN-KEY": key}
+    data = {"type": "log", "log-type": log_type, "nlogs": str(nlogs), "async": "yes"}
+    if query:
+        data["query"] = query
+    x = _parse(cl.post(api_url(base), headers=h, data=data))
+    job = x.findtext(".//job")
+    if not job:
+        raise RuntimeError("Panorama tidak memberi job id untuk log " + log_type)
+    t0 = time.time()
+    while True:
+        y = _parse(cl.post(api_url(base), headers=h, data={"type": "log", "action": "get", "job-id": job}))
+        if (y.findtext(".//job/status") or "FIN").upper() == "FIN":
+            break
+        if time.time() - t0 > wait_s:
+            raise RuntimeError("Log belum selesai dalam %d detik" % wait_s)
+        time.sleep(1)
+    rows = [{c.tag: (c.text or "").strip() for c in e} for e in y.iter("entry") if len(e)]
+    return (list(rows[0].keys()) if rows else []), rows

@@ -26,7 +26,7 @@ CREDS = {
               ("vsz.kill_user", "Username akun putus-sesi (opsional, role dengan hak disconnect)", "kill_user_env", "VSZ_KILL_USER"), ("vsz.kill_pass", "Password akun putus-sesi", "kill_pass_env", "VSZ_KILL_PASS")],
 }
 # isian daftar tambahan per konektor (disimpan di config sumber data): (kunci, label)
-EXTRA = {"zabbix": [("group_prefixes", "Prefix host group (satu per baris)"), ("down_patterns", "Nama trigger yang berarti perangkat down (satu per baris, cocok sebagian)")]}
+EXTRA = {"panorama": [("test_reports", "Nama report Panorama untuk uji (satu per baris, persis seperti di Monitor > Manage Custom Reports)")], "zabbix": [("group_prefixes", "Prefix host group (satu per baris)"), ("down_patterns", "Nama trigger yang berarti perangkat down (satu per baris, cocok sebagian)")]}
 
 
 def _cred_state(db: Session, src: DataSource):
@@ -127,16 +127,23 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
             u, pw = vault.cred(db, "pano.user", c.get("user_env", "PANO_USER")), vault.cred(db, "pano.pass", c.get("pass_env", "PANO_PASS"))
             if not u or not pw:
                 raise HTTPException(422, "Username/password API Panorama belum diisi")
-            name = ((c.get("excel") or {}).get("reports") or {}).get("threat_summary", "SOC-Threat-Summary")
-            with httpx.Client(timeout=30, verify=c.get("verify_tls", False)) as cl:
+            names = c.get("test_reports") or list(((c.get("excel") or {}).get("reports") or {}).values())[:3]
+            out = []
+            with httpx.Client(timeout=40, verify=c.get("verify_tls", False)) as cl:
                 k = panorama_api.keygen(cl, c["base_url"], u, pw)
+                out.append("Login berhasil dan key valid.")
                 try:
-                    cols, rows = panorama_api.run_report(cl, c["base_url"], k, name)
+                    lc, lr = panorama_api.run_log(cl, c["base_url"], k, "threat", 3)
+                    out.append(f"Log threat: OK ({len(lr)} baris contoh, kolom: {', '.join(lc[:8]) or '-'}).")
                 except RuntimeError as e:
-                    return {"ok": True, "msg": f"Login berhasil dan key valid, tetapi report {name} gagal diambil: {e}"}
-            cl_txt = ", ".join(cols[:12]) or "-"
-            return {"ok": True, "msg": f"Login berhasil dan key valid. Report {name}: {len(rows)} baris, kolom: {cl_txt}"}
-        if key == "ruckus":
+                    out.append(f"Log threat: gagal ({e}).")
+                for name in names:
+                    try:
+                        cols, rows = panorama_api.run_report(cl, c["base_url"], k, name, wait_s=60)
+                        out.append(f"Report {name}: OK, {len(rows)} baris, kolom: {', '.join(cols[:10]) or '-'}.")
+                    except RuntimeError as e:
+                        out.append(f"Report {name}: gagal ({e}).")
+            return {"ok": True, "msg": " ".join(out)}        if key == "ruckus":
             u, pw = vault.cred(db, "vsz.user", c.get("user_env", "VSZ_USER")), vault.cred(db, "vsz.pass", c.get("pass_env", "VSZ_PASS"))
             if not u or not pw:
                 raise HTTPException(422, "Username/password API vSZ belum diisi")
