@@ -50,7 +50,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 /* layout: sidebar (desktop) + bottom nav (mobile) */
 .shell{display:grid;grid-template-columns:268px minmax(0,1fr);min-height:100vh}
 .side{background:var(--side-bg);color:var(--side-ink);position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:12px 10px;gap:8px;z-index:6}
-.brand{display:flex;gap:10px;align-items:center;padding:2px 4px}.brand .g2{height:46px;width:auto;max-width:100%;min-width:0}.railbtn{position:absolute;top:10px;right:8px;flex:none;background:none;border:0;color:var(--side-ink);opacity:.7;cursor:pointer;border-radius:8px;width:28px;height:28px;display:grid;place-items:center;font-size:15px}.railbtn:hover{opacity:1;background:rgba(255,255,255,.08)}
+.brand{display:flex;gap:10px;align-items:center;padding:2px 4px}.brand .g2{height:46px;width:auto;max-width:100%;min-width:0}.railbtn{position:absolute;top:26px;right:-13px;z-index:8;width:26px;height:26px;border-radius:50%;background:var(--side-bg);border:1px solid var(--side-line);color:var(--side-ink);cursor:pointer;display:grid;place-items:center;font-size:17px;line-height:1;padding:0 0 2px;opacity:.9;box-shadow:0 2px 8px -2px rgba(0,0,0,.5)}.railbtn:hover{opacity:1;color:#fff;background:#1b2c46}
 .brand .mk{width:44px;height:44px;flex:none;display:grid;place-items:center;background:#fff;border-radius:12px;box-shadow:0 6px 16px -6px rgba(0,0,0,.45)}
 .brand .mk img{width:36px;height:36px;display:block}
 .brand h1{font-size:13px;font-weight:700;color:#fff;line-height:1.25;min-width:0}
@@ -77,11 +77,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 .iconbtn:hover{background:rgba(255,255,255,.14);color:#fff}
 .side-act{display:flex;gap:6px}.side-act .iconbtn{flex:none}
 @media (min-width:901px){
-.shell.rail{grid-template-columns:62px minmax(0,1fr)}
+.shell.rail{grid-template-columns:78px minmax(0,1fr)}
 .shell.rail .side{padding:12px 6px;align-items:center}
-.shell.rail .brand .g2,.shell.rail .brand h1,.shell.rail .tabs button span,.shell.rail .who-t,.shell.rail .tb,.shell.rail #duty span{display:none}
-.shell.rail .brand{justify-content:center;padding:0;min-height:28px}.shell.rail .railbtn{position:static}
-.shell.rail .tabs button{justify-content:center;padding:9px}.shell.rail #duty{padding:8px;justify-content:center}
+.shell.rail .brand h1,.shell.rail .tabs button span,.shell.rail .who-t,.shell.rail .tb,.shell.rail #duty span{display:none}
+.shell.rail .brand{justify-content:center;padding:0}.shell.rail .brand .g2{width:46px;height:46px;object-fit:cover;object-position:left center}
+.shell.rail .tabs button{justify-content:center;padding:11px}.shell.rail .tabs button svg{width:21px;height:21px}.shell.rail #duty{padding:8px;justify-content:center}
 .shell.rail .side-foot{align-items:center}.shell.rail .who{flex-direction:column}.shell.rail .side-act{flex-direction:column}
 }
 .main{min-width:0}
@@ -453,8 +453,8 @@ body.dragging{user-select:none;cursor:grabbing}
 .loginbox input{padding:10px 12px!important;border-radius:10px!important}
 input[type=password]{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
 footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between}
-.dutychip{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--ink);background:rgba(12,163,12,.12);border:1px solid rgba(12,163,12,.35);line-height:1.3;white-space:nowrap}
-.dutychip small{font-weight:400;opacity:.75;margin-left:4px}.dutychip i{width:8px;height:8px;border-radius:50%;background:#3fc23f;flex:none;box-shadow:0 0 0 3px rgba(63,194,63,.2)}
+.dutychip{display:inline-flex;align-items:center;gap:10px;border-radius:999px;padding:7px 16px;font-size:15px;font-weight:600;color:var(--ink);background:rgba(12,163,12,.12);border:1px solid rgba(12,163,12,.35);line-height:1.3;white-space:nowrap}
+.dutychip small{font-weight:500;font-size:14px;opacity:.8;margin-left:8px;padding-left:10px;border-left:1px solid currentColor}.dutychip i{width:10px;height:10px;border-radius:50%;background:#3fc23f;flex:none;box-shadow:0 0 0 3px rgba(63,194,63,.2)}
 @media (min-width:901px){
 .wrap{max-width:none;margin:0;padding:16px 22px 44px}
 .fg{flex-wrap:nowrap}.fg select{width:auto;min-width:140px;max-width:230px}
@@ -468,7 +468,7 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
 <div id="login" hidden></div>
 <div id="app" class="shell" hidden>
 <aside class="side">
-  <div class="brand brand-g2"><img class="g2" src="assets/logo-g2-dark.png" alt="IT Operation Center"><h1 class="brandName"><span class="b1">Dashboard IT</span></h1><button class="railbtn" id="railBtn" type="button" aria-label="Ciutkan atau lebarkan menu" title="Ciutkan / lebarkan menu">«</button></div>
+  <div class="brand brand-g2"><img class="g2" src="assets/logo-g2-dark.png" alt="IT Operation Center"><h1 class="brandName"><span class="b1">Dashboard IT</span></h1><button class="railbtn" id="railBtn" type="button" aria-label="Menu">‹</button></div>
   <nav class="tabs" role="tablist" id="tabs" aria-label="Menu"></nav>
   <button class="more" id="moreBtn" type="button" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Menu</span></button>
   <div class="side-foot">
@@ -478,7 +478,7 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
 </aside>
 <div class="main">
   <div class="mtop">
-    <div class="brand brand-g2"><span class="g2chip"><img class="g2" src="assets/logo-g2.png" alt="IT Operation Center"></span><h1 class="brandName"><span class="b1">Dashboard IT</span></h1><button class="railbtn" id="railBtn" type="button" aria-label="Ciutkan atau lebarkan menu" title="Ciutkan / lebarkan menu">«</button></div>
+    <div class="brand brand-g2"><span class="g2chip"><img class="g2" src="assets/logo-g2.png" alt="IT Operation Center"></span><h1 class="brandName"><span class="b1">Dashboard IT</span></h1></div>
     <div class="mr"><span id="dutyM"></span></div>
   </div>
   <div class="wrap">
