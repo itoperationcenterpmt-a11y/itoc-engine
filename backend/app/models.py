@@ -496,3 +496,23 @@ class ZbxStat(Base):
     down: Mapped[int] = mapped_column(Integer, default=0)
     degraded: Mapped[int] = mapped_column(Integer, default=0)
     maintenance: Mapped[int] = mapped_column(Integer, default=0)
+
+class XdrAlert(Base):
+    """Alert Workbench dari Trend Micro Vision One (XDR): satu baris per alert, diperbarui saat statusnya berubah."""
+    __tablename__ = "xdr_alert"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    incident_id: Mapped[str | None] = mapped_column(String(80))
+    model: Mapped[str | None] = mapped_column(String(300))
+    model_type: Mapped[str | None] = mapped_column(String(40))
+    severity: Mapped[str | None] = mapped_column(String(20), index=True)
+    score: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str | None] = mapped_column(String(40))
+    investigation_status: Mapped[str | None] = mapped_column(String(40))
+    provider: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    owners: Mapped[list | None] = mapped_column(JSONB)
+    impact: Mapped[dict | None] = mapped_column(JSONB)
+    indicators: Mapped[list | None] = mapped_column(JSONB)
+    link: Mapped[str | None] = mapped_column(String(600))
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

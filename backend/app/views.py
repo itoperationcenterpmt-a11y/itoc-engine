@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from . import models as M
 from .store import Config, cached
 from .timeutil import ms
-from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI
+from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR
 from .calc.common import iso
 from .security import can_see
 
@@ -135,6 +135,8 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
         V["dev"] = DEV.build(db, cfg, st, f.kind, f.dstat, full=(tab == "devices"), grp=f.grp, dtype=f.dtype)
         if tab == "devices":
             V["dev"]["hist"] = DEV.history(db, cfg, f.d_from, f.d_to, st, f.kind, f.dtype)
+    if tab == "xdr" or (tab == "ringkasan" and ok("xdr")):
+        V["xdr"] = XDR.build(db, cfg, a, b, f.kind if tab == "xdr" and f.kind in XDR.SEV else "")
     if tab == "wifi":
         V["wifi"] = WIFI.build(db, cfg, user, zone=f.dtype, ssid=f.grp, band=f.kind, site=st, a=f.d_from, b=f.d_to)
     if tab == "ringkasan" and ok("wifi"):

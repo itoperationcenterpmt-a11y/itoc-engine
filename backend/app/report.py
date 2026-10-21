@@ -7,12 +7,12 @@ Bentuk model (aman untuk JSON):
   chart = {"title", "kind": bar | stack | hbar | donut | line, "labels": [..], "series": [{"name","values"}]}; charts[0] = grafik utama (dipakai di Summary)
   table = {"title","heads","kinds","rows"}
   kind angka: n = bulat, f0/f1/f2 = desimal, p0/p1/p2 = persen dari pecahan, t = teks."""
-from datetime import timedelta
+from datetime import datetime, timedelta
 from . import views as VW
 from .calc import soc as SOC
 from .security import can_see
 
-SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking"), ("soc", "Cyber Security"), ("devices", "Devices"), ("wifi", "WiFi Users")]
+SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking"), ("soc", "Cyber Security"), ("xdr", "XDR"), ("devices", "Devices"), ("wifi", "WiFi Users")]
 WEEKLY_AFTER = 31  # rentang harian lebih panjang dari ini diringkas per minggu (sama dengan dashboard Excel)
 _UK = {"type": "Tipe ancaman", "action": "Tindakan", "severity": "Severity"}
 
@@ -373,7 +373,36 @@ def _wifi(db, cfg, f, preset="standar"):
         s["attention"].append(f"{W['weak']} client dengan sinyal lemah (di bawah {W['weakAt']} dBm)")
     return s
 
-_BUILD = {"servicedesk": _servicedesk, "noc": _noc, "soc": _soc, "devices": _devices, "wifi": _wifi}
+XDR_IDS = ["xdr_sev", "xdr_daily", "xdr_models", "xdr_status"]
+
+
+def _xdr(db, cfg, f, preset="standar"):
+    """Alert Workbench Trend Micro Vision One pada periode laporan (menurut waktu alert dibuat)."""
+    from .calc import xdr as XDR
+    X = XDR.build(db, cfg, f.d_from, f.d_to)
+    s = {"key": "xdr", "title": "XDR", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    if not X["configured"] or not X["total"]:
+        s["notes"].append("Belum ada alert XDR pada periode ini." + (" Sinkron terakhir gagal: " + X["error"] if X["error"] else ""))
+        return s
+    sev = {x["k"]: x["n"] for x in X["bySev"]}
+    s["kpis"] = [_kpi("Alert", X["total"], "n", "pada periode"), _kpi("Masih terbuka", X["open"], "n", "belum Closed"), _kpi("Critical", sev.get("critical", 0), "n", ""), _kpi("High", sev.get("high", 0), "n", ""),
+                 _kpi("Skor rata-rata", X["avgScore"], "f1", "0 sampai 100"), _kpi("Backlog critical/high", X["backlogCH"], "n", "terbuka saat ini, semua periode")]
+    d = X["daily"]
+    s["charts"] = _pick(cfg, "xdr", XDR_IDS, preset, [
+        _chart("Alert per severity", [x["k"].capitalize() for x in X["bySev"]], [{"name": "Alert", "values": [x["n"] for x in X["bySev"]]}], "donut"),
+        _daily("Alert per hari", [x["date"] for x in d], [{"name": k.capitalize(), "values": [x[k] for x in d]} for k in XDR.SEV], "stack"),
+        _top("10 model deteksi terbanyak", [(x["k"], x["n"]) for x in X["byModel"]], "Alert"),
+        _chart("Status investigasi", [x["k"] for x in X["byStatus"]], [{"name": "Alert", "values": [x["n"] for x in X["byStatus"]]}])])
+    s["tables"].append(_table("Model deteksi teratas", ["Model", "Alert"], ["t", "n"], [[x["k"], x["n"]] for x in X["byModel"]]))
+    s["tables"].append(_table("Alert critical/high terbaru", ["Waktu", "Severity", "Model", "Skor", "Status"], ["t", "t", "t", "n", "t"],
+                              [[datetime.utcfromtimestamp(x["created"] / 1000).strftime("%d/%m %H.%M"), x["severity"], x["model"], x["score"], x["status"]] for x in X["list"] if x["severity"] in ("critical", "high")][:25]))
+    i = X["impact"]
+    s["notes"].append(f"Cakupan dampak (jumlah, bisa tumpang tindih antar alert): desktop {fmt_n(i['desktop'])}, server {fmt_n(i['server'])}, akun {fmt_n(i['account'])}, email {fmt_n(i['email'])}.")
+    if X["backlogCH"]:
+        s["attention"].append(f"{X['backlogCH']} alert critical/high masih terbuka")
+    return s
+
+_BUILD = {"servicedesk": _servicedesk, "noc": _noc, "soc": _soc, "devices": _devices, "wifi": _wifi, "xdr": _xdr}
 
 # Jenis laporan (bisa diubah di Admin → Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
@@ -381,6 +410,7 @@ DEFAULT_KINDS = {
     "noc": {"label": "Networking", "desc": "Availability, downtime, link bermasalah, utilisasi", "title": "Report ITOC Network SLA & Traffic ISP", "subtitle": "Evaluasi Availability, Coverage Monitoring, Traffic", "prefix": "Network SLA", "sections": ["noc"]},
     "soc": {"label": "Cyber Security", "desc": "Event ancaman, severity, tindakan firewall, URL", "title": "Report ITOC SOC Monitoring", "subtitle": "Ringkasan traffic security, threat, web security, dan triage high/critical", "prefix": "SOC", "sections": ["soc"]},
     "servicedesk": {"label": "Ticketing", "desc": "Tiket masuk, SLA, kategori, ranking teknisi, tiket open", "title": "Report ITOC Ticketing Servicedesk", "subtitle": "Ringkasan Performa Ticketing ManageEngine", "prefix": "Ticketing", "sections": ["servicedesk"]},
+    "xdr": {"label": "XDR", "desc": "Alert Trend Micro Vision One: severity, model deteksi, status, backlog", "title": "Report ITOC XDR", "subtitle": "Alert Workbench Trend Micro Vision One", "prefix": "XDR", "sections": ["xdr"]},
     "devices": {"label": "Devices", "desc": "Status perangkat Zabbix: kategori, tipe, lokasi, perangkat down", "title": "Report ITOC Devices", "subtitle": "Status Perangkat dari Zabbix", "prefix": "Devices", "sections": ["devices"]},
     "wifi": {"label": "WiFi Users", "desc": "Client aktif, Access Point, usage per SSID dan AP (Ruckus vSZ)", "title": "Report ITOC WiFi Users", "subtitle": "Client dan Access Point Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
     "full": {"label": "Full", "desc": "Summary dan rincian semua bidang dalam satu berkas", "title": "Report ITOC : Summary & Rincian", "subtitle": "Management Overview", "prefix": "", "sections": None},

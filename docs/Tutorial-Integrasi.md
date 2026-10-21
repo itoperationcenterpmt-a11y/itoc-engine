@@ -87,3 +87,29 @@ Panorama punya API (PAN-OS XML API). Dashboard memakainya lewat **dynamic report
 - Hasil bisa sedikit berbeda dari custom report di firewall karena sumbernya log yang dikumpulkan Panorama.
 
 **Alternatif Syslog** (bila API tidak diizinkan): Device → Server Profiles → Syslog, lalu Objects → Log Forwarding. Di server dashboard jalankan penerima (rsyslog atau syslog-ng) dan agregasi per hari. Cara ini memberi data per IP host, tetapi perlu pekerjaan tambahan.
+---
+
+## 6. Trend Micro Vision One (XDR)
+
+Dashboard memakai REST API Vision One v3 untuk menarik **alert Workbench** dan menyimpannya di database dashboard (tabel `xdr_alert`). Menu **XDR** menampilkan severity, status, model deteksi, backlog critical/high, dan cakupan dampak; ada juga di Overview, katalog widget, dan Report.
+
+**Buat API key di Vision One**
+1. Console Vision One → **Administration → User Roles** → Add role (mis. `dashboard-readonly`). Beri hak minimum: **Workbench: View, filter, and search**. Hak lain tidak perlu.
+2. **Administration → API Keys → Add API key**: isi nama (mis. `itoc-dashboard`), pilih role tadi, atur masa berlaku (catat tanggal kedaluwarsa agar bisa diganti tepat waktu), status Enabled.
+3. Salin key (hanya tampil sekali).
+
+**Alamat regional (Base URL)**: sesuaikan dengan region akun Vision One Anda.
+| Region | Base URL |
+|---|---|
+| Amerika Serikat | `https://api.xdr.trendmicro.com` |
+| Singapura | `https://api.sg.xdr.trendmicro.com` |
+| India | `https://api.in.xdr.trendmicro.com` |
+| Australia / Selandia Baru | `https://api.au.xdr.trendmicro.com` |
+| Jepang | `https://api.xdr.trendmicro.co.jp` |
+| Eropa | `https://api.eu.xdr.trendmicro.com` |
+| Timur Tengah dan Afrika | `https://api.mea.xdr.trendmicro.com` |
+
+**Di dashboard**: Admin → Integrations → **Trend Micro XDR**: isi Base URL regional dan API key, **Test connection**, Mode = API, Status = Aktif, lalu **Sync now**. Server dashboard harus bisa membuka HTTPS ke alamat itu (akses internet keluar).
+Sinkron pertama menarik 30 hari ke belakang (`backfill_days`, maksimal 365); berikutnya hanya alert yang baru atau berubah (interval 15 menit). Halaman XDR membaca dari database, bukan langsung dari Vision One.
+
+**Catatan**: bentuk jawaban API ditulis mengikuti dokumentasi Vision One v3. Tombol Test menampilkan nama field yang benar-benar diterima, jadi bila ada perbedaan versi, kirim hasil Test-nya untuk disesuaikan.

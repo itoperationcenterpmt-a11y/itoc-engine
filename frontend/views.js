@@ -60,6 +60,7 @@ const ICO = {
   ticket: '<path d="M3 9V6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v3a2.5 2.5 0 0 0 0 5v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a2.5 2.5 0 0 0 0-5z"/><path d="M14 5v2.5M14 10.75v2.5M14 16.5V19"/>',
   activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
   wifi: '<path d="M5 12.55a11 11 0 0 1 14 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/>',
+  xdr: '<circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="2"/>',
   camera: '<path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/>',
   shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.3c1.9.8 3 2.6 3 5.7"/>',
@@ -95,7 +96,7 @@ function renderShell() {
   const kinds = new Map(Object.entries(KL)); ((V.dev && V.dev.byKind) || []).forEach(k => kinds.set(k.key, KL[k.key] || k.k));
   const gl = ((V.dev && V.dev.groups) || []).filter(g => !S.kind || g.kind === S.kind);
   const WF = S.tab === "wifi" && V.wifi ? V.wifi.opts : null;
-  [["gKind", "Band", "Category"], ["gGrp", "SSID", "Group"], ["gTyp", "Zone", "Type"]].forEach(([id, w, d]) => { $(id).querySelector(".k").textContent = S.tab === "wifi" ? w : d; });
+  [["gKind", "Band", "Category"], ["gGrp", "SSID", "Group"], ["gTyp", "Zone", "Type"]].forEach(([id, w, d]) => { $(id).querySelector(".k").textContent = S.tab === "wifi" ? w : S.tab === "xdr" && id === "gKind" ? "Severity" : d; });
   if (WF) {
     $("fTyp").innerHTML = `<option value="">Semua zone</option>` + WF.zones.map(z => `<option ${z === S.dtype ? "selected" : ""}>${esc(z)}</option>`).join("");
     $("fGrp").innerHTML = `<option value="">Semua SSID</option>` + WF.ssids.map(z => `<option ${z === S.grp ? "selected" : ""}>${esc(z)}</option>`).join("");
@@ -105,6 +106,7 @@ function renderShell() {
   $("fGrp").innerHTML = `<option value="">All groups</option>` + gl.map(g => `<option value="${esc(g.name)}" ${g.name === S.grp ? "selected" : ""}>${esc(g.name)} (${g.n})</option>`).join("");
   $("fKind").innerHTML = [["", "All"], ...kinds].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
   }
+  if (S.tab === "xdr") $("fKind").innerHTML = [["", "All"], ["critical", "Critical"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
   $("fStat").innerHTML = SL.map(([k, l]) => `<button type="button" data-st="${k}" aria-pressed="${S.dstat === k}">${l}</button>`).join("");
   $("gKind").hidden = !ap.k; $("gStat").hidden = !ap.t; $("gGrp").hidden = !ap.g; $("gTyp").hidden = !ap.y;
   $("fwrap").hidden = !anyF;
@@ -112,7 +114,7 @@ function renderShell() {
   [["gPeriode", ap.p], ["gShift", ap.s], ["gSite", ap.l], ["gCmp", ap.p && ap.c]].forEach(([id, on]) => { const el = $(id); el.classList.toggle("na", !on); el.querySelectorAll("button,select,input").forEach(x => x.disabled = !on); });
   if (CFG.me.site) { $("fSite").disabled = true; $("gSite").classList.add("na"); }
   const chips = [], active = [];
-  if (ap.p) active.push(rangeTxt()); if (ap.s && S.sf) active.push("shift " + SN[S.sf] + " (" + shiftHours(S.sf) + ")"); if (ap.l && S.site) active.push(S.site); if (ap.k && S.kind) active.push(S.tab === "wifi" ? S.kind : (KL[S.kind] || S.kind)); if (ap.g && S.grp) active.push(S.grp); if (ap.y && S.dtype) active.push(((V.dev && V.dev.byType.find(t => t.code === S.dtype)) || {k: S.dtype}).k); if (ap.t && S.dstat) active.push(SL.find(x => x[0] === S.dstat)[1]); if (S.cmp && $("gCmp").querySelector("input:not(:disabled)")) active.push("dibanding " + dmon(prevRange().from) + " – " + dmon(prevRange().to));
+  if (ap.p) active.push(rangeTxt()); if (ap.s && S.sf) active.push("shift " + SN[S.sf] + " (" + shiftHours(S.sf) + ")"); if (ap.l && S.site) active.push(S.site); if (ap.k && S.kind) active.push(S.tab === "wifi" || S.tab === "xdr" ? S.kind : (KL[S.kind] || S.kind)); if (ap.g && S.grp) active.push(S.grp); if (ap.y && S.dtype) active.push(((V.dev && V.dev.byType.find(t => t.code === S.dtype)) || {k: S.dtype}).k); if (ap.t && S.dstat) active.push(SL.find(x => x[0] === S.dstat)[1]); if (S.cmp && $("gCmp").querySelector("input:not(:disabled)")) active.push("dibanding " + dmon(prevRange().from) + " – " + dmon(prevRange().to));
   if (anyF) { chips.push(`<span class="on">Active filter: <b>${esc(active.join(" · ") || "Semua")}</b></span>`);
     if (!ap.s && S.sf || !ap.l && S.site) chips.push(`<span class="na-txt">${(!ap.s && S.sf ? "Shift" : "") + (!ap.s && S.sf && !ap.l && S.site ? " dan " : "") + (!ap.l && S.site ? "lokasi" : "")} tidak berlaku di halaman ini</span>`); }
   $("fApplies").innerHTML = chips.join("");
@@ -123,7 +125,7 @@ function renderShell() {
 
 /* ---------- Ringkasan ---------- */
 function vRingkasan() {
-  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total); const Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal));
+  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total); const Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)); const Xd = V.xdr, hasX = !!(Xd && Xd.configured && (Xd.total || Xd.backlogCH));
   const T = hasT ? tkR() : null, N = hasN ? netR() : null, R = hasS ? socR() : null, chk = hasS ? socCheck() : [], okDays = chk.filter(x => x.s === "ok" || x.s === "dup").length, now = nowShift();
   const P = S.cmp ? prevRange() : null, Tp = P && tkR(P), Np = P && netR(P), Rp = P && socR(P);
   const openOld = V.open_old || [], oldD = CFG.params["sd.open_alert_days"];
@@ -136,6 +138,7 @@ function vRingkasan() {
   if (R && R.unknown && Object.keys(R.unknown).length) att.push(["warn", `<b>Cyber Security: nilai baru di luar daftar parameter</b> (${Object.entries(R.unknown).map(([k, r]) => ({type: "tipe", action: "tindakan", severity: "severity"}[k]) + ": " + r.map(x => esc(x[0])).join(", ")).join("; ")})`, "soc"]);
   if (N && (N.unmappedIsp || []).length) att.push(["warn", `<b>${N.unmappedIsp.length} link belum cocok dengan ISP mana pun</b>: ${N.unmappedIsp.slice(0, 3).map(esc).join(", ")}`, "noc"]);
   if (hasD && D.all.down) att.push(["warn", `<b>${fmt(D.all.down)} perangkat down</b> (CCTV dan Gate System), ${fmt(D.chronic)} di antaranya lebih dari 30 hari.`, "devices"]);
+  if (hasX && Xd.backlogCH) att.push(["warn", `<b>${Xd.backlogCH} alert XDR critical/high masih terbuka</b>.`, "xdr"]);
   if (hasW && Wf.apTotal - Wf.apOnline > 0) att.push(["warn", `<b>${Wf.apTotal - Wf.apOnline} Access Point WiFi tidak online</b> dari ${Wf.apTotal}.`, "wifi"]);
   if (hasD && (D.error || D.stale)) att.push(["warn", `<b>Data Zabbix ${D.error ? "gagal disinkron" : "belum diperbarui"}</b>, cek konektor di Admin.`, "devices"]);
   const bad = chk.filter(x => x.s === "bad" || x.s === "miss"); if (bad.length) att.push(["warn", `<b>Data SOC belum lengkap</b>: ${bad.length} dari ${chk.length} hari tidak terbaca atau belum diunggah.`, "kelengkapan"]);
@@ -150,6 +153,7 @@ function vRingkasan() {
   ${!hasN ? "" : dom("Networking", "noc", ``, N ? kpi("Availability", pc(N.avail, 2), "target " + pc(PAR.target, 1), {tip: RUMUS.av, dl: Np ? delta(N.avail, Np.avail, {up: true, pct: 1}) : "", cls: N.avail < PAR.target ? "warnv" : ""}) + kpi("Links Meeting SLA", N.ok + "/" + (N.ok + N.bad), N.bad + " tidak, " + N.nodata + " data kurang", {tip: RUMUS.link}) + kpi("Total Downtime", fx(N.downH, 1) + " jam", N.events + " kejadian", {tip: RUMUS.down, dl: Np ? delta(N.downH, Np.downH, {up: false}) : ""}) + kpi("High Utilization", fmt(N.utilHigh), "link puncak ≥ " + pc(PAR.utilPeak, 0), {tip: RUMUS.util}) : empty())}
   ${!hasD ? "" : dom("Devices", "devices", ``, kpi("Devices", fmt(D.all.total), "CCTV dan Gate System") + kpi("Availability Now", D.all.avail != null ? pc(D.all.avail, 1) : "-", "online ÷ (online + down)", {cls: D.all.avail != null && D.all.avail < 0.95 ? "warnv" : ""}) + kpi("Down", fmt(D.all.down), fmt(D.chronic) + " lebih dari 30 hari", {cls: D.all.down ? "warnv" : ""}) + kpi("Interface Issue", fmt(D.all.deg || 0), "ping normal, SNMP tidak tersedia"))}
   ${!hasW ? "" : dom("WiFi Users", "wifi", ``, kpi("Client Aktif", fmt(Wf.total), "terhubung saat ini") + kpi("Access Point", Wf.apTotal ? fmt(Wf.apOnline) + " / " + fmt(Wf.apTotal) : "-", "online", {cls: Wf.apTotal && Wf.apOnline < Wf.apTotal ? "warnv" : ""}) + kpi("Sinyal Lemah", fmt(Wf.weak), "di bawah " + Wf.weakAt + " dBm", {cls: Wf.weak ? "warnv" : ""}) + kpi("Usage", wBytes(Wf.tx + Wf.rx), "sesi berjalan"))}
+  ${!hasX ? "" : dom("XDR", "xdr", ``, kpi("Alert", fmt(Xd.total), "pada periode") + kpi("Masih Terbuka", fmt(Xd.open), "belum Closed", {cls: Xd.open ? "warnv" : ""}) + kpi("Critical", fmt((Xd.bySev.find(x => x.k === "critical") || {n: 0}).n), "") + kpi("Backlog C/H", fmt(Xd.backlogCH), "terbuka saat ini", {cls: Xd.backlogCH ? "warnv" : ""}))}
   ${!hasS ? "" : dom("Cyber Security", "soc", ``, kpi("Critical + High Blocked", R.ch ? pc(R.chBlkPct) : "–", fmt(R.chAlert) + " hanya alert", {tip: RUMUS.socCH, dl: Rp && Rp.ch ? delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : ""}) + kpi("Total Events", R.total ? fmt(R.total) : "–", fmt(R.ch) + " critical/high", {tip: RUMUS.socTot}) + kpi("Validated Days", okDays + "/" + chk.length, okDays < chk.length ? "sisanya tidak dihitung" : "lengkap", {cls: okDays < chk.length ? "warnv" : ""}) + kpi("Internal Source", pc(R.internalPct), "dari total event", {tip: RUMUS.socInt}))}
   ${panel("c8", "Attention", ctxTxt(), att.length ? `<ul class="att">${att.map(a => `<li class="${a[0]}"><span>${a[1]}</span>${go(a[2], "Lihat")}</li>`).join("")}</ul>` : `<div class="empty sm">Tidak ada yang perlu ditindaklanjuti.</div>`)}
   ${panel("c4", "On Duty", dlong(now.date) + " · " + shiftHours(now.shift), onDuty(now))}

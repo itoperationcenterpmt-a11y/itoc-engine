@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .. import mailer, notify, vault
 from ..db import get_db
 from ..netguard import check_url
-from ..ingest import zabbix, ruckus, panorama_api
+from ..ingest import zabbix, ruckus, panorama_api, trendmicro
 from ..models import ApiKey, DataSource, Role, User, Webhook, ZbxHost
 from ..security import rate_limit, require_admin, require_admin_area
 from ..store import audit, bump_config
@@ -22,6 +22,7 @@ CREDS = {
     "manageengine": [("me.token", "API token", "token_env", "ME_AUTHTOKEN")],
     "prtg": [("prtg.user", "Username", "user_env", "PRTG_USER"), ("prtg.passhash", "Passhash", "passhash_env", "PRTG_PASSHASH")],
     "zabbix": [("zabbix.token", "API token", "token_env", "ZABBIX_TOKEN")],
+    "trendmicro": [("tm.token", "API key Vision One", "token_env", "TMV1_TOKEN")],
     "panorama": [("pano.user", "Username akun API Panorama", "user_env", "PANO_USER"), ("pano.pass", "Password akun API Panorama", "pass_env", "PANO_PASS")],
     "ruckus": [("vsz.user", "Username API vSZ", "user_env", "VSZ_USER"), ("vsz.pass", "Password API vSZ", "pass_env", "VSZ_PASS"),
               ("vsz.kill_user", "Username akun putus-sesi (opsional, role dengan hak disconnect)", "kill_user_env", "VSZ_KILL_USER"), ("vsz.kill_pass", "Password akun putus-sesi", "kill_pass_env", "VSZ_KILL_PASS")],
@@ -129,6 +130,23 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
             s.config = {**c, "base_url": url[: -len("/api_jsonrpc.php")]}                  # simpan alamat yang terbukti benar
             db.commit()
             return {"ok": True, "msg": f"Terhubung ke Zabbix {ver} di {s.config['base_url']}, token valid, {len(g)} host group cocok prefix"}
+        if key == "trendmicro":
+            tok = vault.cred(db, "tm.token", c.get("token_env", "TMV1_TOKEN"))
+            if not tok:
+                raise HTTPException(422, "API key Vision One belum diisi")
+            from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+            base, out = trendmicro.root(c["base_url"]), []
+            with httpx.Client(timeout=30, verify=c.get("verify_tls", True), follow_redirects=False) as cl:
+                try:
+                    j = trendmicro.get(cl, base + "/v3.0/healthcheck/connectivity", tok)
+                    out.append("Koneksi: %s." % (j.get("status") or "OK"))
+                except RuntimeError as e:
+                    out.append("Healthcheck: %s." % str(e)[:140])
+                now = _dt.now(_tz.utc)
+                items = trendmicro.fetch_alerts(cl, base, tok, now - _td(days=30), now, top=5, max_pages=1)
+            fields = ", ".join(sorted(items[0].keys())[:14]) if items else "-"
+            out.append("API key valid. Alert Workbench 30 hari terakhir (contoh): %d. Field: %s." % (len(items), fields))
+            return {"ok": True, "msg": " ".join(out)}
         if key == "panorama":
             u, pw = vault.cred(db, "pano.user", c.get("user_env", "PANO_USER")), vault.cred(db, "pano.pass", c.get("pass_env", "PANO_PASS"))
             if not u or not pw:

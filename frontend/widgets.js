@@ -50,6 +50,15 @@ function widgetList() {
         html: () => panel("c6", "Devices Down · " + k.k, "", tbl(["Perangkat", "Lokasi", "Lama"], (V.dev.kindDown[k.key] || []).map(x => [x.name, x.loc, {h: `<span class="${x.ageH != null && x.ageH > 24 ? "crit-t" : ""}">${durTxt(x.ageH)}</span>`}]), {empty: "Semua perangkat online."}))});
     });
   }
+  const Xd = V.xdr;
+  if (Xd && Xd.configured) {
+    const XP = xdrPanels(Xd), addx = (key, title, desc, size, fn) => extra.push({key: "xdr-" + key, mod: "xdr", need: "xdr", title, desc, size, html: XP[fn]});
+    addx("kpi", "XDR Summary", "Alert, yang masih terbuka, critical, backlog critical/high", "c4", "kpi");
+    addx("daily", "XDR Alerts per Day", "Alert per hari menurut severity", "c8", "daily");
+    addx("sev", "XDR Severity and Status", "Sebaran severity dan status investigasi", "c4", "sev");
+    addx("models", "XDR Top Detection Models", "Model deteksi dengan alert terbanyak", "c6", "models");
+    addx("impact", "XDR Impact Scope", "Jumlah desktop, server, akun, dan email yang terdampak", "c6", "impact");
+  }
   const Wf = V.wifi;
   if (Wf) {
     const WP = wifiPanels(Wf), add = (key, title, desc, size, fn) => extra.push({key: "wifi-" + key, mod: "wifi", need: "wifi", title, desc, size, html: WP[fn]});
