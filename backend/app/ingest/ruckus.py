@@ -4,10 +4,11 @@ import re
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 import httpx
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from .. import vault
-from ..models import DataSource, WifiAp, WifiClient, WifiStat
+from ..models import DataSource, WifiAp, WifiClient, WifiSession, WifiStat, ZbxLocMap
 from ..store import Config
 
 FALLBACK = ["v9_1", "v9_0", "v8_2", "v8_1", "v8_0", "v7_1"]
@@ -130,6 +131,10 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
                 aps_raw, _ = fetch_clients(cl, rt, ver, ticket, limit=500, path="query/ap")
             except Exception:                      # akun tanpa hak melihat AP: client tetap disinkron, zone dan status AP kosong
                 aps_raw = []
+            try:                                   # sesi yang sudah selesai (riwayat vSZ, retensinya pendek): disimpan sendiri supaya laporan punya sejarah panjang
+                hist_raw, _ = fetch_clients(cl, rt, ver, ticket, limit=1000, max_rows=20000, path="query/historicalclient")
+            except Exception:
+                hist_raw = []
         finally:
             logout(cl, rt, ver, ticket)
     aps = {a["mac"]: a for a in (to_ap(d, tz) for d in aps_raw) if a}
@@ -146,7 +151,49 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         ins = insert(WifiClient).values(list(rows.values()))
         db.execute(ins.on_conflict_do_update(index_elements=["mac"], set_={k: getattr(ins.excluded, k) for k in next(iter(rows.values())) if k != "mac"} | {"updated_at": datetime.utcnow()}))
     db.query(WifiClient).filter(~WifiClient.mac.in_(list(rows))).delete(synchronize_session=False)
-    return len(rows), f"{len(rows)} client WiFi, {len(aps)} AP (vSZ API {ver})"
+    n_ses = save_sessions(db, cfg, rows, aps, hist_raw)
+    return len(rows), f"{len(rows)} client WiFi, {len(aps)} AP, {n_ses} sesi tercatat (vSZ API {ver})"
+
+
+def loc_of(ap_name, zone, cmap):
+    """Lokasi dari kode di awal nama AP (mis. SRG-RUANG IT) lewat pemetaan kode lokasi Zabbix; selain itu nama zone."""
+    return cmap.get((ap_name or "").split("-")[0].strip().lower()) or zone
+
+
+def save_sessions(db: Session, cfg: Config, rows: dict, aps: dict, hist_raw: list) -> int:
+    now, tz = cfg.now(), cfg.p("tz_offset_hours", 7)
+    cmap = {m.code.lower(): m.site for m in db.query(ZbxLocMap) if m.site}
+    act = []
+    for r in rows.values():
+        if not r["started_at"]:
+            continue
+        raw = r.get("raw") or {}
+        act.append({"mac": r["mac"], "started_at": r["started_at"], "ended_at": None, "last_seen": now, "ip": r["ip"], "username": r["username"], "hostname": r["hostname"],
+                    "device": raw.get("deviceType"), "ssid": r["ssid"], "ap_mac": r["ap_mac"], "ap_name": r["ap_name"], "zone": r["zone"], "loc": loc_of(r["ap_name"], r["zone"], cmap),
+                    "auth": raw.get("authMethod"), "rx_bytes": r["rx_bytes"], "tx_bytes": r["tx_bytes"]})
+    done = []
+    for d in hist_raw:
+        mac, st, en = (pick(d, "clientMac", "mac") or "").upper(), _local(_int(pick(d, "sessionStartTime")), tz), _local(_int(pick(d, "sessionEndTime")), tz)
+        if not mac or not st:
+            continue
+        ap = aps.get((pick(d, "apMac") or "").upper()) or {}
+        done.append({"mac": mac, "started_at": st, "ended_at": en or st, "last_seen": en, "ip": pick(d, "ipAddress"), "username": None, "hostname": pick(d, "hostname"),
+                     "device": pick(d, "modelName"), "ssid": pick(d, "ssid"), "ap_mac": (pick(d, "apMac") or "").upper() or None, "ap_name": ap.get("name"), "zone": ap.get("zone"),
+                     "loc": loc_of(ap.get("name"), ap.get("zone"), cmap), "auth": None, "rx_bytes": _int(pick(d, "rxBytes")), "tx_bytes": _int(pick(d, "txBytes"))})
+    keep = lambda ins, cols: {c: func.coalesce(getattr(ins.excluded, c), getattr(WifiSession, c)) for c in cols}
+    for part in (done[i:i + 1000] for i in range(0, len(done), 1000)):
+        ins = insert(WifiSession).values(part)
+        db.execute(ins.on_conflict_do_update(index_elements=["mac", "started_at"], set_={"ended_at": ins.excluded.ended_at, "last_seen": ins.excluded.last_seen, "rx_bytes": ins.excluded.rx_bytes,
+                                                                                     "tx_bytes": ins.excluded.tx_bytes, **keep(ins, ["ip", "hostname", "device", "ssid", "ap_mac", "ap_name", "zone", "loc"])}))
+    for part in (act[i:i + 1000] for i in range(0, len(act), 1000)):
+        ins = insert(WifiSession).values(part)
+        db.execute(ins.on_conflict_do_update(index_elements=["mac", "started_at"], set_={"ended_at": None, "last_seen": ins.excluded.last_seen, "rx_bytes": ins.excluded.rx_bytes,
+                                                                                     "tx_bytes": ins.excluded.tx_bytes, "ip": ins.excluded.ip, "ssid": ins.excluded.ssid, "ap_mac": ins.excluded.ap_mac,
+                                                                                     "ap_name": ins.excluded.ap_name, "zone": ins.excluded.zone, "loc": ins.excluded.loc, "auth": ins.excluded.auth,
+                                                                                     **keep(ins, ["username", "hostname", "device"])}))
+    db.query(WifiSession).filter(WifiSession.ended_at.is_(None), WifiSession.last_seen < now - timedelta(seconds=30)).update({WifiSession.ended_at: WifiSession.last_seen}, synchronize_session=False)
+    db.query(WifiSession).filter(WifiSession.started_at < now - timedelta(days=int(cfg.p("wifi.history_days", 90)))).delete(synchronize_session=False)
+    return len(act) + len(done)
 
 
 def disconnect(db: Session, mode: str, mac: str, ap_mac: str) -> None:

@@ -1,6 +1,7 @@
 """Client WiFi aktif, Access Point, usage, dan tren dari snapshot Ruckus vSZ (tabel wifi_client, wifi_ap, wifi_stat)."""
-from datetime import datetime, timedelta
-from ..models import DataSource, WifiAp, WifiClient, WifiStat, ZbxLocMap
+from datetime import date, datetime, time as dtime, timedelta
+from sqlalchemy import func
+from ..models import DataSource, WifiAp, WifiClient, WifiSession, WifiStat, ZbxLocMap
 from ..store import Config
 from ..timeutil import ms
 
@@ -28,7 +29,37 @@ def _top(rows, key, n=12, val=lambda r: 1):
     return [{"k": k, "n": v} for k, v in sorted(c.items(), key=lambda x: -x[1])[:n]]
 
 
-def build(db, cfg: Config, user=None, zone: str = "", ssid: str = "", band: str = "", site: str = "") -> dict:
+def history(db, cfg: Config, a: date, b: date, zone: str = "", ssid: str = "", site: str = "") -> dict:
+    """Riwayat sesi WiFi pada rentang tanggal a..b (menurut waktu sesi mulai): usage per hari, zone, SSID, lokasi, AP, tipe perangkat, client teratas, dan jam tersibuk."""
+    S = WifiSession
+    t0, t1 = datetime.combine(a, dtime.min), datetime.combine(b + timedelta(days=1), dtime.min)
+    cond = [S.started_at >= t0, S.started_at < t1] + ([S.zone == zone] if zone else []) + ([S.ssid == ssid] if ssid else []) + ([S.loc == site] if site else [])
+    by = func.coalesce(func.sum(func.coalesce(S.rx_bytes, 0) + func.coalesce(S.tx_bytes, 0)), 0)
+    rx, tx = func.coalesce(func.sum(S.rx_bytes), 0), func.coalesce(func.sum(S.tx_bytes), 0)
+    tot = db.query(func.count(), func.count(func.distinct(S.mac)), rx, tx).filter(*cond).one()
+    first = db.query(func.min(S.started_at)).scalar()
+    day = func.date(S.started_at)
+    drows = {r[0]: r for r in db.query(day, func.count(), func.count(func.distinct(S.mac)), by).filter(*cond).group_by(day)}
+    daily, x = [], a
+    while x <= b:
+        r = drows.get(x)
+        daily.append({"date": x.isoformat(), "sessions": r[1] if r else 0, "clients": r[2] if r else 0, "bytes": int(r[3]) if r else 0})
+        x += timedelta(days=1)
+
+    def grp(col, n=10):
+        q = db.query(col, func.count(), func.count(func.distinct(S.mac)), by).filter(*cond).group_by(col).order_by(by.desc()).limit(n)
+        return [{"k": r[0] or "-", "sessions": r[1], "clients": r[2], "bytes": int(r[3])} for r in q]
+    hr = func.extract("hour", S.started_at)
+    hours = [0] * 24
+    for h, n in db.query(hr, func.count()).filter(*cond).group_by(hr):
+        hours[int(h)] = n
+    top = [{"mac": r[0], "user": r[1], "host": r[2], "ssid": r[3], "sessions": r[4], "bytes": int(r[5])}
+           for r in db.query(S.mac, func.max(S.username), func.max(S.hostname), func.max(S.ssid), func.count(), by).filter(*cond).group_by(S.mac).order_by(by.desc()).limit(15)]
+    return {"from": a.isoformat(), "to": b.isoformat(), "sessions": tot[0], "clients": tot[1], "rx": int(tot[2]), "tx": int(tot[3]), "since": first.isoformat() if first else None,
+            "daily": daily, "byZone": grp(S.zone), "bySsid": grp(S.ssid), "byLoc": grp(S.loc), "byAp": grp(S.ap_name), "byDevice": grp(S.device, 8), "top": top, "hours": hours}
+
+
+def build(db, cfg: Config, user=None, zone: str = "", ssid: str = "", band: str = "", site: str = "", a: date | None = None, b: date | None = None) -> dict:
     every_row = db.query(WifiClient).order_by(WifiClient.username, WifiClient.mac).all()
     cmap = {m.code.lower(): m.site for m in db.query(ZbxLocMap) if m.site}
     loc = lambda r: cmap.get((r.ap_name or "").split("-")[0].strip().lower()) or r.zone or "-"      # kode lokasi di awal nama AP (mis. SRG-RUANG IT) -> lokasi master
@@ -58,7 +89,8 @@ def build(db, cfg: Config, user=None, zone: str = "", ssid: str = "", band: str 
     portal = [{"mac": r.mac, "ip": r.ip, "user": r.username, "host": r.hostname, "status": "login" if (r.username or str((r.raw or {}).get("authStatus") or "").upper() == "AUTHORIZED") else "pending", "auth": (r.raw or {}).get("authMethod"),
                "ssid": r.ssid, "ap": r.ap_name, "zone": r.zone, "loc": loc(r), "band": _band(r), "rssi": r.rssi, "since": ms(r.started_at), "rx": r.rx_bytes, "tx": r.tx_bytes} for r in rows if is_portal(r)]
     portal.sort(key=lambda x: (x["status"] != "login", x["user"] or "", x["since"] or 0))
-    return {"portal": portal, "portalLogin": sum(1 for x in portal if x["status"] == "login"), "byLoc": _top(rows, loc, 10), "total": len(rows), "users": len({r.username for r in rows if r.username}), "named": sum(1 for r in rows if r.username), "weak": sum(1 for r in rows if r.rssi is not None and r.rssi < weak), "weakAt": weak,
+    hist = history(db, cfg, a, b, zone, ssid, site) if a and b else None
+    return {"hist": hist, "portal": portal, "portalLogin": sum(1 for x in portal if x["status"] == "login"), "byLoc": _top(rows, loc, 10), "total": len(rows), "users": len({r.username for r in rows if r.username}), "named": sum(1 for r in rows if r.username), "weak": sum(1 for r in rows if r.rssi is not None and r.rssi < weak), "weakAt": weak,
             "rx": sum(r.rx_bytes or 0 for r in rows), "tx": sum(r.tx_bytes or 0 for r in rows),
             "apTotal": len(aps), "apOnline": sum(1 for a in aps if isup(a)), "apDown": down[:50],
             "bySsid": _top(rows, lambda r: r.ssid), "bySsidBytes": _top(rows, lambda r: r.ssid, 10, tot), "byAp": sorted(by_ap.values(), key=lambda x: -x["n"])[:10],

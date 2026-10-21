@@ -279,8 +279,8 @@ def _soc(db, cfg, f, preset="standar"):
     return s
 
 
-DEV_IDS = ["dev_status", "dev_kind", "dev_down_loc", "dev_age", "dev_type"]
-WIFI_IDS = ["wifi_ssid", "wifi_ssid_gb", "wifi_ap", "wifi_zone", "wifi_band", "wifi_trend"]
+DEV_IDS = ["dev_status", "dev_kind", "dev_down_loc", "dev_age", "dev_type", "dev_h_daily", "dev_h_events", "dev_h_loc", "dev_h_type"]
+WIFI_IDS = ["wifi_ssid", "wifi_ssid_gb", "wifi_ap", "wifi_zone", "wifi_band", "wifi_trend", "wifi_h_daily", "wifi_h_sessions", "wifi_h_zone", "wifi_h_ssid", "wifi_h_loc", "wifi_h_hours", "wifi_h_device"]
 _GB = 1073741824
 
 
@@ -288,12 +288,13 @@ def _devices(db, cfg, f, preset="standar"):
     """Status perangkat adalah kondisi terkini dari Zabbix saat laporan dibuat; periode tidak berlaku."""
     from .calc import devices as DEV
     D = DEV.build(db, cfg, f.site, "", "", full=False)
+    H = DEV.history(db, cfg, f.d_from, f.d_to, f.site)
     s = {"key": "devices", "title": "Devices", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     A = D["all"]
     if not D["configured"] or not A["total"]:
         s["notes"].append("Belum ada data perangkat dari Zabbix." + (" Sinkron terakhir gagal: " + D["error"] if D["error"] else ""))
         return s
-    s["notes"].append("Kondisi terkini saat laporan dibuat (snapshot Zabbix), bukan rata-rata periode.")
+    s["notes"].append("Status perangkat = kondisi terkini saat laporan dibuat (snapshot Zabbix). Bagian riwayat (kejadian dan downtime) mengikuti periode laporan" + (", tercatat sejak " + H["since"][:10] if H.get("since") else "") + ".")
     s["kpis"] = [_kpi("Devices", A["total"], "n", "dipantau dari Zabbix"), _kpi("Online", A["up"], "n", fmt_p(A["avail"], 1) + " dari yang aktif" if A["avail"] is not None else ""),
                  _kpi("Down", A["down"], "n", f"{D['chronic']} lebih dari {D['chronicDays']} hari"), _kpi("Availability Now", A["avail"], "p2", "online ÷ (online + down)"),
                  _kpi("Interface Issue", A["deg"], "n", "ping normal, SNMP/agent tidak tersedia"), _kpi("Maintenance", A["maint"], "n", "nonaktif di Zabbix: " + fmt_n(A["off"]))]
@@ -303,7 +304,17 @@ def _devices(db, cfg, f, preset="standar"):
         _chart("Status per kategori", [r["k"] for r in bk], [{"name": "Online", "values": [r["up"] for r in bk]}, {"name": "Down", "values": [r["down"] for r in bk]}], "stack"),
         _top("10 lokasi dengan perangkat down terbanyak", [(r["k"], r["down"]) for r in bl], "Down"),
         _chart("Sebaran lama perangkat down", [x["k"] for x in D["ageDist"]], [{"name": "Perangkat", "values": [x["n"] for x in D["ageDist"]]}]),
-        _top("10 tipe perangkat terbanyak", [(r["k"], r["total"]) for r in sorted(bt, key=lambda r: -r["total"])], "Perangkat")])
+        _top("10 tipe perangkat terbanyak", [(r["k"], r["total"]) for r in sorted(bt, key=lambda r: -r["total"])], "Perangkat"),
+        _daily("Downtime semua perangkat (jam)", [x["date"] for x in H["daily"]], [{"name": "Jam", "values": [x["hours"] for x in H["daily"]]}]),
+        _daily("Kejadian down", [x["date"] for x in H["daily"]], [{"name": "Kejadian", "values": [x["events"] for x in H["daily"]]}]),
+        _top("10 lokasi dengan downtime terbesar pada periode (jam)", [(r["k"], r["hours"]) for r in H["byLoc"]], "Jam"),
+        _top("10 tipe perangkat dengan downtime terbesar pada periode (jam)", [(r["k"], r["hours"]) for r in H["byType"]], "Jam")])
+    s["kpis"] += [_kpi("Kejadian down (periode)", H["events"], "n", "kejadian dari Zabbix"), _kpi("Downtime periode (jam)", H["hours"], "f0", fmt_n(H["hosts"]) + " perangkat terdampak"),
+                  _kpi("Rata-rata pulih (jam)", H["mttr"], "f1", "kejadian yang sudah selesai"), _kpi("Availability periode", H["avail"], "p2", "1 − downtime ÷ (perangkat × periode)")]
+    s["tables"].append(_table("Downtime per lokasi (periode)", ["Lokasi", "Kejadian", "Downtime (jam)", "Perangkat", "Availability"], ["t", "n", "f1", "n", "p1"], [[r["k"], r["events"], r["hours"], r["hosts"], r["avail"]] for r in H["byLoc"]]))
+    s["tables"].append(_table("Downtime per tipe perangkat (periode)", ["Tipe", "Kejadian", "Downtime (jam)", "Perangkat"], ["t", "n", "f1", "n"], [[r["k"], r["events"], r["hours"], r["hosts"]] for r in H["byType"]]))
+    s["tables"].append(_table("Perangkat paling sering down (periode)", ["Perangkat", "Kejadian", "Downtime (jam)"], ["t", "n", "f1"], [[r["k"], r["events"], r["hours"]] for r in H["byHost"]]))
+    s["tables"].append(_table("Masalah dominan (periode)", ["Masalah", "Kejadian", "Downtime (jam)"], ["t", "n", "f1"], [[r["k"], r["events"], r["hours"]] for r in H["byProb"]]))
     s["tables"].append(_table("Per kategori", ["Kategori", "Perangkat", "Online", "Down", "Interface", "Availability"], ["t", "n", "n", "n", "n", "p1"], [[r["k"], r["total"], r["up"], r["down"], r["deg"], r["avail"]] for r in bk]))
     s["tables"].append(_table("Per tipe perangkat", ["Tipe", "Kode", "Perangkat", "Down", "Availability"], ["t", "t", "n", "n", "p1"], [[r["k"], r["code"], r["total"], r["down"], r["avail"]] for r in bt]))
     s["tables"].append(_table("Per lokasi", ["Lokasi", "Perangkat", "Down", "Interface", "Availability"], ["t", "n", "n", "n", "p1"], [[r["k"], r["total"], r["down"], r["deg"], r["avail"]] for r in bl[:40]]))
@@ -320,11 +331,12 @@ def _wifi(db, cfg, f, preset="standar"):
     """Client WiFi aktif dan Access Point dari Ruckus vSZ: kondisi terkini saat laporan dibuat; usage = trafik sesi yang sedang berjalan."""
     from .calc import wifi as WIFI
     W = WIFI.build(db, cfg)
+    Hh = WIFI.history(db, cfg, f.d_from, f.d_to, site=f.site)
     s = {"key": "wifi", "title": "WiFi Users", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not W["configured"] or not (W["total"] or W["apTotal"]):
         s["notes"].append("Belum ada data WiFi dari Ruckus vSZ." + (" Sinkron terakhir gagal: " + W["error"] if W["error"] else ""))
         return s
-    s["notes"].append("Kondisi terkini saat laporan dibuat (snapshot vSZ). Usage adalah trafik sesi yang sedang berjalan, bukan total harian.")
+    s["notes"].append("KPI dan grafik status = kondisi terkini saat laporan dibuat (snapshot vSZ). Bagian periode (usage, client, sesi) dihitung dari sesi yang tersimpan" + (", tercatat sejak " + Hh["since"][:10] if Hh.get("since") else "") + "; usage sebuah sesi dihitung pada hari sesi dimulai.")
     s["kpis"] = [_kpi("Client aktif", W["total"], "n", "terhubung saat ini"), _kpi("User login", W["users"], "n", f"{fmt_n(W['named'])} client dengan username"),
                  _kpi("Access Point online", W["apOnline"], "n", f"dari {fmt_n(W['apTotal'])} AP"), _kpi("Sinyal lemah", W["weak"], "n", f"di bawah {W['weakAt']} dBm"),
                  _kpi("Download (GB)", W["tx"] / _GB, "f1", "sesi berjalan"), _kpi("Upload (GB)", W["rx"] / _GB, "f1", "sesi berjalan")]
@@ -335,7 +347,20 @@ def _wifi(db, cfg, f, preset="standar"):
         _top("Client per Access Point", [(x["k"], x["n"]) for x in W["byAp"]], "Client"),
         _top("Client per zone", [(x["k"], x["n"]) for x in W["byZone"]], "Client"),
         _chart("Client per band", [x["k"] for x in W["byBand"]], [{"name": "Client", "values": [x["n"] for x in W["byBand"]]}], "donut"),
-        _chart("Client 24 jam terakhir", [f"{(x['t'] // 3600000) % 24:02d}.{(x['t'] // 60000) % 60:02d}" for x in tr], [{"name": "Client", "values": [x["c"] for x in tr]}], "line") if len(tr) > 1 else None])
+        _chart("Client 24 jam terakhir", [f"{(x['t'] // 3600000) % 24:02d}.{(x['t'] // 60000) % 60:02d}" for x in tr], [{"name": "Client", "values": [x["c"] for x in tr]}], "line") if len(tr) > 1 else None,
+        _daily("Usage WiFi (GB)", [x["date"] for x in Hh["daily"]], [{"name": "GB", "values": [round(x["bytes"] / _GB, 2) for x in Hh["daily"]]}]),
+        _daily("Client unik dan sesi", [x["date"] for x in Hh["daily"]], [{"name": "Client unik", "values": [x["clients"] for x in Hh["daily"]]}, {"name": "Sesi", "values": [x["sessions"] for x in Hh["daily"]]}]),
+        _top("Usage per zone pada periode (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byZone"]], "GB"),
+        _top("Usage per SSID pada periode (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["bySsid"]], "GB"),
+        _top("Usage per lokasi pada periode (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byLoc"]], "GB"),
+        _chart("Jam mulai sesi", [f"{h:02d}" for h in range(24)], [{"name": "Sesi", "values": Hh["hours"]}]),
+        _top("Perangkat dominan pada periode (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byDevice"]], "GB")])
+    s["kpis"] += [_kpi("Sesi (periode)", Hh["sessions"], "n", ""), _kpi("Client unik (periode)", Hh["clients"], "n", "MAC berbeda"), _kpi("Total usage (GB)", (Hh["rx"] + Hh["tx"]) / _GB, "f1", "periode laporan"),
+                  _kpi("Rata-rata usage per client (GB)", (Hh["rx"] + Hh["tx"]) / _GB / Hh["clients"] if Hh["clients"] else None, "f2", "")]
+    for ttl, key, nm in (("Usage per zone (periode)", "byZone", "Zone"), ("Usage per SSID (periode)", "bySsid", "SSID"), ("Usage per lokasi (periode)", "byLoc", "Lokasi"), ("Usage per AP (periode)", "byAp", "AP")):
+        s["tables"].append(_table(ttl, [nm, "Client unik", "Sesi", "Usage (GB)"], ["t", "n", "n", "f2"], [[x["k"], x["clients"], x["sessions"], x["bytes"] / _GB] for x in Hh[key]]))
+    s["tables"].append(_table("Client dengan usage terbesar (periode)", ["User / Host", "MAC", "SSID", "Sesi", "Usage (GB)"], ["t", "t", "t", "n", "f2"],
+                              [[x["user"] or x["host"], x["mac"], x["ssid"], x["sessions"], x["bytes"] / _GB] for x in Hh["top"]]))
     s["tables"].append(_table("Per SSID", ["SSID", "Client", "Usage (GB)"], ["t", "n", "f2"], [[x["k"], x["n"], 0] for x in W["bySsid"]]))
     gb = dict((x["k"], x["n"]) for x in W["bySsidBytes"])
     s["tables"][-1]["rows"] = [[x["k"], x["n"], gb.get(x["k"], 0) / _GB] for x in W["bySsid"]]

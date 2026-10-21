@@ -118,3 +118,69 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
             "byType": by_type, "groups": groups, "groupMaps": group_maps, "unmapped": [{"code": c, "n": n} for c, n in sorted(unmapped.items(), key=lambda x: -x[1])], "kindLoc": kind_loc, "kindDown": kind_down,
             "list": lst, "listN": list_n, "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": stale,
             "configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled), "error": src.last_error if src else None}
+
+def history(db: Session, cfg: Config, a, b, site: str = "", kind: str = "", dtype: str = "") -> dict:
+    """Riwayat down dari tabel zbx_event pada rentang tanggal a..b: kejadian, downtime (jam), perangkat terdampak, MTTR, per hari, lokasi, tipe, perangkat, dan masalah dominan."""
+    from datetime import time as _t, timedelta
+    labels = cfg.p("dev.kind_labels", {}) or {}
+    amap, cmap = _alias_map(db), {m.code.lower(): m.site for m in db.query(M.ZbxLocMap) if m.site}
+    dlabel = {d.code: (d.label or d.code) for d in db.query(M.DevCode)}
+    now = cfg.now()
+    t0, t1 = datetime.combine(a, _t.min), min(datetime.combine(b + timedelta(days=1), _t.min), now)
+    hosts = {h.hostid: h for h in db.query(M.ZbxHost)}
+    loc_of = lambda c: cmap.get((c or "").lower()) or amap.get((c or "").lower()) or (c or "-")
+    base = [h for h in hosts.values() if (not site or loc_of(h.code) == site) and (not kind or h.kind == kind) and (not dtype or (h.dev_code or "-") == dtype)]
+    ov = lambda s, e, x0, x1: max(0.0, (min(e, x1) - max(s, x0)).total_seconds()) / 3600
+    evs = db.query(M.ZbxEvent).filter(M.ZbxEvent.start_at < t1, (M.ZbxEvent.end_at.is_(None)) | (M.ZbxEvent.end_at >= t0)).all()
+    daily = {}
+    d = a
+    while d <= b:
+        daily[d] = [0, 0.0]
+        d += timedelta(days=1)
+    tot_h, n_ev, dur_closed, per = 0.0, 0, [], {"loc": {}, "type": {}, "host": {}, "prob": {}, "kind": {}}
+    for e in evs:
+        h = hosts.get(e.hostid)
+        code = e.code if h is None else h.code
+        loc = loc_of(code)
+        dc = (e.dev_code or "-") if h is None else (h.dev_code or "-")
+        kd = e.kind or (h.kind if h else "")
+        if (site and loc != site) or (kind and kd != kind) or (dtype and dc != dtype):
+            continue
+        end = e.end_at or now
+        hrs = ov(e.start_at, end, t0, t1)
+        if hrs <= 0:
+            continue
+        n_ev += 1
+        tot_h += hrs
+        if e.end_at and t0 <= e.start_at < t1:
+            dur_closed.append((e.end_at - e.start_at).total_seconds() / 3600)
+        if a <= e.start_at.date() <= b:
+            daily[e.start_at.date()][0] += 1
+        x = e.start_at.date()
+        while x <= end.date() and x <= b:
+            if x >= a:
+                daily[x][1] += ov(e.start_at, end, datetime.combine(x, _t.min), datetime.combine(x + timedelta(days=1), _t.min))
+            x += timedelta(days=1)
+        for key, k in (("loc", loc), ("type", dc), ("host", e.host_name or e.hostid), ("prob", e.name or "-"), ("kind", kd or "-")):
+            p = per[key].setdefault(k, [0, 0.0, set()])
+            p[0] += 1
+            p[1] += hrs
+            p[2].add(e.hostid)
+    period_h = max((t1 - t0).total_seconds() / 3600, 1)
+    n_dev = len(base)
+    rank = lambda key, n=10, name=lambda k: k: [{"k": name(k), "key": k, "events": v[0], "hours": round(v[1], 1), "hosts": len(v[2])} for k, v in sorted(per[key].items(), key=lambda x: -x[1][1])[:n]]
+    cnt_by = lambda f: {}
+    out = {"from": a.isoformat(), "to": b.isoformat(), "events": n_ev, "hours": round(tot_h, 1), "hosts": len({h for v in per["host"].values() for h in v[2]}), "devices": n_dev,
+           "mttr": round(sum(dur_closed) / len(dur_closed), 1) if dur_closed else None, "avail": max(0.0, 1 - tot_h / (n_dev * period_h)) if n_dev else None,
+           "daily": [{"date": k.isoformat(), "events": v[0], "hours": round(v[1], 1)} for k, v in daily.items()],
+           "byLoc": rank("loc"), "byType": rank("type", 10, lambda k: dlabel.get(k, k) if k != "-" else "Tidak terklasifikasi"), "byKind": rank("kind", 10, lambda k: labels.get(k, k)),
+           "byHost": [{"k": r["k"], "events": r["events"], "hours": r["hours"]} for r in rank("host", 15)], "byProb": [{"k": r["k"], "events": r["events"], "hours": r["hours"]} for r in rank("prob", 8)]}
+    # availability per lokasi = 1 - downtime / (jumlah perangkat lokasi * lama periode)
+    cnt = {}
+    for h in base:
+        cnt[loc_of(h.code)] = cnt.get(loc_of(h.code), 0) + 1
+    for r in out["byLoc"]:
+        r["avail"] = max(0.0, 1 - r["hours"] / (cnt.get(r["key"], 0) * period_h)) if cnt.get(r["key"]) else None
+    first = db.query(M.func.min(M.ZbxEvent.start_at)).scalar() if hasattr(M, "func") else None
+    out["since"] = first.isoformat() if first else None
+    return out

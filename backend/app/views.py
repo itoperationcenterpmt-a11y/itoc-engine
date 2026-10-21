@@ -133,8 +133,10 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
             V["ho_open"] = [ho_json(h) for h in db.scalars(q.order_by(M.Handover.created_at.desc()))]
     if tab == "devices" or (tab == "ringkasan" and ok("devices")):
         V["dev"] = DEV.build(db, cfg, st, f.kind, f.dstat, full=(tab == "devices"), grp=f.grp, dtype=f.dtype)
+        if tab == "devices":
+            V["dev"]["hist"] = DEV.history(db, cfg, f.d_from, f.d_to, st, f.kind, f.dtype)
     if tab == "wifi":
-        V["wifi"] = WIFI.build(db, cfg, user, zone=f.dtype, ssid=f.grp, band=f.kind, site=st)
+        V["wifi"] = WIFI.build(db, cfg, user, zone=f.dtype, ssid=f.grp, band=f.kind, site=st, a=f.d_from, b=f.d_to)
     if tab == "ringkasan" and ok("wifi"):
         V["wifi"] = WIFI.build(db, cfg, user)
     if tab == "noc":

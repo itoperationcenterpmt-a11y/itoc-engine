@@ -450,3 +450,49 @@ class WifiStat(Base):
     tx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     ap_online: Mapped[int] = mapped_column(Integer, default=0)
     ap_total: Mapped[int] = mapped_column(Integer, default=0)
+
+class WifiSession(Base):
+    """Riwayat sesi client WiFi (satu baris per sesi): dasar laporan per zone, client, SSID, dan rentang waktu. Sesi aktif diperbarui tiap sinkron, sesi selesai dilengkapi dari riwayat vSZ."""
+    __tablename__ = "wifi_session"
+    mac: Mapped[str] = mapped_column(String(20), primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_seen: Mapped[datetime | None] = mapped_column(DateTime)
+    ip: Mapped[str | None] = mapped_column(String(64))
+    username: Mapped[str | None] = mapped_column(String(160))
+    hostname: Mapped[str | None] = mapped_column(String(160))
+    device: Mapped[str | None] = mapped_column(String(80))
+    ssid: Mapped[str | None] = mapped_column(String(120))
+    ap_mac: Mapped[str | None] = mapped_column(String(20))
+    ap_name: Mapped[str | None] = mapped_column(String(160))
+    zone: Mapped[str | None] = mapped_column(String(120))
+    loc: Mapped[str | None] = mapped_column(String(120))
+    auth: Mapped[str | None] = mapped_column(String(60))
+    rx_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    tx_bytes: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class ZbxEvent(Base):
+    """Riwayat kejadian down perangkat dari Zabbix (event problem yang cocok dengan pola down): dasar laporan downtime per lokasi, tipe, dan perangkat."""
+    __tablename__ = "zbx_event"
+    eventid: Mapped[str] = mapped_column(String(20), primary_key=True)
+    hostid: Mapped[str] = mapped_column(String(20), index=True)
+    host_name: Mapped[str | None] = mapped_column(String(255))
+    kind: Mapped[str | None] = mapped_column(String(40))
+    code: Mapped[str | None] = mapped_column(String(40))
+    dev_code: Mapped[str | None] = mapped_column(String(20))
+    name: Mapped[str | None] = mapped_column(String(255))
+    start_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class ZbxStat(Base):
+    """Cuplikan per jam jumlah perangkat menurut kategori dan status (untuk tren availability)."""
+    __tablename__ = "zbx_stat"
+    hour: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(40), primary_key=True)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    up: Mapped[int] = mapped_column(Integer, default=0)
+    down: Mapped[int] = mapped_column(Integer, default=0)
+    degraded: Mapped[int] = mapped_column(Integer, default=0)
+    maintenance: Mapped[int] = mapped_column(Integer, default=0)

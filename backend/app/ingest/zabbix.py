@@ -1,6 +1,7 @@
 """Zabbix 7.x lewat JSON-RPC: host group CCTV-* dan OPERASIONAL-* -> status terkini per perangkat (tabel zbx_host).
 Kredensial: API token (Admin -> Integrations, terenkripsi). Nama grup, prefix, dan nama trigger "down" semuanya parameter, bukan kode."""
 import re
+import time
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 import httpx
@@ -8,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from .. import vault
-from ..models import DataSource, DevCode, ZbxHost, ZbxLocMap
+from ..models import DataSource, DevCode, ZbxEvent, ZbxHost, ZbxLocMap, ZbxStat
 from ..store import Config
 
 LABEL = {"CCTV-": "CCTV", "OPERASIONAL-": "OPERASIONAL"}
@@ -88,6 +89,53 @@ def _chunks(seq, n):
         yield seq[i:i + n]
 
 
+def fetch_events(cl, url, token, gids, pats, since_ts, open_ids):
+    """Riwayat kejadian down dari Zabbix sendiri (event.get): kejadian baru sejak since_ts, ditambah kejadian yang masih terbuka di database (untuk mengisi waktu pulih)."""
+    fields = ["eventid", "objectid", "clock", "r_eventid", "name", "severity"]
+    evs = rpc(cl, url, "event.get", {"output": fields, "groupids": gids, "source": 0, "object": 0, "value": 1, "time_from": int(since_ts), "selectHosts": ["hostid"],
+                                     "sortfield": ["eventid"], "sortorder": "ASC", "limit": 50000}, token)
+    for part in _chunks(open_ids, 400):
+        evs += rpc(cl, url, "event.get", {"output": fields, "eventids": part, "source": 0, "object": 0, "selectHosts": ["hostid"]}, token)
+    evs = list({e["eventid"]: e for e in evs if not pats or any(x in e["name"].lower() for x in pats)}.values())
+    rids = sorted({e["r_eventid"] for e in evs if e.get("r_eventid") not in (None, "", "0")})
+    rclock = {}
+    for part in _chunks(rids, 500):
+        for r in rpc(cl, url, "event.get", {"output": ["eventid", "clock"], "eventids": part}, token):
+            rclock[r["eventid"]] = int(r["clock"])
+    return evs, rclock
+
+
+def save_history(db: Session, cfg: Config, src: DataSource, rows: list, evs: list, rclock: dict) -> int:
+    tz, now = cfg.p("tz_offset_hours", 7), cfg.now()
+    loc = lambda ts: datetime.utcfromtimestamp(int(ts)) + timedelta(hours=tz)
+    info = {r["hostid"]: r for r in rows}
+    out = []
+    for e in evs:
+        hid = next((h["hostid"] for h in e.get("hosts", []) if h["hostid"] in info), None)
+        if not hid:
+            continue
+        r = info[hid]
+        rc = rclock.get(e.get("r_eventid"))
+        out.append({"eventid": e["eventid"], "hostid": hid, "host_name": r["name"], "kind": r["kind"], "code": r["code"], "dev_code": r["dev_code"], "name": e["name"][:255],
+                    "start_at": loc(e["clock"]), "end_at": loc(rc) if rc else None})
+    for part in _chunks(out, 1000):
+        ins = insert(ZbxEvent).values(part)
+        db.execute(ins.on_conflict_do_update(index_elements=["eventid"], set_={"end_at": ins.excluded.end_at, "name": ins.excluded.name, "host_name": ins.excluded.host_name,
+                                                                              "kind": ins.excluded.kind, "code": ins.excluded.code, "dev_code": ins.excluded.dev_code}))
+    hour, cnt = now.replace(minute=0, second=0, microsecond=0), {}
+    for r in rows:
+        c = cnt.setdefault(r["kind"] or "-", {"total": 0, "up": 0, "down": 0, "degraded": 0, "maintenance": 0})
+        c["total"] += 1
+        if r["status"] in c:
+            c[r["status"]] += 1
+    if cnt:
+        ins = insert(ZbxStat).values([{"hour": hour, "kind": k, **v} for k, v in cnt.items()])
+        db.execute(ins.on_conflict_do_update(index_elements=["hour", "kind"], set_={k: getattr(ins.excluded, k) for k in ("total", "up", "down", "degraded", "maintenance")}))
+    db.query(ZbxStat).filter(ZbxStat.hour < now - timedelta(days=400)).delete(synchronize_session=False)
+    src.cursor = {**(src.cursor or {}), "ev_from": int(time.time()) - 86400}
+    return len(out)
+
+
 def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     c = src.config or {}
     token = vault.cred(db, "zabbix.token", c.get("token_env", "ZABBIX_TOKEN"))
@@ -111,6 +159,11 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         for part in _chunks(tids, 400):
             for t in rpc(cl, url, "trigger.get", {"output": ["triggerid"], "triggerids": part, "selectHosts": ["hostid"]}, token):
                 trig_host[t["triggerid"]] = {h["hostid"] for h in t.get("hosts", [])}
+        ev_from = int((src.cursor or {}).get("ev_from") or (time.time() - int(cfg.p("dev.history_days", 60)) * 86400))
+        try:
+            evs, rclock = fetch_events(cl, url, token, gids, pats, ev_from, [e for (e,) in db.query(ZbxEvent.eventid).filter(ZbxEvent.end_at.is_(None))])
+        except Exception:                      # riwayat gagal tidak boleh menggagalkan status terkini
+            evs, rclock = None, {}
     by_host: dict[str, list] = {}
     for p in probs:
         if pats and not any(x in p["name"].lower() for x in pats):
@@ -153,4 +206,9 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     ids = [r["hostid"] for r in rows]
     db.query(ZbxHost).filter(~ZbxHost.hostid.in_(ids)).delete(synchronize_session=False) if ids else db.query(ZbxHost).delete()
     down = sum(1 for r in rows if r["status"] == "down")
-    return len(rows), f"{len(rows)} perangkat dari {len(gids)} grup, {down} down"
+    if evs is not None:                        # problem yang sudah berjalan lebih lama dari jendela riwayat tetap dicatat sebagai kejadian terbuka
+        have = {e["eventid"] for e in evs}
+        evs = evs + [{"eventid": p["eventid"], "clock": p["clock"], "name": p["name"], "r_eventid": None, "hosts": [{"hostid": h} for h in trig_host.get(p["objectid"], ())]}
+                     for p in probs if p["eventid"] not in have and str(p.get("suppressed")) == "0" and (not pats or any(x in p["name"].lower() for x in pats))]
+    n_ev = save_history(db, cfg, src, rows, evs, rclock) if evs is not None else None
+    return len(rows), f"{len(rows)} perangkat dari {len(gids)} grup, {down} down" + (f", {n_ev} kejadian riwayat" if n_ev is not None else ", riwayat gagal diambil")

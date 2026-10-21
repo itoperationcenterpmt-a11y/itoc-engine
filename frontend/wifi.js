@@ -40,7 +40,22 @@ function wifiPanels(W) {
     apdown: () => panel("c4", "Access Point Tidak Online", fmt(W.apTotal - W.apOnline) + " dari " + fmt(W.apTotal), tbl(["AP", "Zone", "Status", "Terakhir terlihat"], W.apDown.slice(0, 10).map(x => [x.name || "-", x.zone || "-", x.status || "-", x.since ? dtime(x.since) : "-"]), {empty: "Semua AP online."}))
   };
 }
-function vWifi() {
+/* Riwayat WiFi pada rentang periode filter: usage per hari, zone, SSID, lokasi, AP, perangkat, dan client teratas (dari sesi yang tersimpan). */
+function wifiHist(W) {
+  const H = W.hist, G = 1073741824, days = H.daily.map(x => ({label: dmon(x.date), full: dlong(x.date)}));
+  const u = x => wBytes(x.bytes) + " · " + fmt(x.clients) + " client";
+  const hb = (a, f) => hbars(a.map(x => [x.k, x.bytes, 0, f ? f(x) : u(x)]));
+  const note = H.since && H.since.slice(0, 10) > H.from ? "riwayat tersedia sejak " + dmon(H.since.slice(0, 10)) : "";
+  const kp = `<div class="kpis k6">${kpi("Sesi", fmt(H.sessions), "pada periode" + (note ? ", " + note : ""))}${kpi("Client Unik", fmt(H.clients), "MAC berbeda")}${kpi("Total Usage", wBytes(H.rx + H.tx), "download " + wBytes(H.tx) + " · upload " + wBytes(H.rx))}${kpi("Rata-rata per Client", H.clients ? wBytes((H.rx + H.tx) / H.clients) : "-", "usage per client unik")}</div>`;
+  return `<div class="grid">${panel("c12", "Riwayat WiFi", dmon(H.from) + " – " + dmon(H.to), kp)}` +
+    panel("c8", "Usage per Hari", "total download + upload (GB)", bars(days, [{name: "Usage (GB)", c: "--s1", v: H.daily.map(x => +(x.bytes / G).toFixed(2))}], {dec: 1, unit: " GB", label: "Usage WiFi per hari"})) +
+    panel("c4", "Jam Mulai Sesi", "sebaran sesi menurut jam", bars(hrs24(), [{name: "Sesi", c: "--s2", v: H.hours}], {label: "Sesi per jam"})) +
+    panel("c6", "Client dan Sesi per Hari", "", legend([{name: "Client unik", c: "--s1"}, {name: "Sesi", c: "--s2"}]) + bars(days, [{name: "Client unik", c: "--s1", v: H.daily.map(x => x.clients)}, {name: "Sesi", c: "--s2", v: H.daily.map(x => x.sessions)}], {label: "Client dan sesi per hari"})) +
+    panel("c6", "Perangkat Dominan", "tipe perangkat menurut usage", hb(H.byDevice)) +
+    panel("c4", "Usage per Zone", "10 teratas", hb(H.byZone)) + panel("c4", "Usage per SSID", "10 teratas", hb(H.bySsid)) + panel("c4", "Usage per Lokasi", "10 teratas", hb(H.byLoc)) +
+    panel("c4", "Usage per AP", "10 teratas", hb(H.byAp)) +
+    panel("c8", "Client Teratas Periode", "menurut total usage", tbl(["User / Host", "MAC", "SSID", "Sesi", "Total usage"], H.top.map(x => [x.user || x.host || "-", x.mac, x.ssid || "-", x.sessions, wBytes(x.bytes)]), {r: [3, 4], empty: "Belum ada riwayat sesi pada periode ini."})) + `</div>`;
+}function vWifi() {
   const W = V.wifi, grid = h => `<div class="grid">${h}</div>`;
   if (!W) return grid(`<section class="panel c12">${empty()}</section>`);
   if (!W.configured || !(W.total || W.enabled)) return grid(panel("c12", "WiFi Users", "", `<div class="empty"><b>Belum ada data WiFi</b><span>${W.error ? "Sinkron terakhir gagal: " + esc(W.error) : "Isi alamat dan akun API Ruckus vSZ di Admin → Integrations → Ruckus vSZ, aktifkan, lalu klik Sync now."}</span></div>`));
@@ -56,5 +71,5 @@ function vWifi() {
   const L = W.list;
   return (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
     P.portal() + P.trend() + P.band() + P.ssid() + P.usage() + P.ap() + P.zone() + P.loc() + P.top() + P.apdown() +
-    panel("c12", "Client List", W.total + " client" + (W.total > L.length ? ", menampilkan " + L.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari username, host, MAC, IP, SSID, atau AP" aria-label="Cari client">${wSel("wfSsid", "Semua SSID", L.map(x => x.ssid))}${wSel("wfAp", "Semua AP", L.map(x => x.ap))}${wSel("wfZone", "Semua zone", L.map(x => x.zone))}${wSel("wfBand", "Semua band", L.map(x => x.band))}<span class="sub">${W.canKill ? "Disconnect memutus sesi; Deauth meminta client login ulang" : "Akun Anda hanya bisa melihat"}</span></div><div id="dlist">${tbl(heads, rows, {tall: true, empty: "Tidak ada client aktif."})}</div>`));
+    panel("c12", "Client List", W.total + " client" + (W.total > L.length ? ", menampilkan " + L.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari username, host, MAC, IP, SSID, atau AP" aria-label="Cari client">${wSel("wfSsid", "Semua SSID", L.map(x => x.ssid))}${wSel("wfAp", "Semua AP", L.map(x => x.ap))}${wSel("wfZone", "Semua zone", L.map(x => x.zone))}${wSel("wfBand", "Semua band", L.map(x => x.band))}<span class="sub">${W.canKill ? "Disconnect memutus sesi; Deauth meminta client login ulang" : "Akun Anda hanya bisa melihat"}</span></div><div id="dlist">${tbl(heads, rows, {tall: true, empty: "Tidak ada client aktif."})}</div>`)) + (W.hist ? wifiHist(W) : "");
 }

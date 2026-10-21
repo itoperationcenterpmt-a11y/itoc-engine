@@ -62,6 +62,19 @@ function initDevMaps() {
     new ResizeObserver(() => map.invalidateSize()).observe(el);
   });
 }
+/* Riwayat down pada rentang periode filter (dari kejadian Zabbix yang tersimpan): kejadian, downtime, MTTR, per hari, lokasi, tipe, perangkat, dan masalah dominan. */
+function devHist(H) {
+  const days = H.daily.map(x => ({label: dmon(x.date), full: dlong(x.date)}));
+  const kp = `<div class="kpis k6">${kpi("Kejadian Down", fmt(H.events), "pada periode")}${kpi("Downtime", fmt(Math.round(H.hours)) + " jam", "total semua perangkat")}${kpi("Perangkat Terdampak", fmt(H.hosts), "dari " + fmt(H.devices) + " perangkat")}${kpi("Rata-rata Pulih", H.mttr != null ? fx(H.mttr, 1) + " jam" : "-", "kejadian yang sudah selesai")}${kpi("Availability Periode", H.avail != null ? pc(H.avail, 2) : "-", "1 − downtime ÷ (perangkat × lama periode)")}</div>`;
+  const tb = (a, nm) => tbl([nm, "Kejadian", "Downtime (jam)", "Availability"], a.map(r => [r.k, r.events, fx(r.hours, 1), r.avail != null ? {h: `<span class="${availTone(r.avail)}">${pc(r.avail, 1)}</span>`} : "-"]), {r: [1, 2, 3], empty: "Belum ada riwayat down pada periode ini."});
+  return panel("c12", "Riwayat Down", dmon(H.from) + " – " + dmon(H.to) + (H.since ? " · data sejak " + dmon(H.since.slice(0, 10)) : ""), kp) +
+    panel("c6", "Kejadian Down per Hari", "kejadian yang dimulai pada hari itu", bars(days, [{name: "Kejadian", c: "--crit", v: H.daily.map(x => x.events)}], {label: "Kejadian down per hari"})) +
+    panel("c6", "Downtime per Hari", "jam downtime semua perangkat", bars(days, [{name: "Downtime (jam)", c: "--warn", v: H.daily.map(x => x.hours)}], {dec: 0, unit: " jam", label: "Downtime per hari"})) +
+    panel("c6", "Downtime per Lokasi", "10 teratas", tb(H.byLoc, "Lokasi")) +
+    panel("c6", "Downtime per Tipe Perangkat", "10 teratas", tb(H.byType, "Tipe")) +
+    panel("c6", "Perangkat Paling Sering Down", "menurut total downtime", tbl(["Perangkat", "Kejadian", "Downtime (jam)"], H.byHost.map(r => [r.k, r.events, fx(r.hours, 1)]), {r: [1, 2], empty: "Belum ada riwayat down pada periode ini."})) +
+    panel("c6", "Masalah Dominan", "menurut jumlah kejadian", hbars(H.byProb.map(r => [r.k, r.events, 0, fmt(r.events) + " · " + fx(r.hours, 0) + " jam"])));
+}
 function vDevices() {
   const D = V.dev, grid = h => `<div class="grid">${h}</div>`;
   if (!D) return grid(`<section class="panel c12">${empty()}</section>`);
@@ -84,5 +97,5 @@ function vDevices() {
     panel("c8", "Down by Location", "perangkat down / total", hbars(downByLoc)) +
     panel("c12", "By Device Type", D.byType.length + " tipe", tbl(["Tipe", "Kode", "Perangkat", "Down", "Interface", "Availability", "Status"], D.byType.map(r => [r.k, r.code === "-" ? "-" : r.code, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, r.deg || 0, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}, {h: stBar(r)}]), {r: [2, 3, 4, 5], tall: true, empty: "Belum ada data."})) +
     panel("c12", "Per Location", D.byLoc.length + " lokasi", tbl(["Lokasi", "Perangkat", "Down", "Interface", "Maintenance", "Availability", "Status"], locs, {r: [1, 2, 3, 4, 5], tall: true, empty: "Belum ada data."})) +
-    panel("c12", "Device List", D.listN + " perangkat" + (D.listN > D.list.length ? ", menampilkan " + D.list.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari nama, lokasi, atau masalah" aria-label="Cari perangkat"><span class="sub">Filter lokasi, kategori, dan status di bar filter atas</span></div><div id="dlist">${tbl(["Perangkat", "Tipe", "Lokasi", "Status", "Down sejak", "Lama", "Masalah"], rows, {tall: true, empty: "Tidak ada perangkat untuk filter ini."})}</div>`));
+    panel("c12", "Device List", D.listN + " perangkat" + (D.listN > D.list.length ? ", menampilkan " + D.list.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari nama, lokasi, atau masalah" aria-label="Cari perangkat"><span class="sub">Filter lokasi, kategori, dan status di bar filter atas</span></div><div id="dlist">${tbl(["Perangkat", "Tipe", "Lokasi", "Status", "Down sejak", "Lama", "Masalah"], rows, {tall: true, empty: "Tidak ada perangkat untuk filter ini."})}</div>`)) + (D.hist ? grid(devHist(D.hist)) : "");
 }
