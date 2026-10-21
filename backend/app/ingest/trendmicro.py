@@ -97,3 +97,15 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     cur["last_update"] = ((newest.replace(tzinfo=timezone.utc) if newest else now) - timedelta(minutes=5)).isoformat()
     src.cursor = cur
     return len(rows), f"{len(rows)} alert Workbench baru/berubah"
+
+
+def detect_region(cl: httpx.Client, token: str) -> str | None:
+    """API key Vision One hanya berlaku di region akunnya: bila Base URL salah, jawabannya 401. Coba tiap region dan kembalikan yang menerima key (None bila tidak ada)."""
+    for base in REGIONS.values():
+        try:
+            r = cl.get(base + "/v3.0/healthcheck/connectivity", headers={"Authorization": "Bearer " + token, "Accept": "application/json"}, timeout=8)
+        except httpx.HTTPError:
+            continue
+        if r.status_code == 200:
+            return base
+    return None

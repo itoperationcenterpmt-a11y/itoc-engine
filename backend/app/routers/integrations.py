@@ -141,6 +141,10 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
                     j = trendmicro.get(cl, base + "/v3.0/healthcheck/connectivity", tok)
                     out.append("Koneksi: %s." % (j.get("status") or "OK"))
                 except RuntimeError as e:
+                    if "HTTP 401" in str(e):
+                        good = trendmicro.detect_region(cl, tok)
+                        raise HTTPException(422, ("API key valid di region lain: ubah Base URL menjadi %s lalu Test lagi." % good) if good and good.rstrip("/") != base.rstrip("/")
+                                            else "API key ditolak di semua region: key salah, kedaluwarsa, atau di-disable di Vision One. Buat key baru (Administration > API Keys).")
                     out.append("Healthcheck: %s." % str(e)[:140])
                 now = _dt.now(_tz.utc)
                 items = trendmicro.fetch_alerts(cl, base, tok, now - _td(days=30), now, top=5, max_pages=1)
