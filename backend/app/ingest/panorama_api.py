@@ -97,12 +97,14 @@ def find_report(cl: httpx.Client, base: str, key: str, name: str) -> tuple[list[
             continue
     return found, dgs
 
-def run_dynamic(cl: httpx.Client, base: str, key: str, typ: str, aggs: list[str], vals: list[str], period: str, query: str = "", topn: int = 500, wait_s: int = 300) -> list[dict]:
+def run_dynamic(cl: httpx.Client, base: str, key: str, typ: str, aggs: list[str], vals: list[str], period: str, query: str = "", topn: int = 500, wait_s: int = 300,
+                rng: tuple[str, str] | None = None) -> list[dict]:
     """Dynamic report Panorama: agregat dari semua firewall terkelola, dihitung di Panorama. typ = threat | url | trsum | urlsum | appstat;
     period = last-calendar-day, last-7-days, last-30-days, dan seterusnya; query = filter PAN-OS, mis. ( severity geq high )."""
     h = {"X-PAN-KEY": key}
     members = lambda xs: "".join(f"<member>{a}</member>" for a in xs)
-    cmd = (f"<type><{typ}><aggregate-by>{members(aggs)}</aggregate-by><values>{members(vals)}</values></{typ}></type><period>{period}</period>"
+    when = f"<start-time>{rng[0]}</start-time><end-time>{rng[1]}</end-time>" if rng else f"<period>{period}</period>"      # rentang bebas (YYYY/MM/DD HH:MM:SS), tidak dibatasi 90 hari
+    cmd = (f"<type><{typ}><aggregate-by>{members(aggs)}</aggregate-by><values>{members(vals)}</values></{typ}></type>{when}"
            + (f"<query>{query}</query>" if query else "") + f"<topn>{topn}</topn><topm>10</topm><caption>soc</caption>")
     x = _parse(cl.post(api_url(base), headers=h, data={"type": "report", "reporttype": "dynamic", "reportname": "custom-dynamic-report", "cmd": cmd, "async": "yes"}))
     job = x.findtext(".//job")

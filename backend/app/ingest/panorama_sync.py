@@ -85,12 +85,13 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     cur = dict(src.cursor or {})
     now = cfg.now()
     today, yesterday = now.date(), now.date() - timedelta(days=1)
-    backfill = min(int(c.get("backfill_days", 14)), 90)
-    start = date.fromisoformat(cur["last_day"]) + timedelta(days=1) if cur.get("last_day") else yesterday - timedelta(days=backfill - 1)
+    lower = date.fromisoformat(c["backfill_from"]) if c.get("backfill_from") else yesterday - timedelta(days=int(c.get("backfill_days", 14)) - 1)
     have = {x for (x,) in db.execute(select(SocDay.day).join(SocBatch).where(SocBatch.status != "failed"))}      # hari yang sudah ada (impor CSV) tidak ditimpa
-    pending, d = [], start
+    tried = set(cur.get("tried", []))                                                                          # hari yang sudah dicoba tetapi kosong di Panorama
+    pending, d = [], lower
     while d <= yesterday and len(pending) < int(c.get("max_days_per_run", 4)):
-        pending.append(d)
+        if d not in have and d.isoformat() not in tried:
+            pending.append(d)
         d += timedelta(days=1)
     top_due = not cur.get("top_at") or (now - datetime.fromisoformat(cur["top_at"])).total_seconds() > float(c.get("top_refresh_h", 12)) * 3600
     if not pending and not top_due:
@@ -99,23 +100,17 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     with httpx.Client(timeout=60, verify=c.get("verify_tls", False)) as cl:
         key = PA.keygen(cl, c["base_url"], user, pw)
         for d in pending:
-            if d in have:
-                cur["last_day"] = d.isoformat()
-                continue
-            per = _period_for(d, today)
-            if per is None:
-                cur["last_day"] = d.isoformat()                      # lebih tua dari 90 hari: di luar jangkauan dynamic report
-                continue
             try:
                 reports = {}
+                rng = (d.strftime("%Y/%m/%d 00:00:00"), d.strftime("%Y/%m/%d 23:59:59"))
                 for k, typ, aggs, vals, q, topn, fmt in DAILY:
-                    recs = PA.run_dynamic(cl, c["base_url"], key, typ, aggs, vals, per, _day_query(d), topn)
+                    recs = PA.run_dynamic(cl, c["base_url"], key, typ, aggs, vals, "", "", topn, rng=rng)
                     reports[k] = _numeric(k, [fmt(r, d.strftime("%Y-%m-%d 00:00:00")) for r in recs])
                 b = _model(db, cfg, d, reports, f"Panorama API · {d.isoformat()}", True)
                 if b is not None:
                     n_days += 1
                     n_rows += b.rows_read
-                cur["last_day"] = d.isoformat()
+                tried.add(d.isoformat())
             except (RuntimeError, httpx.HTTPError) as e:
                 notes.append(f"hari {d.isoformat()} gagal: {str(e)[:120]}")
                 break
@@ -137,6 +132,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
                 n_rows += sum(len(v) for v in reports.values())
             except (RuntimeError, httpx.HTTPError) as e:
                 notes.append("laporan Top gagal: " + str(e)[:120])
+    cur["tried"] = sorted(tried)[-800:]
     src.cursor = cur
     if notes and not n_days and not cur.get("top_at"):
         raise RuntimeError("; ".join(notes))
