@@ -14,16 +14,17 @@ def api_url(base: str) -> str:
 
 
 def _parse(r: httpx.Response) -> ET.Element:
-    r.raise_for_status()
+    """PAN-OS menjawab kegagalan (kredensial salah, hak kurang) dengan HTTP 403 dan XML berisi alasan: alasan itu yang ditampilkan."""
     try:
         x = ET.fromstring(r.text)
     except ET.ParseError:
+        r.raise_for_status()
         raise RuntimeError("Jawaban Panorama bukan XML (alamat salah atau bukan Panorama?)")
     if x.get("status") != "success":
         msg = " ".join((e.text or "").strip() for e in x.iter() if e.tag in ("line", "msg") and (e.text or "").strip()) or r.text[:160]
-        raise RuntimeError("Panorama menolak: " + msg[:200])
+        raise RuntimeError(f"Panorama menolak (HTTP {r.status_code}, kode {x.get('code') or '-'}): {msg[:180]}")
+    r.raise_for_status()
     return x
-
 
 def keygen(cl: httpx.Client, base: str, user: str, pw: str) -> str:
     x = _parse(cl.post(api_url(base), data={"type": "keygen", "user": user, "password": pw}))
