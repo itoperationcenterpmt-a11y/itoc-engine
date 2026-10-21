@@ -12,7 +12,7 @@ from . import views as VW
 from .calc import soc as SOC
 from .security import can_see
 
-SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking"), ("soc", "Cyber Security"), ("xdr", "XDR"), ("devices", "Devices"), ("wifi", "WiFi Users")]
+SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)")]
 WEEKLY_AFTER = 31  # rentang harian lebih panjang dari ini diringkas per minggu (sama dengan dashboard Excel)
 _UK = {"type": "Tipe ancaman", "action": "Tindakan", "severity": "Severity"}
 
@@ -176,7 +176,7 @@ def _servicedesk(db, cfg, f, preset="standar"):
 
 def _noc(db, cfg, f, preset="standar"):
     N = VW._net(db, cfg, f.d_from, f.d_to, f.shift, f.site)
-    s = {"key": "noc", "title": "Networking", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    s = {"key": "noc", "title": "Networking (PRTG)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not N or not N.get("links"):
         s["notes"].append("Belum ada data PRTG untuk periode dan filter ini.")
         return s
@@ -227,7 +227,7 @@ def _noc(db, cfg, f, preset="standar"):
 def _soc(db, cfg, f, preset="standar"):
     S = VW._soc(db, cfg, f.d_from, f.d_to)
     R = S["R"]
-    s = {"key": "soc", "title": "Cyber Security", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    s = {"key": "soc", "title": "NDR (Palo Alto)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not R["hasData"]:
         s["notes"].append("Belum ada data SOC yang lolos validasi pada periode ini.")
         return s
@@ -332,7 +332,7 @@ def _wifi(db, cfg, f, preset="standar"):
     from .calc import wifi as WIFI
     W = WIFI.build(db, cfg)
     Hh = WIFI.history(db, cfg, f.d_from, f.d_to, site=f.site)
-    s = {"key": "wifi", "title": "WiFi Users", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    s = {"key": "wifi", "title": "WiFi (Ruckus)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not W["configured"] or not (W["total"] or W["apTotal"]):
         s["notes"].append("Belum ada data WiFi dari Ruckus vSZ." + (" Sinkron terakhir gagal: " + W["error"] if W["error"] else ""))
         return s
@@ -380,7 +380,7 @@ def _xdr(db, cfg, f, preset="standar"):
     """Alert Workbench Trend Micro Vision One pada periode laporan (menurut waktu alert dibuat)."""
     from .calc import xdr as XDR
     X = XDR.build(db, cfg, f.d_from, f.d_to)
-    s = {"key": "xdr", "title": "XDR", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    s = {"key": "xdr", "title": "XDR (Trend Micro)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not X["configured"] or not X["total"]:
         s["notes"].append("Belum ada alert XDR pada periode ini." + (" Sinkron terakhir gagal: " + X["error"] if X["error"] else ""))
         return s
@@ -407,14 +407,20 @@ _BUILD = {"servicedesk": _servicedesk, "noc": _noc, "soc": _soc, "devices": _dev
 # Jenis laporan (bisa diubah di Admin → Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
     "summary": {"label": "Summary", "desc": "Ringkasan manajemen: KPI dan grafik utama semua bidang", "title": "Report ITOC : Summary", "subtitle": "Management Overview", "prefix": "Management", "sections": None, "summary": True},
-    "noc": {"label": "Networking", "desc": "Availability, downtime, link bermasalah, utilisasi", "title": "Report ITOC Network SLA & Traffic ISP", "subtitle": "Evaluasi Availability, Coverage Monitoring, Traffic", "prefix": "Network SLA", "sections": ["noc"]},
-    "soc": {"label": "Cyber Security", "desc": "Event ancaman, severity, tindakan firewall, URL", "title": "Report ITOC SOC Monitoring", "subtitle": "Ringkasan traffic security, threat, web security, dan triage high/critical", "prefix": "SOC", "sections": ["soc"]},
+    "noc": {"label": "PRTG (Link)", "desc": "Availability, downtime, link bermasalah, utilisasi", "title": "Report ITOC Network SLA & Traffic ISP", "subtitle": "Evaluasi Availability, Coverage Monitoring, Traffic", "prefix": "Network SLA", "sections": ["noc"]},
+    "soc": {"label": "NDR (Palo Alto)", "desc": "Event ancaman, severity, tindakan firewall, URL", "title": "Report ITOC SOC Monitoring", "subtitle": "Ringkasan traffic security, threat, web security, dan triage high/critical", "prefix": "SOC", "sections": ["soc"]},
     "servicedesk": {"label": "Ticketing", "desc": "Tiket masuk, SLA, kategori, ranking teknisi, tiket open", "title": "Report ITOC Ticketing Servicedesk", "subtitle": "Ringkasan Performa Ticketing ManageEngine", "prefix": "Ticketing", "sections": ["servicedesk"]},
-    "xdr": {"label": "XDR", "desc": "Alert Trend Micro Vision One: severity, model deteksi, status, backlog", "title": "Report ITOC XDR", "subtitle": "Alert Workbench Trend Micro Vision One", "prefix": "XDR", "sections": ["xdr"]},
+    "xdr": {"label": "XDR (Trend Micro)", "desc": "Alert Trend Micro Vision One: severity, model deteksi, status, backlog", "title": "Report ITOC XDR", "subtitle": "Alert Workbench Trend Micro Vision One", "prefix": "XDR", "sections": ["xdr"]},
     "devices": {"label": "Devices", "desc": "Status perangkat Zabbix: kategori, tipe, lokasi, perangkat down", "title": "Report ITOC Devices", "subtitle": "Status Perangkat dari Zabbix", "prefix": "Devices", "sections": ["devices"]},
-    "wifi": {"label": "WiFi Users", "desc": "Client aktif, Access Point, usage per SSID dan AP (Ruckus vSZ)", "title": "Report ITOC WiFi Users", "subtitle": "Client dan Access Point Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
+    "wifi": {"label": "WiFi (Ruckus)", "desc": "Client aktif, Access Point, usage per SSID dan AP (Ruckus vSZ)", "title": "Report ITOC WiFi Users", "subtitle": "Client dan Access Point Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
+    "network": {"label": "Network (PRTG + WiFi)", "desc": "Ringkasan gabungan link PRTG dan WiFi Ruckus, ditambah rincian keduanya", "title": "Report ITOC Network", "subtitle": "Link PRTG dan WiFi Ruckus", "prefix": "Network", "sections": ["noc", "wifi"]},
+    "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Ringkasan gabungan NDR Palo Alto dan XDR Trend Micro, ditambah rincian keduanya", "title": "Report ITOC Cyber Security", "subtitle": "NDR Palo Alto dan XDR Trend Micro", "prefix": "Cyber", "sections": ["soc", "xdr"]},
     "full": {"label": "Full", "desc": "Summary dan rincian semua bidang dalam satu berkas", "title": "Report ITOC : Summary & Rincian", "subtitle": "Management Overview", "prefix": "", "sections": None},
 }
+
+
+_ORDER = ["summary", "network", "cyber", "servicedesk", "noc", "wifi", "soc", "xdr", "devices", "full"]
+DEFAULT_KINDS = {k: DEFAULT_KINDS[k] for k in _ORDER}
 
 
 def kinds_for(cfg, user):
@@ -465,4 +471,4 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     return {"title": cfg.p("ui.brand_name", "Dashboard"), "kind": spec["key"], "subtitle": spec["title"], "tagline": spec["subtitle"], "prefix": spec.get("prefix", ""),
             "company": cfg.p("report.company", ""), "contact": cfg.p("report.contact", {}), "period": _period(cfg, f.d_from, f.d_to),
             "preset": preset, "filters": filt, "generated": cfg.now().strftime("%d/%m/%Y %H.%M") + " WIB", "by": user.full_name, "sections": body,
-            "kinds": [{"key": k, "label": v["label"], "desc": v["desc"]} for k, v in ks.items()]}
+            "kinds": [{"key": k, "label": v["label"], "desc": v["desc"], "sections": v["allowed"]} for k, v in ks.items()]}

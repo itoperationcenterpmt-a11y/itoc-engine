@@ -1,7 +1,7 @@
 /* IT PMT Dashboard — render, event, Admin (parameter & master data generik), login. */
 "use strict";
 try { if (localStorage.getItem("itoc.rail")) { document.addEventListener("DOMContentLoaded", () => { const a = document.getElementById("app"); if (a) a.classList.add("rail"); const b = document.getElementById("railBtn"); if (b) b.textContent = "›"; }); } } catch (_) {}
-const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, wifi: vWifi, xdr: vXdr, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
+const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, wifi: vWifi, xdr: vXdr, network: vNetwork, cyber: vCyber, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
 const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype"];
@@ -36,7 +36,7 @@ async function downloadReport(kind, btn) {
   } finally { btn.innerHTML = old; btn.disabled = false; }
 }
 /* Tata letak halaman (widget): urutan, ukuran, judul, tampil/sembunyi per role. Admin mengatur lewat tombol Customize; tersimpan di tabel layout. */
-const LAYOUT_PAGES = ["ringkasan", "servicedesk", "noc", "soc", "xdr", "devices", "wifi"], SIZES = [["c3", "S"], ["c4", "M"], ["c6", "L"], ["c8", "XL"], ["c12", "Full"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
+const LAYOUT_PAGES = ["ringkasan", "servicedesk", "network", "noc", "wifi", "cyber", "soc", "xdr", "devices"], SIZES = [["c3", "S"], ["c4", "M"], ["c6", "L"], ["c8", "XL"], ["c12", "Full"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
 const slug = s => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const nearest = c => { const n = +(String(c).slice(1)) || 12; return SIZES.reduce((a, s) => Math.abs(+s[0].slice(1) - n) < Math.abs(+a[0].slice(1) - n) ? s : a)[0]; };
 function layoutRows(page, role) {
@@ -248,7 +248,7 @@ document.addEventListener("click", async e => {
     else if (d.resetUser) { if (!confirm("Reset password " + d.resetUser + "?")) return; const r = await send("/api/admin/users/" + encodeURIComponent(d.resetUser), {reset_password: true}, "PATCH"); refresh({msg: `Password awal ${d.resetUser}: ${r.initial_password} (wajib diganti saat login).`}, true); }
     else if (d.medit) { S.msg = ""; set({medit: d.medit === "x" ? null : d.medit === "new" ? {} : Object.assign({__i: +d.medit}, S.mdata.rows[+d.medit])}, true); }
     else if (d.mdel !== undefined) { if (!confirm("Hapus baris ini?")) return; await api(`/api/admin/master/${S.mkey}/${encodeURIComponent(pkOf(S.medit))}`, {method: "DELETE"}).catch(err => { $("mMsg").textContent = err.message; throw null; }); await reloadConfig(); S.mdata = null; refresh({medit: null}); }
-    else if (d.sync) { b.disabled = true; b.textContent = "Menyinkron…"; await send("/api/ingest/sync/" + d.sync, {}).catch(err => { alert(err.message); }); refresh(); }
+    else if (d.sync) { b.disabled = true; b.textContent = "Menyinkron…"; const r = await send("/api/ingest/sync/" + d.sync, {}).catch(err => { alert(err.message); return null; }); if (r && r.started) alert(r.msg); refresh(); }
     else if (b.id === "fReset") { S.kind = ""; S.dstat = ""; S.grp = ""; S.dtype = ""; S.sf = 0; S.site = CFG.me.site || ""; S.cmp = false; setPreset(CFG.params["ui.default_preset"]); render(true); }
     else if (b.id === "fToggle") { const w = $("fwrap").classList.toggle("open"); b.setAttribute("aria-expanded", w); }
     else if (b.id === "railBtn") { const on = $("app").classList.toggle("rail"); b.textContent = on ? "›" : "‹"; try { localStorage.setItem("itoc.rail", on ? "1" : ""); } catch (_) {} }
@@ -341,7 +341,7 @@ document.addEventListener("pointerover", e => { const el = e.target.closest("[da
 document.addEventListener("pointermove", e => { if (tip.hidden) return; const w = tip.offsetWidth, h = tip.offsetHeight; tip.style.left = Math.min(innerWidth - w - 8, e.clientX + 12) + "px"; tip.style.top = (e.clientY + 14 + h > innerHeight ? e.clientY - h - 10 : e.clientY + 14) + "px"; });
 document.addEventListener("focusin", e => { const el = e.target.closest(".ib"); if (!el) return; const r = el.getBoundingClientRect(); tip.textContent = el.dataset.tip; tip.hidden = false; tip.style.left = Math.min(innerWidth - tip.offsetWidth - 8, r.left) + "px"; tip.style.top = r.bottom + 6 + "px"; });
 document.addEventListener("focusout", () => { tip.hidden = true; });
-setInterval(() => { if (!CFG || $("app").hidden) return; renderDuty(); }, 30000);
+setInterval(() => { if (!CFG || $("app").hidden || document.hidden) return; renderDuty(); }, 1000);
 
 /* ---------- login & boot ---------- */
 function showLogin(msg, change) {

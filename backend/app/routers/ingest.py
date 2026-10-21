@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
 from ..models import User, SyncLog
-from ..security import require_upload, require_admin
+from ..security import require_upload, require_admin, current_user, rate_limit
 from ..store import load_config, audit, bump_data
 from ..ingest import panorama, manageengine, prtg_pdf
 from .. import jobs
@@ -113,8 +113,24 @@ async def tickets_upload(file: UploadFile = File(...), user: User = Depends(requ
     bump_data()
     return {"rows": n, "skipped": P["skipped"], "file": file.filename}
 
-@router.post("/sync/{key}")
-def sync_now(key: str, user: User = Depends(require_admin)):
+SYNC_PERM = {"panorama": "soc", "prtg": "prtg", "manageengine": "tickets"}
+
+
+@router.post("/sync/{key}", dependencies=[Depends(rate_limit("sync", 10, 60))])
+def sync_now(key: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Tarik data sekarang (force). Admin boleh semua sumber; role dengan hak unggah boleh menarik sumbernya (Panorama, PRTG, ManageEngine). Panorama berjalan di latar belakang karena bisa makan beberapa menit."""
+    up = user.role.uploads or []
+    if not (user.role.is_admin or "*" in up or SYNC_PERM.get(key) in up):
+        raise HTTPException(403, "Role ini tidak boleh menarik data sumber ini")
+    if key not in jobs.SYNCERS:
+        raise HTTPException(404, "Sumber tidak dikenal")
+    cfg = load_config(db)
+    audit(db, user.username, f"Tarik data sekarang: {key}", None, cfg.p("tz_offset_hours", 7))
+    db.commit()
+    if key == "panorama":
+        import threading
+        threading.Thread(target=lambda: jobs.run_source("panorama"), daemon=True).start()
+        return {"ok": True, "started": True, "msg": "Penarikan Panorama dimulai di latar belakang. Hasilnya tampil di halaman ini dalam beberapa menit; hari baru dan laporan Top diperbarui bertahap."}
     r = jobs.run_source(key)
     if not r["ok"]:
         raise HTTPException(502, r["msg"])

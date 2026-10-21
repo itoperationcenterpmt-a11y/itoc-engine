@@ -73,7 +73,18 @@ def to_row(a: dict, tz: float) -> dict | None:
     if not a.get("id") or not pdt(a.get("createdDateTime"), tz):
         return None
     ind = [{"type": i.get("type"), "value": str(i.get("value") if not isinstance(i.get("value"), (dict, list)) else i.get("value"))[:200]} for i in (a.get("indicators") or [])[:30] if isinstance(i, dict)]
-    return {"id": str(a["id"])[:80], "incident_id": a.get("incidentId"), "model": (a.get("model") or "")[:300], "model_type": a.get("modelType"), "severity": (a.get("severity") or "").lower(),
+    ents = []
+    for e in ((a.get("impactScope") or {}).get("entities") or [])[:40]:
+        v = e.get("entityValue")
+        ents.append({"type": e.get("entityType"), "name": (v.get("name") if isinstance(v, dict) else v) or "", "ips": (v.get("ips") if isinstance(v, dict) else None) or []})
+    techs, rules = [], []
+    for r in a.get("matchedRules") or []:
+        if r.get("name") and r["name"] not in rules:
+            rules.append(r["name"])
+        for f in r.get("matchedFilters") or []:
+            techs += [t for t in (f.get("mitreTechniqueIds") or []) if t not in techs]
+    return {"description": (a.get("description") or "")[:2000], "investigation_result": a.get("investigationResult"), "entities": ents, "techniques": techs[:40], "rules": rules[:20],
+            "id": str(a["id"])[:80], "incident_id": a.get("incidentId"), "model": (a.get("model") or "")[:300], "model_type": a.get("modelType"), "severity": (a.get("severity") or "").lower(),
             "score": a.get("score"), "status": a.get("status"), "investigation_status": a.get("investigationStatus"), "provider": a.get("alertProvider"),
             "created_at": pdt(a.get("createdDateTime"), tz), "updated_at": pdt(a.get("updatedDateTime"), tz), "owners": a.get("ownerIds") or [], "impact": a.get("impactScope") or {},
             "indicators": ind, "link": (a.get("workbenchLink") or "")[:600]}

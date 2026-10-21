@@ -89,8 +89,18 @@ def build(db, cfg: Config, user=None, zone: str = "", ssid: str = "", band: str 
     portal = [{"mac": r.mac, "ip": r.ip, "user": r.username, "host": r.hostname, "status": "login" if (r.username or str((r.raw or {}).get("authStatus") or "").upper() == "AUTHORIZED") else "pending", "auth": (r.raw or {}).get("authMethod"),
                "ssid": r.ssid, "ap": r.ap_name, "zone": r.zone, "loc": loc(r), "band": _band(r), "rssi": r.rssi, "since": ms(r.started_at), "rx": r.rx_bytes, "tx": r.tx_bytes} for r in rows if is_portal(r)]
     portal.sort(key=lambda x: (x["status"] != "login", x["user"] or "", x["since"] or 0))
+    locs = {}
+    for r in rows:
+        locs.setdefault(loc(r), {"k": loc(r), "clients": 0, "apTotal": 0, "apOnline": 0})["clients"] += 1
+    for ap in aps:
+        x = locs.setdefault(cmap.get((ap.name or "").split("-")[0].strip().lower()) or ap.zone or "-", {"k": "", "clients": 0, "apTotal": 0, "apOnline": 0})
+        x["apTotal"] += 1
+        x["apOnline"] += 1 if isup(ap) else 0
+    for k, x in locs.items():
+        x["k"] = k
+    by_loc_ap = sorted(locs.values(), key=lambda x: (-(x["apTotal"] - x["apOnline"]), -x["clients"]))
     hist = history(db, cfg, a, b, zone, ssid, site) if a and b else None
-    return {"hist": hist, "portal": portal, "portalLogin": sum(1 for x in portal if x["status"] == "login"), "byLoc": _top(rows, loc, 10), "total": len(rows), "users": len({r.username for r in rows if r.username}), "named": sum(1 for r in rows if r.username), "weak": sum(1 for r in rows if r.rssi is not None and r.rssi < weak), "weakAt": weak,
+    return {"byLocAp": by_loc_ap, "hist": hist, "portal": portal, "portalLogin": sum(1 for x in portal if x["status"] == "login"), "byLoc": _top(rows, loc, 10), "total": len(rows), "users": len({r.username for r in rows if r.username}), "named": sum(1 for r in rows if r.username), "weak": sum(1 for r in rows if r.rssi is not None and r.rssi < weak), "weakAt": weak,
             "rx": sum(r.rx_bytes or 0 for r in rows), "tx": sum(r.tx_bytes or 0 for r in rows),
             "apTotal": len(aps), "apOnline": sum(1 for a in aps if isup(a)), "apDown": down[:50],
             "bySsid": _top(rows, lambda r: r.ssid), "bySsidBytes": _top(rows, lambda r: r.ssid, 10, tot), "byAp": sorted(by_ap.values(), key=lambda x: -x["n"])[:10],

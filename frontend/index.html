@@ -454,7 +454,7 @@ body.dragging{user-select:none;cursor:grabbing}
 input[type=password]{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
 footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between}
 .dutychip{display:inline-flex;align-items:center;gap:10px;border-radius:999px;padding:7px 16px;font-size:15px;font-weight:600;color:var(--ink);background:rgba(12,163,12,.12);border:1px solid rgba(12,163,12,.35);line-height:1.3;white-space:nowrap}
-.dutychip small{font-weight:500;font-size:14px;opacity:.8;margin-left:8px;padding-left:10px;border-left:1px solid currentColor}.dutychip i{width:10px;height:10px;border-radius:50%;background:#3fc23f;flex:none;box-shadow:0 0 0 3px rgba(63,194,63,.2)}
+.dutychip small{font-weight:500;font-size:14px;opacity:.85;margin-left:8px;padding-left:10px;border-left:1px solid currentColor;font-variant-numeric:tabular-nums}.dutychip i{width:10px;height:10px;border-radius:50%;background:#3fc23f;flex:none;box-shadow:0 0 0 3px rgba(63,194,63,.2)}
 @media (min-width:901px){
 .wrap{max-width:none;margin:0;padding:16px 22px 44px}
 .fg{flex-wrap:nowrap}.fg select{width:auto;min-width:140px;max-width:230px}
@@ -462,6 +462,29 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
 #duty{display:none}
 }
 @media (max-width:900px){.dutychip{display:none}}
+.rowlbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:14px 2px 6px}
+#subnav .subtabs{margin:0 0 12px}
+.rbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px 32px;margin-bottom:14px}
+.rgroup{display:flex;flex-direction:column;gap:6px;min-width:0}
+.rgroup .chips,.rgroup .rdl{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0}
+.rgroup .chip{white-space:nowrap}
+.rgroup .rdl .btn{min-width:112px;justify-content:center}
+.dutychip{position:relative;overflow:hidden}
+.dutychip::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.22) 50%,transparent 70%);transform:translateX(-120%);animation:dutysheen 5.5s ease-in-out infinite;pointer-events:none}
+.dutychip i{animation:dutypulse 1.8s ease-out infinite}
+.dutychip .clk{font-variant-numeric:tabular-nums;font-weight:700;letter-spacing:.02em}
+.dutychip .clk b{display:inline-block;animation:dutyblink 1s steps(1) infinite;font-weight:700;padding:0 1px}
+@keyframes dutypulse{0%{box-shadow:0 0 0 0 rgba(63,194,63,.65)}70%{box-shadow:0 0 0 9px rgba(63,194,63,0)}100%{box-shadow:0 0 0 0 rgba(63,194,63,0)}}
+@keyframes dutysheen{0%,60%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+@keyframes dutyblink{0%,49%{opacity:1}50%,100%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.dutychip::after,.dutychip i,.dutychip .clk b{animation:none}}
+.stiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.stile{display:flex;flex-direction:column;gap:3px;text-align:left;background:var(--sunken);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);cursor:pointer;font:inherit;transition:transform .15s,border-color .15s}
+.stile:hover{transform:translateY(-1px)}
+.stile .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.stile b{font-size:16px;font-weight:700}
+.stile.good{border-left-color:var(--good)}.stile.warn{border-left-color:var(--warn)}.stile.crit{border-left-color:var(--crit)}
+.stile.crit b{color:var(--crit)}.stile.warn b{color:var(--warn)}
 </style>
 </head>
 <body>
@@ -483,6 +506,7 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
   </div>
   <div class="wrap">
     <div class="pagehead"><h2 id="ptitle"></h2><span class="sub" id="psub" hidden></span><span id="dutyH" class="dutychip"></span></div>
+    <div id="subnav"></div>
     <div id="laybar"></div>
     <div class="fwrap" id="fwrap">
       <button class="fhead" id="fToggle" type="button" aria-expanded="false"><b><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>Filter</b><span class="sub" id="fSum"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
@@ -513,6 +537,7 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
 <script src="devices.js"></script>
 <script src="wifi.js"></script>
 <script src="xdr.js"></script>
+<script src="groups.js"></script>
 <script src="widgets.js"></script>
 <script src="main.js"></script>
 </body>

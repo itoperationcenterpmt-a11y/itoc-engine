@@ -180,6 +180,8 @@ def save_sessions(db: Session, cfg: Config, rows: dict, aps: dict, hist_raw: lis
         done.append({"mac": mac, "started_at": st, "ended_at": en or st, "last_seen": en, "ip": pick(d, "ipAddress"), "username": None, "hostname": pick(d, "hostname"),
                      "device": pick(d, "modelName"), "ssid": pick(d, "ssid"), "ap_mac": (pick(d, "apMac") or "").upper() or None, "ap_name": ap.get("name"), "zone": ap.get("zone"),
                      "loc": loc_of(ap.get("name"), ap.get("zone"), cmap), "auth": None, "rx_bytes": _int(pick(d, "rxBytes")), "tx_bytes": _int(pick(d, "txBytes"))})
+    done = list({(r["mac"], r["started_at"]): r for r in done}.values())       # satu perintah upsert tidak boleh memuat kunci yang sama dua kali
+    act = list({(r["mac"], r["started_at"]): r for r in act}.values())
     keep = lambda ins, cols: {c: func.coalesce(getattr(ins.excluded, c), getattr(WifiSession, c)) for c in cols}
     for part in (done[i:i + 1000] for i in range(0, len(done), 1000)):
         ins = insert(WifiSession).values(part)

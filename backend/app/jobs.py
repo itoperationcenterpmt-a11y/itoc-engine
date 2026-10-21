@@ -1,6 +1,7 @@
 """Penjadwal sinkron. Sumber, mode (api/impor), dan interval dibaca dari tabel data_source;
 perubahan di Admin terbaca ulang tiap 5 menit. Advisory lock PostgreSQL mencegah dua worker sinkron bersamaan."""
 import logging
+import re
 import time
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import text
@@ -44,16 +45,41 @@ def run_source(key: str) -> dict:
 
 
 def _refresh():
+    """Jadwal dari data_source: config.schedule (daftar "HH:MM" waktu lokal, mis. ["00:00", "12:00"]) memakai jam tetap; selain itu interval_min."""
     with session_scope() as db:
-        wanted = {s.key: s.interval_min for s in db.query(DataSource).filter_by(enabled=True, mode="api") if s.key in SYNCERS}
+        tz = float(load_config(db).p("tz_offset_hours", 7))
+        wanted = {}
+        for s in db.query(DataSource).filter_by(enabled=True, mode="api"):
+            if s.key not in SYNCERS:
+                continue
+            times = [str(t) for t in ((s.config or {}).get("schedule") or []) if re.fullmatch(r"\d{1,2}:\d{2}", str(t))]
+            if times:
+                for t in times:
+                    h, m = (int(x) for x in t.split(":"))
+                    wanted[f"sync:{s.key}@{t}"] = ("cron", (int((h - tz) % 24), m), s.key)
+            else:
+                wanted[f"sync:{s.key}"] = ("int", s.interval_min, s.key)
     for job in _sched.get_jobs():
-        if job.id.startswith("sync:") and job.id[5:] not in wanted:
+        if job.id.startswith("sync:") and job.id not in wanted:
             job.remove()
-    for key, every in wanted.items():
-        job = _sched.get_job("sync:" + key)
-        if job is None or job.trigger.interval.total_seconds() != every * 60:
-            _sched.add_job(run_source, "interval", minutes=every, args=[key], id="sync:" + key, replace_existing=True, max_instances=1, coalesce=True)
+    for jid, (kind, spec, key) in wanted.items():
+        job = _sched.get_job(jid)
+        if kind == "int":
+            if job is None or job.trigger.__class__.__name__ != "IntervalTrigger" or job.trigger.interval.total_seconds() != spec * 60:
+                _sched.add_job(run_source, "interval", minutes=spec, args=[key], id=jid, replace_existing=True, max_instances=1, coalesce=True)
+        elif job is None or job.name != str(spec):
+            _sched.add_job(run_source, "cron", hour=spec[0], minute=spec[1], args=[key], id=jid, name=str(spec), replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=3600)
 
+
+def _catch_up():
+    """Sumber berjadwal jam tetap yang terlewat (server mati saat jamnya) ditarik sekali begitu server hidup lagi."""
+    from datetime import datetime, timedelta
+    with session_scope() as db:
+        cfg = load_config(db)
+        late = [s.key for s in db.query(DataSource).filter_by(enabled=True, mode="api")
+                if s.key in SYNCERS and (s.config or {}).get("schedule") and (s.last_ok_at is None or cfg.now() - s.last_ok_at > timedelta(hours=12, minutes=30))]
+    for key in late:
+        _sched.add_job(run_source, args=[key], id="catchup:" + key, replace_existing=True)
 
 def start():
     global _sched
@@ -62,6 +88,7 @@ def start():
     _sched.start()
     try:
         _refresh()
+        _catch_up()
     except Exception:
         log.exception("refresh jadwal")
 

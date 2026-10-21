@@ -72,21 +72,29 @@ const ICO = {
 };
 const icon = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICO[(MODS[k] || {}).icon] || '<circle cx="12" cy="12" r="4"/>'}</svg>`;const topOf = k => { const p = (MODS[k] || {}).parent; return p && MODS[p] ? p : k; };
 /* Sub-menu: halaman induk dan anak-anaknya (mis. Report + Handover) sebagai tab di dalam halaman */
+const SUBSUM = {network: "Summary", cyber: "Summary"};
 function subnav(parent) {
   const items = TABS.filter(t => t[0] === parent || (MODS[t[0]] || {}).parent === parent);
-  return items.length < 2 ? "" : `<div class="subtabs">${items.map(([k, l]) => `<button type="button" data-tab="${k}" aria-selected="${k === S.tab}">${esc(l)}</button>`).join("")}</div>`;
+  return items.length < 2 ? "" : `<div class="subtabs">${items.map(([k, l]) => `<button type="button" data-tab="${k}" aria-selected="${k === S.tab}">${esc(k === parent && SUBSUM[parent] ? SUBSUM[parent] : l)}</button>`).join("")}</div>`;
 }
 /* Jam shift berjalan: dipanggil saat render dan tiap 30 detik, supaya tidak membeku. */
 function renderDuty() {
-  const n = nowShift(), tm = teamOn(n.date, n.shift), h = `<i></i><span>On duty: Team ${tm} · ${SN[n.shift]}<small>${n.clock} WIB</small></span>`;
-  ["duty", "dutyH"].forEach(id => { const e = $(id); if (e) e.innerHTML = h; }); $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]}`;
-}
-function renderShell() {
+  const n = nowShift(), tm = teamOn(n.date, n.shift), d = new Date(nowMs()), hh = pad(d.getUTCHours()), mm = pad(d.getUTCMinutes()), ss = pad(d.getUTCSeconds());
+  ["duty", "dutyH"].forEach(id => {
+    const e = $(id); if (!e) return;
+    if (!e.querySelector(".clk")) e.innerHTML = `<i></i><span><span class="dtxt"></span><small class="clk"><span class="th"></span><b>:</b><span class="tm"></span><b>:</b><span class="ts"></span> WIB</small></span>`;   // struktur dibuat sekali agar animasi tidak mengulang tiap detik
+    e.querySelector(".dtxt").textContent = `On duty: Team ${tm} · ${SN[n.shift]}`;
+    e.querySelector(".th").textContent = hh; e.querySelector(".tm").textContent = mm; e.querySelector(".ts").textContent = ss;
+  });
+  $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]} · ${hh}.${mm}`;
+}function renderShell() {
   const NAVT = TABS.filter(t => topOf(t[0]) === t[0]), curTop = topOf(S.tab);
   $("tabs").innerHTML = NAVT.map(([k, l, bd]) => `<button role="tab" data-tab="${k}" title="${esc(l)}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></button>`).join("");
   $("sheetGrid").innerHTML = NAVT.map(([k, l, bd]) => `<button type="button" data-tab="${k}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></button>`).join("");
   $("moreBtn").classList.toggle("on", NAVT.findIndex(t => t[0] === curTop) > 3);
-  const cur = TABS.find(t => t[0] === S.tab); $("ptitle").textContent = cur ? cur[1] : "";
+  const cur = TABS.find(t => t[0] === S.tab), par = (MODS[S.tab] || {}).parent, grp = SUBSUM[S.tab] ? S.tab : (SUBSUM[par] ? par : "");
+  $("ptitle").textContent = !cur ? "" : grp ? MODS[grp].label + " · " + (S.tab === grp ? SUBSUM[grp] : cur[1]) : cur[1];
+  $("subnav").innerHTML = grp ? subnav(grp) : "";
   $("psub").textContent = APPLY[S.tab] && APPLY[S.tab].p ? rangeTxt() : "";
   $("fPreset").innerHTML = PRESETS.map(([k, l]) => `<button type="button" data-p="${k}" aria-pressed="${S.preset === k}">${l}</button>`).join("");
   $("fShift").innerHTML = SN.map((l, i) => `<button type="button" data-s="${i}" aria-pressed="${S.sf === i}" ${i ? `title="${shiftHours(i)}"` : ""}>${l}</button>`).join("");
@@ -148,7 +156,19 @@ function vRingkasan() {
   const careP = cg ? panel("c4", esc(cg.label), esc(cg.start + "–" + cg.end), `<div class="carenum">${ct.phone ? `<span class="lbl">Layanan ${esc(cg.label)}</span><b class="num">${esc(ct.phone)}</b>` : ""}${ct.email ? `<span class="sub">${esc(ct.email)}</span>` : ""}</div>${care.length ? `<ul class="plist">${care.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc(p.job || "")}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`).join("")}</ul>` : ""}`) : "";
   const lead = CFG.people.filter(p => p.unit === "ITOC" && !p.team_code), leadP = lead.length ? panel("c4", "Escalation", "Supervisor & Lead", `<ul class="plist">${lead.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc((p.job || "").replace(/^ITOC /, ""))}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`).join("")}</ul>`) : "";
   const dom = (title, tab, src, body) => `<section class="panel c4 dom"><header><h2>${title}</h2>${src}</header><div class="mini">${body}</div>${go(tab)}</section>`;
+  const wg = k => { const w = widgetFind(k); return w && widgetOk(w) ? w.html() : ""; };
+  const xCrit = hasX ? (Xd.bySev.find(x => x.k === "critical") || {n: 0}).n : 0, apOff = hasW ? Wf.apTotal - Wf.apOnline : 0, hiCrit = hoOpen.filter(h => prTone(h.prio) === "crit").length;
+  const tile = (tab, name, tone, head, sub) => `<button type="button" class="stile ${tone}" data-go="${tab}"><span class="k">${esc(name)}</span><b>${head}</b><span class="sub">${sub}</span></button>`;
+  const tiles = [
+    hasT ? tile("servicedesk", "Ticketing", openOld.length ? "crit" : "good", openOld.length ? openOld.length + " tiket open lama" : "Terkendali", fmt(T.n) + " tiket · " + fmt(T.open) + " open · SLA " + pc(T.slaPct)) : "",
+    hasN || hasW ? tile("network", "Network", badLinks.length ? "crit" : (N && N.nodata) || apOff ? "warn" : "good", badLinks.length ? badLinks.length + " link di bawah target" : apOff ? apOff + " AP offline" : "Stabil", (N ? "Availability " + pc(N.avail, 2) : "") + (N && hasW ? " · " : "") + (hasW ? fmt(Wf.total) + " client WiFi" : "")) : "",
+    hasS || hasX ? tile("cyber", "Cyber Security", xCrit ? "crit" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "warn" : "good", xCrit ? xCrit + " alert XDR critical" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "Perlu tindak lanjut" : "Aman", (R ? fmt(R.total) + " event NDR" : "") + (R && hasX ? " · " : "") + (hasX ? fmt(Xd.total) + " alert XDR" : "")) : "",
+    hasD ? tile("devices", "Devices", D.all.down ? "warn" : "good", D.all.down ? fmt(D.all.down) + " perangkat down" : "Semua online", "Availability " + (D.all.avail != null ? pc(D.all.avail, 1) : "-") + " · " + fmt(D.all.total) + " perangkat") : "",
+    hasH ? tile("serahterima", "Handover", hiCrit ? "crit" : hoOpen.length ? "warn" : "good", hoOpen.length ? hoOpen.length + " handover open" : "Tidak ada", hiCrit ? hiCrit + " prioritas tinggi" : "semua terkendali") : ""
+  ].filter(Boolean);
+  const tilesP = tiles.length ? panel("c12", "Status Hari Ini", ctxTxt(), `<div class="stiles">${tiles.join("")}</div>`) : "";
   return `<div class="grid">
+  ${tilesP}
   ${!hasT ? "" : dom("Ticketing", "servicedesk", ``, kpi("Tickets In", fmt(T.n), fx(T.perDay, 1) + "/hari", {tip: RUMUS.tkIn, dl: Tp ? delta(T.n, Tp.n) : ""}) + kpi("Close", pc(T.doneRate), fmt(T.open) + " open", {tip: RUMUS.tkDone, dl: Tp ? delta(T.doneRate, Tp.doneRate, {up: true, pct: 1}) : ""}) + kpi("Within SLA Target", pc(T.slaPct), fmt(T.slaOut) + " melewati", {tip: RUMUS.tkSla, dl: Tp ? delta(T.slaPct, Tp.slaPct, {up: true, pct: 1}) : "", cls: T.slaPct != null && T.slaPct < CFG.params["sd.sla_warn"] ? "warnv" : ""}) + kpi("Median Duration", fx(T.medMin, 0) + " mnt", "P90 " + fx(T.p90, 1) + " jam", {tip: RUMUS.tkMed, dl: Tp ? delta(T.medMin, Tp.medMin, {up: false}) : ""}))}
   ${!hasN ? "" : dom("Networking", "noc", ``, N ? kpi("Availability", pc(N.avail, 2), "target " + pc(PAR.target, 1), {tip: RUMUS.av, dl: Np ? delta(N.avail, Np.avail, {up: true, pct: 1}) : "", cls: N.avail < PAR.target ? "warnv" : ""}) + kpi("Links Meeting SLA", N.ok + "/" + (N.ok + N.bad), N.bad + " tidak, " + N.nodata + " data kurang", {tip: RUMUS.link}) + kpi("Total Downtime", fx(N.downH, 1) + " jam", N.events + " kejadian", {tip: RUMUS.down, dl: Np ? delta(N.downH, Np.downH, {up: false}) : ""}) + kpi("High Utilization", fmt(N.utilHigh), "link puncak ≥ " + pc(PAR.utilPeak, 0), {tip: RUMUS.util}) : empty())}
   ${!hasD ? "" : dom("Devices", "devices", ``, kpi("Devices", fmt(D.all.total), "CCTV dan Gate System") + kpi("Availability Now", D.all.avail != null ? pc(D.all.avail, 1) : "-", "online ÷ (online + down)", {cls: D.all.avail != null && D.all.avail < 0.95 ? "warnv" : ""}) + kpi("Down", fmt(D.all.down), fmt(D.chronic) + " lebih dari 30 hari", {cls: D.all.down ? "warnv" : ""}) + kpi("Interface Issue", fmt(D.all.deg || 0), "ping normal, SNMP tidak tersedia"))}
@@ -161,7 +181,14 @@ function vRingkasan() {
   ${careP}
   ${leadP}
   ${!hasH ? "" : panel("c4", "Handover open", hoOpen.length + " item", hoList(hoOpen.slice(0, 3), true) + go("serahterima", "All handover"))}
-  ${N ? panel("c12", "Link Downtime per Day", "Jumlah menit downtime semua link dalam filter", bars(dayB(N.daily), [{name: "Downtime (menit)", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " mnt", label: "Daily Downtime", w: 1200})) : ""}
+  ${N ? panel("c8", "Link Downtime per Day", "Jumlah menit downtime semua link dalam filter", bars(dayB(N.daily), [{name: "Downtime (menit)", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " mnt", label: "Daily Downtime"})) : ""}
+  ${N ? panel("c4", "Top 5 Links by Downtime", "Availability = Σ Up ÷ Σ (Up + Down)", tbl(["Link", "Availability", "Jam"], N.rank.slice(0, 5).map(s => [s.link, pc(s.av, 2), fx(s.down / 3600, 1)]), {r: [1, 2], empty: "Belum ada data."})) : ""}
+  ${hasW ? wifiPanels(Wf).trend() + wifiPanels(Wf).apdown() : ""}
+  ${R && R.hasData ? panel("c8", "NDR · Critical and High per Day", "Event Palo Alto", legend([{name: "Critical", c: "--crit"}, {name: "High", c: "--serious"}]) + bars(dayB(R.daily), [{name: "Critical", c: "--crit", v: R.daily.map(x => x.critical)}, {name: "High", c: "--serious", v: R.daily.map(x => x.high)}], {stack: true, label: "Critical dan high"})) : ""}
+  ${R && R.hasData ? panel("c4", "NDR · Severity", "", tbl(["Severity", "Event", "Diblokir"], R.sev.map(x => [x.k, x.n, pc(x.blkPct, 0)]), {r: [1, 2]})) : ""}
+  ${hasX ? xdrPanels(Xd).daily() + xdrPanels(Xd).sev() + xdrPanels(Xd).hosts() + xdrPanels(Xd).techniques() : ""}
+  ${wg("dev-category")}${wg("dev-location")}${wg("dev-down")}
+  ${wg("tk-open")}${wg("tk-tech")}
   </div>`;
 }
 function onDuty(n) {
@@ -245,7 +272,7 @@ function vSoc() {
   const UK = {type: ["Tipe ancaman", "soc.threat_types"], action: ["Tindakan", "soc.actions"], severity: ["Severity", "soc.severities"]};
   const unkL = Object.entries(R.unknown || {}).map(([k, rows]) => `<li class="warn"><span><b>${UK[k][0]} baru:</b> ${rows.map(([n, c]) => `${esc(n)} (${fmt(c)})`).join(", ")} · tambahkan ke <span class="num">${UK[k][1]}</span> di Admin → Parameter</span></li>`).join("");
   const unkP = unkL ? panel("c12", "New Values Outside Parameter List", "", `<ul class="att">${unkL}</ul>`) : "";
-  const val = panel("c12", "SOC Data Validation", ctxTxt(APPLY.soc), `<div class="valgrid"><div>${covStrip(chk)}</div><ul class="checks">${checks.map(c => `<li>${pill(c[0], "")}<div><b>${c[1]}</b>${c[2] ? `<span>${c[2]}</span>` : ""}</div></li>`).join("")}</ul></div>`);
+  const val = panel("c12", "SOC Data Validation", ctxTxt(APPLY.soc), `<div class="valgrid"><div>${covStrip(chk)}</div><ul class="checks">${checks.map(c => `<li>${pill(c[0], "")}<div><b>${c[1]}</b>${c[2] ? `<span>${c[2]}</span>` : ""}</div></li>`).join("")}</ul></div>`, canUp("soc") ? `<span class="acts"><span class="sub">Otomatis 00.00 dan 12.00 WIB</span><button class="btn ghost" data-sync="panorama">Tarik dari Panorama sekarang</button></span>` : `<span class="sub">Otomatis 00.00 dan 12.00 WIB</span>`);
   if (!okD.length) return head + `<div class="grid">${val}<section class="panel c12">${empty("Belum ada hari SOC yang lolos validasi.")}</section></div>`;
   const B = dayB(R.daily), ch = [{name: "Critical", c: "--crit", v: R.daily.map(x => x.critical)}, {name: "High", c: "--serious", v: R.daily.map(x => x.high)}], ml = [{name: "Medium", c: "--warn", v: R.daily.map(x => x.medium)}, {name: "Low", c: "--low", v: R.daily.map(x => x.low)}, {name: "Informational", c: "--ss", v: R.daily.map(x => x.informational)}];
   const sd = {type: ["Tipe ancaman", R.type], action: ["Tindakan firewall", R.action], cat: ["Kategori ancaman", R.cat], dir: ["Arah ancaman", R.dir]}, cur = sd[S.sdim];
@@ -339,7 +366,7 @@ function vDataBody() {
     <div class="legend">${[["ok", "Lengkap"], ["dup", "Lengkap dengan catatan"], ["bad", "Gagal / kurang"], ["miss", "Tidak ada"], ["wait", "Belum waktunya"]].map(([k, l]) => `<span><b class="c ${k}"></b>${l}</span>`).join("")}</div>`;
   const bl = (V.batches || []).slice().reverse().map(b => [b.file, dmon(b.from) + " – " + dmon(b.to), b.by, dtime(b.at), b.rows, b.skipped, {h: b.issues.some(i => i.k === "crit") ? pill("crit", "Gagal, tidak dipakai") : b.issues.length ? pill("warn", "Dipakai, ada catatan") : pill("good", "Valid")}, {h: b.issues.map(i => `<div class="sub">${esc(i.t)}</div>`).join("") || "–"}]);
   return `<div class="grid">${panel("c12", "Data Completeness per Day", ctxTxt(APPLY.kelengkapan), grid)}
-  ${panel("c12", "Raw Data Upload", "", upCards())}  ${panel("c12", "Sync and Upload Log", CFG.me.is_admin ? `<span class="acts"><button class="btn ghost" data-sync="manageengine">Sync ManageEngine</button><button class="btn ghost" data-sync="prtg">Sync PRTG</button></span>` : "Terbaru di atas", tbl(["Waktu", "Sumber", "Status", "Baris", "Keterangan"], (V.sync_log || []).slice(0, 12).map(x => [dtime(x.at), x.src, {h: x.ok ? pill("good", "OK") : pill("crit", "Gagal")}, x.rows, x.msg]), {tall: true}))}
+  ${panel("c12", "Raw Data Upload", "", upCards())}  ${panel("c12", "Sync and Upload Log", (canUp("tickets") || canUp("prtg") || canUp("soc")) ? `<span class="acts">${canUp("tickets") ? `<button class="btn ghost" data-sync="manageengine">Sync ManageEngine</button>` : ""}${canUp("prtg") ? `<button class="btn ghost" data-sync="prtg">Sync PRTG</button>` : ""}${canUp("soc") ? `<button class="btn ghost" data-sync="panorama">Tarik Panorama sekarang</button>` : ""}</span>` : "Terbaru di atas", tbl(["Waktu", "Sumber", "Status", "Baris", "Keterangan"], (V.sync_log || []).slice(0, 12).map(x => [dtime(x.at), x.src, {h: x.ok ? pill("good", "OK") : pill("crit", "Gagal")}, x.rows, x.msg]), {tall: true}))}
   ${panel("c12", "SOC Upload History", "", tbl(["File", "Periode", "Diunggah oleh", "Waktu", "Baris terbaca", "Dilewati", "Status", "Catatan"], bl))}</div>`;
 }
 
@@ -349,13 +376,13 @@ function vReport() {
   const rp = V.report || {sections: [], kinds: []}, kinds = rp.kinds || [], nav = subnav("report");
   if (!kinds.length) return nav + `<div class="grid"><section class="panel c12">${empty("Tidak ada laporan yang boleh diakses role ini.")}</section></div>`;
   if (!kinds.some(k => k.key === S.rkind)) S.rkind = kinds[0].key;
-  const kind = S.rkind, shown = rp.sections.filter(s => kind === "full" || (kind === "summary" ? s.key === "ringkasan" : s.key === kind));
+  const kind = S.rkind, kd = kinds.find(k => k.key === kind) || {}, secs = kd.sections || [kind], shown = rp.sections.filter(s => kind === "full" || (kind === "summary" ? s.key === "ringkasan" : secs.includes(s.key) || (s.key === "ringkasan" && secs.length > 1)));
   const chips = `<div class="chips">${kinds.map(k => `<button type="button" class="chip" data-rkind="${esc(k.key)}" aria-pressed="${k.key === kind}" title="${esc(k.desc)}">${esc(k.label)}</button>`).join("")}</div>`;
   const pre = `<div class="chips sm">${[["ringkas", "Compact"], ["standar", "Standard"], ["lengkap", "Full"]].map(([k, l]) => `<button type="button" class="chip" data-rpreset="${k}" aria-pressed="${k === S.rpreset}">${l}</button>`).join("")}</div>`;
   const dl = `<div class="rdl">${[["xlsx", "Excel"], ["pdf", "PDF"], ["pptx", "PowerPoint"]].map(([k, l]) => `<button type="button" class="btn" data-rep="${k}">${l}</button>`).join("")}</div>`;
   const kp = shown.flatMap(s => s.kpis).slice(0, 12), nc = shown.reduce((a, s) => a + s.charts.length, 0), nt = shown.reduce((a, s) => a + s.tables.length, 0);
   const prev = `<div class="rkpi">${kp.map(k => `<div class="kpi"><span class="lbl">${esc(k.label)}</span><span class="v">${fk(k.value, k.kind)}</span><span class="d">${esc(k.sub || "")}</span></div>`).join("")}</div><div class="sub">${nc} grafik · ${nt} tabel</div>`;
-  return nav + `<div class="grid">${panel("c12", "Report", ctxTxt(), `<div class="rtop">${chips}${pre}</div><div class="rtop">${dl}</div>${prev}`)}</div>`;
+  return nav + `<div class="grid">${panel("c12", "Report", ctxTxt(), `<div class="rbar"><div class="rgroup"><span class="lbl">Jenis laporan</span>${chips}</div><div class="rgroup"><span class="lbl">Ukuran</span>${pre}</div><div class="rgroup"><span class="lbl">Unduh</span>${dl}</div></div>${prev}`)}</div>`;
 }
 /* ---------- Admin ---------- */
 function vAdmin() {

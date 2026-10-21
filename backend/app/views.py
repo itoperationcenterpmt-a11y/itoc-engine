@@ -116,10 +116,10 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
     if tab in ("ringkasan", "servicedesk") and ok("servicedesk"):
         V["tk"] = _tk(db, cfg, a, b, sh, st)
         V["tk_prev"] = _tk(db, cfg, pa, pb, sh, st) if f.cmp else None
-    if tab in ("ringkasan", "noc") and ok("noc"):
+    if tab in ("ringkasan", "noc", "network") and ok("noc"):
         V["net"] = _net(db, cfg, a, b, sh, st)
         V["net_prev"] = _net(db, cfg, pa, pb, sh, st) if f.cmp else None
-    if tab in ("ringkasan", "soc") and ok("soc"):
+    if tab in ("ringkasan", "soc", "cyber") and ok("soc"):
         S = _soc(db, cfg, a, b)
         V["soc"], V["soc_check"] = S["R"], S["chk"]
         V["soc_prev"] = _soc(db, cfg, pa, pb)["R"] if f.cmp else None
@@ -135,11 +135,11 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
         V["dev"] = DEV.build(db, cfg, st, f.kind, f.dstat, full=(tab == "devices"), grp=f.grp, dtype=f.dtype)
         if tab == "devices":
             V["dev"]["hist"] = DEV.history(db, cfg, f.d_from, f.d_to, st, f.kind, f.dtype)
-    if tab == "xdr" or (tab == "ringkasan" and ok("xdr")):
+    if tab == "xdr" or (tab in ("ringkasan", "cyber") and ok("xdr")):
         V["xdr"] = XDR.build(db, cfg, a, b, f.kind if tab == "xdr" and f.kind in XDR.SEV else "")
     if tab == "wifi":
         V["wifi"] = WIFI.build(db, cfg, user, zone=f.dtype, ssid=f.grp, band=f.kind, site=st, a=f.d_from, b=f.d_to)
-    if tab == "ringkasan" and ok("wifi"):
+    if tab in ("ringkasan", "network") and ok("wifi"):
         V["wifi"] = WIFI.build(db, cfg, user)
     if tab == "noc":
         nb = _net_base(db, cfg, a, b, sh, st)
