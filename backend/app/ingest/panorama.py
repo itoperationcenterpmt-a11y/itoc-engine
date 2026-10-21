@@ -203,6 +203,26 @@ def _build(by, cfg, xc, internal, zone):
             "read": read, "skipped": skipped, "top_present": present}
 
 
+def _compare_api(db: Session, P: dict, tol: float = 0.03) -> list[dict]:
+    """Validasi: hari yang sudah diisi dari Panorama API dibandingkan dengan CSV manual (event ancaman, event URL, volume). Hanya selisih di atas toleransi yang dicatat."""
+    keys = [date.fromisoformat(k) for k in P["days"]]
+    if not keys:
+        return []
+    rows = db.execute(select(SocDay, SocBatch.file_name).join(SocBatch).where(SocBatch.status != "failed", SocBatch.file_name.like("Panorama API%"), SocDay.day.in_(keys))).all()
+    out, bad = [], 0
+    for sd, _ in rows:
+        n = P["days"][sd.day.isoformat()]
+        pairs = [("ancaman", sum((sd.threats or {}).values()), sum(n["th"].values())), ("URL", sum((sd.urls or {}).values()), sum(n["url"].values())), ("volume (GB)", (sd.bytes or 0) / 1e9, n["b"] / 1e9)]
+        diff = [(lbl, a, b) for lbl, a, b in pairs if max(a, b) > 0 and abs(a - b) / max(a, b) > tol]
+        if diff:
+            bad += 1
+            if len(out) < 6:
+                out.append({"k": "warn", "t": f"{sd.day.isoformat()}: " + "; ".join(f"{lbl} API {a:,.0f} vs CSV {b:,.0f}".replace(",", ".") for lbl, a, b in diff)})
+    if bad:
+        out.insert(0, {"k": "warn", "t": f"Validasi dengan data Panorama API: {bad} dari {len(rows)} hari yang tumpang tindih selisih lebih dari {tol * 100:.0f}%. CSV manual yang dipakai."})
+    return out
+
+
 def import_file(db: Session, cfg: Config, data: bytes, file_name: str, username: str, d_from: date | None = None, d_to: date | None = None,
                 files: list[tuple[str, bytes]] | None = None) -> SocBatch:
     """Validasi lalu simpan. Batch gagal tetap tersimpan (untuk riwayat), tetapi tidak dipakai di KPI.
@@ -222,6 +242,7 @@ def import_file(db: Session, cfg: Config, data: bytes, file_name: str, username:
     overlap = [iso(x.day) for x in db.scalars(select(SocDay).join(SocBatch).where(SocBatch.status != "failed", SocDay.day.in_([date.fromisoformat(k) for k in P["days"]])))]
     if overlap:
         issues.append({"k": "warn", "t": f"Tanggal {', '.join(sorted(set(overlap)))} juga ada di batch sebelumnya. Dipakai data batch terbaru supaya tidak terhitung dua kali."})
+    issues += _compare_api(db, P)
     status = "failed" if any(i["k"] == "crit" for i in issues) else "warn" if issues else "valid"
     b = SocBatch(file_name=file_name, uploaded_by=username, uploaded_at=cfg.now(), date_from=f, date_to=t, rows_read=P["read"], rows_skipped=P["skipped"],
                  status=status, issues=issues, tables=P["tables"], kpi=P["K"])

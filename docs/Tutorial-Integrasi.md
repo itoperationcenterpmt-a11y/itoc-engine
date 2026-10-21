@@ -77,6 +77,7 @@ Panorama punya API (PAN-OS XML API). Dashboard memakainya lewat **dynamic report
 **Yang diambil dan disimpan** (di database dashboard, sama seperti impor CSV):
 - **Ringkasan harian** (ancaman, URL, aplikasi): satu batch per hari, mulai `backfill_days` hari ke belakang (bawaan 14, maksimal 90) sampai kemarin. Tiap sinkron memproses maksimal `max_days_per_run` hari (bawaan 4), sisanya di sinkron berikutnya. Hari yang sudah ada dari impor CSV tidak ditimpa.
 - **Laporan Top** (sumber serangan, host internal, high/critical, URL diblokir, aplikasi, rule/zone, trafik, ditolak): satu batch periode `top_period` (bawaan 30 hari terakhir), diperbarui tiap `top_refresh_h` jam (bawaan 12).
+- **Jadwal**: interval kartu Panorama diset 720 menit (12 jam). Impor CSV manual (mis. tiap pukul 00.00) tetap dipakai sebagai validasi: bila hari yang sama sudah ada dari API, CSV yang dipakai, dan impor mencatat selisih dengan data API bila lebih dari 3% (kolom Catatan di riwayat batch).
 - Batch dari API bernama "Panorama API · ...". Impor CSV (Admin → Upload RAW SOC) tetap berfungsi sebagai cadangan.
 
 **Batasan yang perlu diketahui**

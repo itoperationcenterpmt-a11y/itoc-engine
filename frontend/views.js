@@ -75,6 +75,11 @@ function subnav(parent) {
   const items = TABS.filter(t => t[0] === parent || (MODS[t[0]] || {}).parent === parent);
   return items.length < 2 ? "" : `<div class="subtabs">${items.map(([k, l]) => `<button type="button" data-tab="${k}" aria-selected="${k === S.tab}">${esc(l)}</button>`).join("")}</div>`;
 }
+/* Jam shift berjalan: dipanggil saat render dan tiap 30 detik, supaya tidak membeku. */
+function renderDuty() {
+  const n = nowShift(), tm = teamOn(n.date, n.shift), h = `<i></i><span>On duty: Team ${tm} · ${SN[n.shift]}<small>${n.clock} WIB</small></span>`;
+  ["duty", "dutyH"].forEach(id => { const e = $(id); if (e) e.innerHTML = h; }); $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]}`;
+}
 function renderShell() {
   const NAVT = TABS.filter(t => topOf(t[0]) === t[0]), curTop = topOf(S.tab);
   $("tabs").innerHTML = NAVT.map(([k, l, bd]) => `<button role="tab" data-tab="${k}" title="${esc(l)}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></button>`).join("");
@@ -111,8 +116,7 @@ function renderShell() {
   if (anyF) { chips.push(`<span class="on">Active filter: <b>${esc(active.join(" · ") || "Semua")}</b></span>`);
     if (!ap.s && S.sf || !ap.l && S.site) chips.push(`<span class="na-txt">${(!ap.s && S.sf ? "Shift" : "") + (!ap.s && S.sf && !ap.l && S.site ? " dan " : "") + (!ap.l && S.site ? "lokasi" : "")} tidak berlaku di halaman ini</span>`); }
   $("fApplies").innerHTML = chips.join("");
-  const n = nowShift(), tm = teamOn(n.date, n.shift);
-  $("duty").innerHTML = `<i></i><span>On duty: Team ${tm} · ${SN[n.shift]}<small>${n.clock} WIB</small></span>`; $("dutyH").innerHTML = `<i></i><span>On duty: Team ${tm} · ${SN[n.shift]}<small>${n.clock} WIB</small></span>`; $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]}`;
+  renderDuty();
   $("fSum").textContent = anyF ? (active.join(" · ") || "Semua") : "Tidak berlaku di halaman ini";
 
 }

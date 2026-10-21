@@ -341,7 +341,7 @@ document.addEventListener("pointerover", e => { const el = e.target.closest("[da
 document.addEventListener("pointermove", e => { if (tip.hidden) return; const w = tip.offsetWidth, h = tip.offsetHeight; tip.style.left = Math.min(innerWidth - w - 8, e.clientX + 12) + "px"; tip.style.top = (e.clientY + 14 + h > innerHeight ? e.clientY - h - 10 : e.clientY + 14) + "px"; });
 document.addEventListener("focusin", e => { const el = e.target.closest(".ib"); if (!el) return; const r = el.getBoundingClientRect(); tip.textContent = el.dataset.tip; tip.hidden = false; tip.style.left = Math.min(innerWidth - tip.offsetWidth - 8, r.left) + "px"; tip.style.top = r.bottom + 6 + "px"; });
 document.addEventListener("focusout", () => { tip.hidden = true; });
-setInterval(() => { if (!CFG || $("app").hidden) return; const n = nowShift(); $("duty").innerHTML = `<i></i><span>On duty: Team ${teamOn(n.date, n.shift)} · ${SN[n.shift]}<small>${n.clock} WIB</small></span>`; $("dutyM").textContent = `Team ${teamOn(n.date, n.shift)} · ${SN[n.shift]}`; }, 30000);
+setInterval(() => { if (!CFG || $("app").hidden) return; renderDuty(); }, 30000);
 
 /* ---------- login & boot ---------- */
 function showLogin(msg, change) {
