@@ -1,7 +1,7 @@
 /* IT PMT Dashboard — render, event, Admin (parameter & master data generik), login. */
 "use strict";
 try { if (localStorage.getItem("itoc.rail")) { document.addEventListener("DOMContentLoaded", () => { const a = document.getElementById("app"); if (a) a.classList.add("rail"); const b = document.getElementById("railBtn"); if (b) b.textContent = "›"; }); } } catch (_) {}
-const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, wifi: vWifi, xdr: vXdr, cctv: vCctv, network: vNetwork, cyber: vCyber, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
+const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, wifi: vWifi, xdr: vXdr, cctv: vCctv, insight: vInsight, network: vNetwork, cyber: vCyber, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
 const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype"];

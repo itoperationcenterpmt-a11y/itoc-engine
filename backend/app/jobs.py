@@ -59,6 +59,36 @@ def run_source(key: str) -> dict:
     return {"ok": ok, "rows": n, "msg": msg}
 
 
+def run_insights() -> dict:
+    """Analisis insight dari data yang sudah tersimpan; insight baru bertingkat warn atau crit dikirim lewat webhook (sekali per insight)."""
+    from sqlalchemy import select
+    from . import insight, notify
+    from .models import Insight
+    t0 = time.time()
+    with session_scope() as db:
+        if not db.execute(text("select pg_try_advisory_xact_lock(hashtext('insights'))")).scalar():
+            return {"ok": False, "msg": "Analisis sedang berjalan"}
+        cfg = load_config(db)
+        try:
+            r = insight.run(db, cfg)
+            fresh = list(db.scalars(select(Insight).where(Insight.notified.is_(False), Insight.status != "selesai", Insight.severity.in_(["warn", "crit"]))))
+            for x in fresh:
+                x.notified = True
+            msg = f"{r['found']} temuan, {len(r['new'])} baru, {r['closed']} selesai" + (f"; galat: {'; '.join(r['errors'])}" if r["errors"] else "")
+            db.add(SyncLog(source="Insight", at=cfg.now(), ok=not r["errors"], rows=r["found"], ms=int((time.time() - t0) * 1000), message=msg[:300]))
+            texts = [f"[{'KRITIS' if x.severity == 'crit' else 'PERINGATAN'}] {x.title}: {x.detail}" for x in fresh[:5]]
+            if len(fresh) > 5:
+                texts.append(f"dan {len(fresh) - 5} insight lain")
+            out = {"ok": True, "found": r["found"], "new": len(r["new"]), "closed": r["closed"], "errors": r["errors"], "msg": msg}
+        except Exception as e:
+            log.exception("insight")
+            return {"ok": False, "msg": str(e)[:200]}
+    if texts:
+        notify.fire("insight_new", "\n".join(texts), {"count": len(fresh)})
+    bump_data()
+    return out
+
+
 def _refresh():
     """Jadwal dari data_source: config.schedule (daftar "HH:MM" waktu lokal, mis. ["00:00", "12:00"]) memakai jam tetap; selain itu interval_min."""
     with session_scope() as db:
@@ -100,6 +130,8 @@ def start():
     global _sched
     _sched = BackgroundScheduler(timezone="UTC")
     _sched.add_job(_refresh, "interval", minutes=5, id="refresh")
+    from datetime import datetime, timedelta, timezone
+    _sched.add_job(run_insights, "interval", minutes=30, id="insights", max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1))
     _sched.start()
     try:
         _refresh()

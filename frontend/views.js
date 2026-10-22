@@ -134,7 +134,7 @@ function renderDuty() {
 
 /* ---------- Ringkasan ---------- */
 function vRingkasan() {
-  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total); const Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)); const Xd = V.xdr, hasX = !!(Xd && Xd.configured && (Xd.total || Xd.backlogCH)); const Cc = V.cctv, hasC = !!(Cc && Cc.configured && Cc.total);
+  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total); const Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)); const Xd = V.xdr, hasX = !!(Xd && Xd.configured && (Xd.total || Xd.backlogCH)); const Cc = V.cctv, hasC = !!(Cc && Cc.configured && Cc.total); const In = V.insight, hasI = !!(In && In.open.length);
   const T = hasT ? tkR() : null, N = hasN ? netR() : null, R = hasS ? socR() : null, chk = hasS ? socCheck() : [], okDays = chk.filter(x => x.s === "ok" || x.s === "dup").length, now = nowShift();
   const P = S.cmp ? prevRange() : null, Tp = P && tkR(P), Np = P && netR(P), Rp = P && socR(P);
   const openOld = V.open_old || [], oldD = CFG.params["sd.open_alert_days"];
@@ -168,9 +168,11 @@ function vRingkasan() {
     hasC ? tile("cctv", "CCTV", "good", fmt(Cc.recording) + " merekam di pusat", fmt(Cc.total) + " kamera · " + fmt(Cc.nHw) + " hardware") : "",
     hasH ? tile("serahterima", "Handover", hiCrit ? "crit" : hoOpen.length ? "warn" : "good", hoOpen.length ? hoOpen.length + " handover terbuka" : "Tidak ada", hiCrit ? hiCrit + " prioritas tinggi" : "semua terkendali") : ""
   ].filter(Boolean);
+  if (hasI) tiles.splice(1, 0, tile("insight", "Insight", In.counts.crit ? "crit" : In.counts.warn ? "warn" : "good", In.open.length + " temuan aktif", In.counts.crit + " kritis · " + In.counts.warn + " peringatan"));
   const tilesP = tiles.length ? panel("c12", "Status Hari Ini", ctxTxt(), `<div class="stiles">${tiles.join("")}</div>`) : "";
   return `<div class="grid">
   ${tilesP}
+  ${hasI ? insightPanel(In, 5) : ""}
   ${!hasT ? "" : dom("Ticketing", "servicedesk", ``, kpi("Tiket Masuk", fmt(T.n), fx(T.perDay, 1) + "/hari", {tip: RUMUS.tkIn, dl: Tp ? delta(T.n, Tp.n) : ""}) + kpi("Selesai", pc(T.doneRate), fmt(T.open) + " terbuka", {tip: RUMUS.tkDone, dl: Tp ? delta(T.doneRate, Tp.doneRate, {up: true, pct: 1}) : ""}) + kpi("Sesuai Target SLA", pc(T.slaPct), fmt(T.slaOut) + " melewati", {tip: RUMUS.tkSla, dl: Tp ? delta(T.slaPct, Tp.slaPct, {up: true, pct: 1}) : "", cls: T.slaPct != null && T.slaPct < CFG.params["sd.sla_warn"] ? "warnv" : ""}) + kpi("Durasi Median", fx(T.medMin, 0) + " mnt", "P90 " + fx(T.p90, 1) + " jam", {tip: RUMUS.tkMed, dl: Tp ? delta(T.medMin, Tp.medMin, {up: false}) : ""}))}
   ${!hasN ? "" : dom("Networking", "noc", ``, N ? kpi("Availability", pc(N.avail, 2), "target " + pc(PAR.target, 1), {tip: RUMUS.av, dl: Np ? delta(N.avail, Np.avail, {up: true, pct: 1}) : "", cls: N.avail < PAR.target ? "warnv" : ""}) + kpi("Link Memenuhi SLA", N.ok + "/" + (N.ok + N.bad), N.bad + " tidak, " + N.nodata + " data kurang", {tip: RUMUS.link}) + kpi("Total Downtime", fx(N.downH, 1) + " jam", N.events + " kejadian", {tip: RUMUS.down, dl: Np ? delta(N.downH, Np.downH, {up: false}) : ""}) + kpi("Utilisasi Tinggi", fmt(N.utilHigh), "link puncak ≥ " + pc(PAR.utilPeak, 0), {tip: RUMUS.util}) : empty())}
   ${!hasD ? "" : dom("Devices", "devices", ``, kpi("Devices", fmt(D.all.total), "CCTV dan Gate System") + kpi("Availability Now", D.all.avail != null ? pc(D.all.avail, 1) : "-", "online ÷ (online + down)", {cls: D.all.avail != null && D.all.avail < 0.95 ? "warnv" : ""}) + kpi("Down", fmt(D.all.down), fmt(D.chronic) + " lebih dari 30 hari", {cls: D.all.down ? "warnv" : ""}) + kpi("Masalah Interface", fmt(D.all.deg || 0), "ping normal, SNMP tidak tersedia"))}

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from . import models as M
 from .store import Config, cached
 from .timeutil import ms
-from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR, cctv as CCTV
+from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR, cctv as CCTV, insight as INSIGHT
 from .calc.common import iso
 from .security import can_see
 
@@ -137,6 +137,8 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
             V["dev"]["hist"] = DEV.history(db, cfg, f.d_from, f.d_to, st, f.kind, f.dtype)
     if tab == "xdr" or (tab in ("ringkasan", "cyber") and ok("xdr")):
         V["xdr"] = XDR.build(db, cfg, a, b, f.kind if tab == "xdr" and f.kind in XDR.SEV else "")
+    if tab == "insight" or (tab == "ringkasan" and ok("insight")):
+        V["insight"] = INSIGHT.build(db, cfg)
     if tab == "cctv" or (tab == "ringkasan" and ok("cctv")):
         V["cctv"] = CCTV.build(db, cfg)
     if tab == "wifi":
@@ -179,7 +181,6 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
     if tab == "admin" and (user.role.is_admin or user.role.admin_view):
         V["users"] = [{"u": u.username, "name": u.full_name, "role": u.role_key, "last": ms(u.last_login), "active": u.active, "site": u.site}
                       for u in db.scalars(select(M.User).order_by(M.User.id))]
-        V["audit"] = [{"at": ms(x.at), "by": x.username, "t": x.action} for x in db.scalars(select(M.AuditLog).order_by(M.AuditLog.at.desc()).limit(200))]
     return V
 
 

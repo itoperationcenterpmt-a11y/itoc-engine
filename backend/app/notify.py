@@ -9,7 +9,7 @@ from .models import Webhook
 
 log = logging.getLogger("itoc.notify")
 EVENTS = {"handover_new": "Handover baru (semua prioritas)", "handover_high": "Handover prioritas tinggi",
-          "sync_failed": "Sinkron sumber data gagal", "test": "Pesan uji"}
+          "sync_failed": "Sinkron sumber data gagal", "insight_new": "Insight baru (peringatan dan kritis)", "test": "Pesan uji"}
 KINDS = {"generic": "JSON umum", "teams": "Microsoft Teams", "slack": "Slack", "telegram": "Telegram"}
 
 

@@ -557,3 +557,25 @@ class CctvCamera(Base):
     fps: Mapped[str | None] = mapped_column(String(10))
     modified_at: Mapped[datetime | None] = mapped_column(DateTime)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Insight(Base):
+    """Temuan analisis otomatis (anomali, tren, kejadian berulang). Kunci unik mencegah duplikat; temuan yang tidak muncul lagi berstatus 'selesai'."""
+    __tablename__ = "insight"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(160))
+    kind: Mapped[str] = mapped_column(String(20))
+    severity: Mapped[str] = mapped_column(String(10))            # info | warn | crit
+    title: Mapped[str] = mapped_column(String(200))
+    detail: Mapped[str] = mapped_column(Text)
+    tab: Mapped[str | None] = mapped_column(String(30))          # halaman rujukan
+    site: Mapped[str | None] = mapped_column(String(120))
+    metric: Mapped[dict | None] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(10), default="baru")   # baru | dibaca | selesai
+    first_seen: Mapped[datetime] = mapped_column(DateTime)
+    last_seen: Mapped[datetime] = mapped_column(DateTime)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    ack_by: Mapped[str | None] = mapped_column(String(60))
+    ack_at: Mapped[datetime | None] = mapped_column(DateTime)
+    notified: Mapped[bool] = mapped_column(Boolean, default=False)
+    __table_args__ = (Index("ix_insight_key_open", "key", "status"),)
