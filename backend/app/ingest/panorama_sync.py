@@ -14,6 +14,7 @@ BLOCK_URL = "( action eq block-url ) or ( action eq block-continue ) or ( action
 DENIED = "( action eq deny ) or ( action eq drop ) or ( action eq reset-both ) or ( action eq reset-client ) or ( action eq reset-server )"
 PERIODS = [(7, "last-7-days"), (30, "last-30-days"), (60, "last-60-days"), (90, "last-90-days")]
 g = lambda r, k: r.get(k, "")
+PARTIAL = "Panorama API · hari ini (sementara)"
 
 # (kunci laporan, jenis, kelompok, nilai, filter, bentuk baris sesuai urutan kolom CSV)
 DAILY = [
@@ -111,7 +112,9 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     now = cfg.now()
     today, yesterday = now.date(), now.date() - timedelta(days=1)
     lower = date.fromisoformat(c["backfill_from"]) if c.get("backfill_from") else yesterday - timedelta(days=int(c.get("backfill_days", 14)) - 1)
-    have = {x for (x,) in db.execute(select(SocDay.day).join(SocBatch).where(SocBatch.status != "failed"))}      # hari yang sudah ada (impor CSV) tidak ditimpa
+    have = {x for (x,) in db.execute(select(SocDay.day).join(SocBatch).where(SocBatch.status != "failed", SocBatch.file_name != PARTIAL))}   # hari yang sudah ada (impor CSV) tidak ditimpa; data sementara hari ini tidak dihitung
+    for old in db.scalars(select(SocBatch).where(SocBatch.file_name == PARTIAL, SocBatch.date_to < today)):
+        db.delete(old)                                                                                         # hari sementara yang sudah lewat digantikan data harian lengkap
     tried = set(cur.get("tried", []))                                                                          # hari yang sudah dicoba tetapi kosong di Panorama
     pending, d = [], lower
     while d <= yesterday and len(pending) < int(c.get("max_days_per_run", 4)):
@@ -119,9 +122,10 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
             pending.append(d)
         d += timedelta(days=1)
     top_jobs = _top_jobs(c, cfg, cur, now, yesterday, lower)
-    if not pending and not top_jobs:
+    partial = bool(c.get("today_partial", True))
+    if not pending and not top_jobs and not partial:
         return 0, "Tidak ada hari baru dan laporan Top masih baru"
-    notes, n_days, n_rows, n_top = [], 0, 0, 0
+    notes, n_days, n_rows, n_top, n_part = [], 0, 0, 0, 0
     with httpx.Client(timeout=60, verify=c.get("verify_tls", False)) as cl:
         key = PA.keygen(cl, c["base_url"], user, pw)
         for d in pending:
@@ -139,13 +143,27 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
             except (RuntimeError, httpx.HTTPError) as e:
                 notes.append(f"hari {d.isoformat()} gagal: {str(e)[:120]}")
                 break
+        if partial:
+            try:                                                      # hari ini sampai saat ini (sementara): diganti tiap sinkron, lalu digantikan data harian lengkap esok hari
+                reports, rng = {}, (today.strftime("%Y/%m/%d 00:00:00"), now.strftime("%Y/%m/%d %H:%M:%S"))
+                for k, typ, aggs, vals, q, topn, fmt in DAILY:
+                    recs = PA.run_dynamic(cl, c["base_url"], key, typ, aggs, vals, "", "", topn, rng=rng)
+                    reports[k] = _numeric(k, [fmt(r, today.strftime("%Y-%m-%d 00:00:00")) for r in recs])
+                if any(reports.values()):
+                    for old in db.scalars(select(SocBatch).where(SocBatch.file_name == PARTIAL)):
+                        db.delete(old)
+                    db.flush()
+                    b = _model(db, cfg, today, reports, PARTIAL, True)
+                    n_part = 1 if b is not None else 0
+            except (RuntimeError, httpx.HTTPError) as e:
+                notes.append(f"data hari ini gagal: {str(e)[:100]}")
         for label, d0, d1, kind in top_jobs[:int(c.get("max_top_per_run", 3))]:
             try:
                 rng = (d0.strftime("%Y/%m/%d 00:00:00"), d1.strftime("%Y/%m/%d 23:59:59"))
                 reports = {}
                 for k, typ, aggs, vals, q, topn, fmt in TOP:
                     q = q.replace("{internal}", str(cfg.p("soc.internal_range") or ""))
-                    recs = PA.run_dynamic(cl, c["base_url"], key, typ, aggs, vals, "", q, int(c.get("top_n", topn)) if topn <= 500 else topn, rng=rng)
+                    recs = PA.run_dynamic(cl, c["base_url"], key, typ, aggs, vals, "", q, int(c.get("top_n", topn)) if topn <= 500 else topn, rng=rng, wait_s=int(c.get("top_wait_s", 600)))
                     reports[k] = _numeric(k, [fmt(r) for r in recs])
                 for old in db.scalars(select(SocBatch).where(SocBatch.file_name == "Panorama API · " + label)):
                     db.delete(old)                                   # hanya batch API dengan label yang sama; impor manual tidak pernah dihapus
@@ -159,10 +177,10 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
                 n_top += 1
                 n_rows += sum(len(v) for v in reports.values())
             except (RuntimeError, httpx.HTTPError) as e:
-                notes.append(f"Top {label} gagal: {str(e)[:100]}")
-                break
+                notes.append(f"{label} gagal: {str(e)[:100]}")
+                continue                                              # batch Top lain tetap dicoba; yang gagal diulang pada sinkron berikutnya
     cur["tried"] = sorted(tried)[-800:]
     src.cursor = cur
-    if notes and not n_days and not n_top:
+    if notes and not n_days and not n_top and not n_part:
         raise RuntimeError("; ".join(notes))
-    return n_rows, f"{n_days} hari ringkasan baru, {n_top} laporan Top diperbarui" + ("; " + "; ".join(notes) if notes else "")
+    return n_rows, f"{n_days} hari ringkasan baru, {n_top} laporan Top diperbarui" + (", data hari ini diperbarui" if n_part else "") + ("; " + "; ".join(notes) if notes else "")

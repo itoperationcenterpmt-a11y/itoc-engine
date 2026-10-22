@@ -39,6 +39,7 @@ services:
     environment:
       ITOC_DATABASE_URL: postgresql+psycopg://itoc:${DB_PASSWORD:-itoc}@db:5432/itoc
     depends_on: [api]
+    healthcheck: {disable: true}            # image memeriksa port 8000 yang hanya ada di api; worker tidak membuka port
     command: python -m app.worker
 networks:
   edge:

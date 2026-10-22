@@ -15,6 +15,18 @@ SYNCERS = {"manageengine": manageengine.sync_api, "prtg": prtg.sync_api, "zabbix
 _sched: BackgroundScheduler | None = None
 
 
+_tries: dict[str, int] = {}
+
+
+def _retry_later(key: str, scheduled) -> None:
+    """Sumber berjadwal jam tetap (mis. 00:00 dan 12:00) yang gagal diulang 10 menit kemudian, maksimal 3 kali, supaya tidak menunggu 12 jam untuk jadwal berikutnya."""
+    from datetime import datetime, timedelta, timezone
+    if not scheduled or _sched is None or _tries.get(key, 0) >= 3:
+        return
+    _tries[key] = _tries.get(key, 0) + 1
+    _sched.add_job(run_source, "date", run_date=datetime.now(timezone.utc) + timedelta(minutes=10), args=[key], id="retry:" + key, replace_existing=True)
+
+
 def run_source(key: str) -> dict:
     t0 = time.time()
     with session_scope() as db:
@@ -39,6 +51,9 @@ def run_source(key: str) -> dict:
             ok, msg, n = False, str(e), 0
             from . import notify
             notify.fire("sync_failed", f"Sinkron {src.label} gagal: {str(e)[:200]}")
+            _retry_later(key, (src.config or {}).get("schedule"))
+    if ok:
+        _tries.pop(key, None)
     bump_data()
     bump_config()  # status sumber di header ikut segar
     return {"ok": ok, "rows": n, "msg": msg}

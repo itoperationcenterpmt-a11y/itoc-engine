@@ -26,6 +26,22 @@ def _parse(r: httpx.Response) -> ET.Element:
     r.raise_for_status()
     return x
 
+def _retry(fn, tries: int = 3):
+    """Panorama kadang menjawab kosong/bukan XML atau memutus koneksi sesaat saat sibuk: ulangi dengan jeda 5 dan 15 detik. Penolakan resmi (kredensial, hak akses) tidak diulang."""
+    for i in range(tries):
+        try:
+            return fn()
+        except (httpx.TransportError, httpx.HTTPStatusError) as e:
+            err = e
+        except RuntimeError as e:
+            if "bukan XML" not in str(e):
+                raise
+            err = e
+        if i < tries - 1:
+            time.sleep(5 if i == 0 else 15)
+    raise err
+
+
 def keygen(cl: httpx.Client, base: str, user: str, pw: str) -> str:
     x = _parse(cl.post(api_url(base), data={"type": "keygen", "user": user, "password": pw}))
     key = x.findtext(".//key")
@@ -43,7 +59,7 @@ def run_report(cl: httpx.Client, base: str, key: str, name: str, wait_s: int = 9
         raise RuntimeError("Panorama tidak memberi job id untuk report " + name)
     t0 = time.time()
     while True:
-        y = _parse(cl.post(api_url(base), headers=h, data={"type": "report", "action": "get", "job-id": job}))
+        y = _retry(lambda: _parse(cl.post(api_url(base), headers=h, data={"type": "report", "action": "get", "job-id": job})))
         if (y.findtext(".//job/status") or "FIN").upper() == "FIN":
             break
         if time.time() - t0 > wait_s:
@@ -106,13 +122,13 @@ def run_dynamic(cl: httpx.Client, base: str, key: str, typ: str, aggs: list[str]
     when = f"<start-time>{rng[0]}</start-time><end-time>{rng[1]}</end-time>" if rng else f"<period>{period}</period>"      # rentang bebas (YYYY/MM/DD HH:MM:SS), tidak dibatasi 90 hari
     cmd = (f"<type><{typ}><aggregate-by>{members(aggs)}</aggregate-by><values>{members(vals)}</values></{typ}></type>{when}"
            + (f"<query>{query}</query>" if query else "") + f"<topn>{topn}</topn><topm>10</topm><caption>soc</caption>")
-    x = _parse(cl.post(api_url(base), headers=h, data={"type": "report", "reporttype": "dynamic", "reportname": "custom-dynamic-report", "cmd": cmd, "async": "yes"}))
+    x = _retry(lambda: _parse(cl.post(api_url(base), headers=h, data={"type": "report", "reporttype": "dynamic", "reportname": "custom-dynamic-report", "cmd": cmd, "async": "yes"})))
     job = x.findtext(".//job")
     if not job:
         raise RuntimeError("Panorama tidak memberi job id untuk dynamic report " + typ)
     t0 = time.time()
     while True:
-        y = _parse(cl.post(api_url(base), headers=h, data={"type": "report", "action": "get", "job-id": job}))
+        y = _retry(lambda: _parse(cl.post(api_url(base), headers=h, data={"type": "report", "action": "get", "job-id": job})))
         if (y.findtext(".//job/status") or "FIN").upper() == "FIN":
             break
         if time.time() - t0 > wait_s:
