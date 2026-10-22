@@ -138,8 +138,8 @@ def _servicedesk(db, cfg, f, preset="standar"):
     dim = lambda key: [(r["k"], r["n"]) for r in (T["dims"].get(key) or [])]
     sla = T["dims"].get("sla") or []
     s["charts"] = _pick(cfg, "servicedesk", SD_IDS, preset, [
-        _chart("Status tiket", ["Close", "Open"], [{"name": "Tiket", "values": [n - T["open"], T["open"]]}], "donut"),
-        _daily("Tiket masuk dan close", [x["date"] for x in d], [{"name": "Masuk", "values": [x["in"] for x in d]}, {"name": "Close", "values": [x["done"] for x in d]}]),
+        _chart("Status tiket", ["Selesai", "Terbuka"], [{"name": "Tiket", "values": [n - T["open"], T["open"]]}], "donut"),
+        _daily("Tiket masuk dan selesai", [x["date"] for x in d], [{"name": "Masuk", "values": [x["in"] for x in d]}, {"name": "Close", "values": [x["done"] for x in d]}]),
         _top("10 kategori dengan tiket terbanyak", dim("kategori"), "Tiket"),
         None if f.site else _top("10 lokasi dengan tiket terbanyak", dim("lokasi"), "Tiket"),
         _chart("Sebaran durasi penyelesaian", [x["k"] for x in T["durasi"]], [{"name": "Tiket", "values": [x["n"] for x in T["durasi"]]}]),
@@ -148,7 +148,7 @@ def _servicedesk(db, cfg, f, preset="standar"):
         _chart("Kepatuhan SLA per level", [r["k"] for r in sla], [{"name": "Dalam target", "values": [r["in"] for r in sla]}, {"name": "Melewati target", "values": [r["out"] for r in sla]}], "stack"),
         _top("Tiket per mode request", dim("mode"), "Tiket"),
         _chart("Rata-rata tiket per hari menurut hari", [x["k"] for x in T["weekday"]], [{"name": "Rata-rata", "values": [round(x["avg"], 1) for x in T["weekday"]]}])])
-    heads = ["", "Tiket", "% dari total", "Close", "Open", "Dalam SLA"]
+    heads = ["", "Tiket", "% dari total", "Selesai", "Terbuka", "Dalam SLA"]
     kinds = ["t", "n", "p1", "n", "n", "p1"]
     for key, label in (("kategori", "Kategori"), ("lokasi", "Lokasi / Group")):
         rows = (T["dims"].get(key) or [])[:10]
@@ -156,11 +156,11 @@ def _servicedesk(db, cfg, f, preset="standar"):
             s["tables"].append(_table("Tiket per " + label.lower(), [label] + heads[1:], kinds, [[r["k"], r["n"], r["pct"], r["done"], r["open"], r["inPct"]] for r in rows]))
     gr = T.get("groupRanking") or []
     if any(r["n"] for r in gr):
-        s["tables"].append(_table("Peringkat grup", ["#", "Grup", "Anggota", "Tiket", "Close", "Open", "Rata-rata (jam)", "Dalam SLA"], ["n", "t", "n", "n", "n", "n", "f1", "p1"],
+        s["tables"].append(_table("Peringkat grup", ["#", "Grup", "Anggota", "Tiket", "Selesai", "Terbuka", "Rata-rata (jam)", "Dalam SLA"], ["n", "t", "n", "n", "n", "n", "f1", "p1"],
                                   [[r["rank"], r["name"], r["members"], r["n"], r["done"], r["open"], r["avg"], r["inPct"]] for r in gr]))
     rk = [r for r in T["ranking"] if r["n"]][:15]
     if rk:
-        s["tables"].append(_table("Peringkat teknisi", ["#", "Nama", "Unit", "Tiket", "Close", "Open", "Rata-rata (jam)", "Dalam SLA"], ["n", "t", "t", "n", "n", "n", "f1", "p1"],
+        s["tables"].append(_table("Peringkat teknisi", ["#", "Nama", "Unit", "Tiket", "Selesai", "Terbuka", "Rata-rata (jam)", "Dalam SLA"], ["n", "t", "t", "n", "n", "n", "f1", "p1"],
                                   [[r["rank"], r["name"], r["unit"], r["n"], r["done"], r["open"], r["avg"], r["inPct"]] for r in rk]))
     if T["openList"]:
         s["tables"].append(_table("Tiket open (terbaru)", ["ID", "Subjek", "Lokasi", "Teknisi", "Prioritas", "Status", "Umur (hari)"], ["t", "t", "t", "t", "t", "t", "f1"],
@@ -343,25 +343,25 @@ def _wifi(db, cfg, f, preset="standar"):
     tr = W["trend"]
     s["charts"] = _pick(cfg, "wifi", WIFI_IDS, preset, [
         _top("Client per SSID", [(x["k"], x["n"]) for x in W["bySsid"]], "Client"),
-        _top("Usage per SSID (GB)", [(x["k"], round(x["n"] / _GB, 2)) for x in W["bySsidBytes"]], "GB"),
+        _top("Penggunaan per SSID (GB)", [(x["k"], round(x["n"] / _GB, 2)) for x in W["bySsidBytes"]], "GB"),
         _top("Client per Access Point", [(x["k"], x["n"]) for x in W["byAp"]], "Client"),
         _top("Client per zone", [(x["k"], x["n"]) for x in W["byZone"]], "Client"),
         _chart("Client per band", [x["k"] for x in W["byBand"]], [{"name": "Client", "values": [x["n"] for x in W["byBand"]]}], "donut"),
         _chart("Client 24 jam terakhir", [f"{(x['t'] // 3600000) % 24:02d}.{(x['t'] // 60000) % 60:02d}" for x in tr], [{"name": "Client", "values": [x["c"] for x in tr]}], "line") if len(tr) > 1 else None,
-        _daily("Usage WiFi (GB)", [x["date"] for x in Hh["daily"]], [{"name": "GB", "values": [round(x["bytes"] / _GB, 2) for x in Hh["daily"]]}]),
+        _daily("Penggunaan WiFi (GB)", [x["date"] for x in Hh["daily"]], [{"name": "GB", "values": [round(x["bytes"] / _GB, 2) for x in Hh["daily"]]}]),
         _daily("Client unik dan sesi", [x["date"] for x in Hh["daily"]], [{"name": "Client unik", "values": [x["clients"] for x in Hh["daily"]]}, {"name": "Sesi", "values": [x["sessions"] for x in Hh["daily"]]}]),
-        _top("Usage per zone pada periode (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byZone"]], "GB"),
-        _top("Usage per SSID pada periode (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["bySsid"]], "GB"),
-        _top("Usage per lokasi pada periode (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byLoc"]], "GB"),
+        _top("Penggunaan per zone pada periode (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byZone"]], "GB"),
+        _top("Penggunaan per SSID pada periode (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["bySsid"]], "GB"),
+        _top("Penggunaan per lokasi pada periode (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byLoc"]], "GB"),
         _chart("Jam mulai sesi", [f"{h:02d}" for h in range(24)], [{"name": "Sesi", "values": Hh["hours"]}]),
         _top("Perangkat dominan pada periode (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byDevice"]], "GB")])
     s["kpis"] += [_kpi("Sesi (periode)", Hh["sessions"], "n", ""), _kpi("Client unik (periode)", Hh["clients"], "n", "MAC berbeda"), _kpi("Total usage (GB)", (Hh["rx"] + Hh["tx"]) / _GB, "f1", "periode laporan"),
                   _kpi("Rata-rata usage per client (GB)", (Hh["rx"] + Hh["tx"]) / _GB / Hh["clients"] if Hh["clients"] else None, "f2", "")]
-    for ttl, key, nm in (("Usage per zone (periode)", "byZone", "Zone"), ("Usage per SSID (periode)", "bySsid", "SSID"), ("Usage per lokasi (periode)", "byLoc", "Lokasi"), ("Usage per AP (periode)", "byAp", "AP")):
-        s["tables"].append(_table(ttl, [nm, "Client unik", "Sesi", "Usage (GB)"], ["t", "n", "n", "f2"], [[x["k"], x["clients"], x["sessions"], x["bytes"] / _GB] for x in Hh[key]]))
-    s["tables"].append(_table("Client dengan usage terbesar (periode)", ["User / Host", "MAC", "SSID", "Sesi", "Usage (GB)"], ["t", "t", "t", "n", "f2"],
+    for ttl, key, nm in (("Penggunaan per zone (periode)", "byZone", "Zone"), ("Penggunaan per SSID (periode)", "bySsid", "SSID"), ("Penggunaan per lokasi (periode)", "byLoc", "Lokasi"), ("Penggunaan per AP (periode)", "byAp", "AP")):
+        s["tables"].append(_table(ttl, [nm, "Client unik", "Sesi", "Penggunaan (GB)"], ["t", "n", "n", "f2"], [[x["k"], x["clients"], x["sessions"], x["bytes"] / _GB] for x in Hh[key]]))
+    s["tables"].append(_table("Client dengan usage terbesar (periode)", ["User / Host", "MAC", "SSID", "Sesi", "Penggunaan (GB)"], ["t", "t", "t", "n", "f2"],
                               [[x["user"] or x["host"], x["mac"], x["ssid"], x["sessions"], x["bytes"] / _GB] for x in Hh["top"]]))
-    s["tables"].append(_table("Per SSID", ["SSID", "Client", "Usage (GB)"], ["t", "n", "f2"], [[x["k"], x["n"], 0] for x in W["bySsid"]]))
+    s["tables"].append(_table("Per SSID", ["SSID", "Client", "Penggunaan (GB)"], ["t", "n", "f2"], [[x["k"], x["n"], 0] for x in W["bySsid"]]))
     gb = dict((x["k"], x["n"]) for x in W["bySsidBytes"])
     s["tables"][-1]["rows"] = [[x["k"], x["n"], gb.get(x["k"], 0) / _GB] for x in W["bySsid"]]
     s["tables"].append(_table("Client dengan usage terbesar", ["User / Host", "MAC", "SSID", "AP", "Download (GB)", "Upload (GB)"], ["t", "t", "t", "t", "f2", "f2"],
