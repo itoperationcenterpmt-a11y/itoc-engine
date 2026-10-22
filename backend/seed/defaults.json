@@ -58,6 +58,8 @@
  {"key": "completeness.prtg_warn", "label": "Cakupan PRTG minimal (di bawah = kurang)", "group": "kelengkapan", "editor": "percent", "ui": {"min": 0.5, "max": 1, "step": 0.01}, "value": 0.9},
 
  {"key": "ui.presets", "label": "Preset periode", "group": "tampilan", "editor": "json", "description": "kode: hari|kemarin|bulan|lalu|<angka hari>", "value": [["hari", "Today"], ["kemarin", "Yesterday"], ["7", "7 days"], ["30", "30 days"], ["bulan", "This month"], ["lalu", "Last month"]]},
+ {"key": "ui.map_tiles", "label": "Alamat tile peta (kosong = peta dasar lokal tanpa internet)", "group": "tampilan", "editor": "text", "value": "", "description": "Contoh: https://tile.server-internal/{z}/{x}/{y}.png. Alamat harus HTTPS dan diizinkan di CSP (img-src)"},
+ {"key": "ui.map_attribution", "label": "Keterangan sumber peta (hak cipta)", "group": "tampilan", "editor": "text", "value": ""},
  {"key": "ui.default_preset", "label": "Preset periode bawaan", "group": "tampilan", "editor": "text", "value": "30"},
  {"key": "ui.max_range_days", "label": "Rentang filter maksimal (hari)", "group": "tampilan", "editor": "number", "ui": {"min": 7, "max": 1000, "step": 1}, "value": 400},
  {"key": "ui.weekdays", "label": "Nama hari (Senin dulu)", "group": "tampilan", "editor": "list", "value": ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]},

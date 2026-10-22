@@ -276,3 +276,76 @@ def user_patch(username: str, body: UserPatch, db: Session = Depends(get_db), us
         audit(db, user.username, "Reset password " + u.username)
     db.commit()
     return out
+
+
+# ---------------- audit log: daftar bertahap dan ekspor CSV ----------------
+AUDIT_MAX_EXPORT = 200000
+_SECRET_KEY = ("pass", "token", "secret", "key", "hash", "url")
+
+
+def _audit_where(frm: date | None, to: date | None, who: str, q: str):
+    from datetime import time, timedelta
+    from sqlalchemy import or_
+    from ..models import AuditLog
+    w = []
+    if frm:
+        w.append(AuditLog.at >= datetime.combine(frm, time.min))
+    if to:
+        w.append(AuditLog.at < datetime.combine(to + timedelta(days=1), time.min))
+    if who:
+        w.append(AuditLog.username == who)
+    if q.strip():
+        like = "%" + q.strip().replace("\\", "\\\\").replace("%", "\%").replace("_", "\_") + "%"
+        w.append(or_(AuditLog.action.ilike(like, escape="\\"), AuditLog.username.ilike(like, escape="\\")))
+    return w
+
+
+def _mask(d):
+    """Detail audit tidak boleh membawa rahasia: nilai pada kunci yang berbau rahasia disamarkan."""
+    if isinstance(d, dict):
+        return {k: ("***" if any(s in str(k).lower() for s in _SECRET_KEY) else _mask(v)) for k, v in d.items()}
+    if isinstance(d, list):
+        return [_mask(x) for x in d]
+    return d
+
+
+@router.get("/audit")
+def audit_list(frm: date | None = None, to: date | None = None, who: str = "", q: str = "", limit: int = 100, offset: int = 0, db: Session = Depends(get_db)):
+    from sqlalchemy import func
+    from ..models import AuditLog
+    w = _audit_where(frm, to, who, q)
+    total = db.scalar(select(func.count()).select_from(AuditLog).where(*w)) or 0
+    rows = db.scalars(select(AuditLog).where(*w).order_by(AuditLog.at.desc(), AuditLog.id.desc()).limit(max(1, min(limit, 500))).offset(max(0, offset)))
+    users = [u for (u,) in db.execute(select(AuditLog.username).distinct().order_by(AuditLog.username))]
+    return {"total": total, "users": users, "rows": [{"id": r.id, "at": r.at.isoformat(), "by": r.username, "t": r.action, "ip": (r.detail or {}).get("ip") if isinstance(r.detail, dict) else None} for r in rows]}
+
+
+@router.get("/audit/export")
+def audit_export(frm: date | None = None, to: date | None = None, who: str = "", q: str = "", db: Session = Depends(get_db), user: User = Depends(require_admin_area)):
+    """CSV UTF-8 (dengan BOM agar Excel membaca dengan benar). Sel yang diawali = + - @ diberi tanda petik supaya tidak dibaca sebagai rumus."""
+    import csv
+    import io
+    import json
+    from fastapi.responses import StreamingResponse
+    from sqlalchemy import func
+    from ..models import AuditLog
+    cfg = load_config(db)
+    w = _audit_where(frm, to, who, q)
+    cell = lambda v: ("'" + v) if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
+    n = db.scalar(select(func.count()).select_from(AuditLog).where(*w)) or 0
+    audit(db, user.username, f"Mengekspor audit log ({min(n, AUDIT_MAX_EXPORT)} baris)", {"from": str(frm or ""), "to": str(to or ""), "user": who, "q": q}, cfg.p("tz_offset_hours", 7))
+    db.commit()
+
+    def gen():
+        buf = io.StringIO()
+        wr = csv.writer(buf)
+        wr.writerow(["Waktu (WIB)", "Pengguna", "Aktivitas", "IP", "Detail"])
+        yield "﻿" + buf.getvalue()
+        for r in db.scalars(select(AuditLog).where(*w).order_by(AuditLog.at.desc(), AuditLog.id.desc()).limit(AUDIT_MAX_EXPORT).execution_options(yield_per=1000)):
+            d = _mask(r.detail) if isinstance(r.detail, dict) else r.detail
+            buf = io.StringIO()
+            csv.writer(buf).writerow([r.at.strftime("%Y-%m-%d %H:%M:%S"), cell(r.username), cell(r.action), (d or {}).get("ip", "") if isinstance(d, dict) else "", cell(json.dumps(d, ensure_ascii=False)) if d else ""])
+            yield buf.getvalue()
+
+    name = f"audit-log-{cfg.now():%Y%m%d-%H%M}.csv"
+    return StreamingResponse(gen(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})

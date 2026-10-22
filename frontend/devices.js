@@ -39,7 +39,10 @@ function initDevMaps() {
   document.querySelectorAll(".dmapbox:not([data-ready])").forEach(el => {
     const pts = DMAPS[el.id] || []; el.dataset.ready = "1";
     const map = L.map(el, {scrollWheelZoom: false, worldCopyJump: true, minZoom: 3, maxZoom: 18}).setView([-2.5, 118], 5);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {subdomains: "abc", maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
+    el.style.background = css("--sunken");
+    mapLand().then(rings => { if (rings) L.polygon(rings, {stroke: true, color: css("--axis"), weight: 1, fillColor: css("--surface"), fillOpacity: 1, interactive: false}).addTo(map).bringToBack(); });   // peta dasar lokal, tanpa internet
+    const tiles = (CFG.params["ui.map_tiles"] || "").trim();
+    if (/^https:\/\//.test(tiles)) L.tileLayer(tiles, {maxZoom: 19, attribution: CFG.params["ui.map_attribution"] || ""}).addTo(map);   // opsional: server peta internal atau OSM
     const bounds = [];
     [...pts].sort((a, b) => b.total - a.total).forEach(p => {
       const cl = p.avail == null ? "n" : p.avail >= 0.99 ? "g" : p.avail >= 0.95 ? "w" : "c";
@@ -99,3 +102,6 @@ function vDevices() {
     panel("c12", "Per Location", D.byLoc.length + " lokasi", tbl(["Lokasi", "Perangkat", "Down", "Interface", "Maintenance", "Availability", "Status"], locs, {r: [1, 2, 3, 4, 5], tall: true, empty: "Belum ada data."})) +
     panel("c12", "Device List", D.listN + " perangkat" + (D.listN > D.list.length ? ", menampilkan " + D.list.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari nama, lokasi, atau masalah" aria-label="Cari perangkat"><span class="sub">Filter lokasi, kategori, dan status di bar filter atas</span></div><div id="dlist">${tbl(["Perangkat", "Tipe", "Lokasi", "Status", "Down sejak", "Lama", "Masalah"], rows, {tall: true, empty: "Tidak ada perangkat untuk filter ini."})}</div>`)) + (D.hist ? grid(devHist(D.hist)) : "");
 }
+/* Garis pantai dasar untuk peta (Natural Earth, domain publik), dimuat sekali dari file lokal. */
+let LAND = null;
+const mapLand = () => LAND || (LAND = fetch("assets/id-map.json").then(r => r.ok ? r.json() : null).then(j => j && j.rings ? j.rings.map(r => r.map(p => [p[1], p[0]])) : null).catch(() => null));

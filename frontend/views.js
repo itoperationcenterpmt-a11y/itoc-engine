@@ -403,7 +403,7 @@ function vAdmin() {
   if (S.adm === "parameter") body = paramForm();
   if (S.adm === "rumus") body = masterView("formula");
   if (S.adm === "master") body = masterView();
-  if (S.adm === "audit") body = tbl(["Waktu", "Pengguna", "Aktivitas"], (V.audit || []).map(a => [dtime(a.at), a.by, a.t]));
+  if (S.adm === "audit") body = vAudit();
   return `<div class="grid"><section class="panel c12"><div class="subtabs">${sub.map(([k, l]) => `<button type="button" data-adm="${k}" aria-selected="${S.adm === k}">${l}</button>`).join("")}</div>${body}</section></div>`;
 }
 

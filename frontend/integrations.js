@@ -1,7 +1,7 @@
 /* IT Pelindo Multi Terminal Dashboard — Admin: Integrations, API Keys, Email (SMTP), Webhooks. Rahasia hanya ditulis, tidak pernah ditampilkan ulang. */
 "use strict";
 const INT = {integrations: null, apikeys: null, smtp: null, webhooks: null, msg: null, newKey: null, hookEdit: null, keyForm: false, busy: {}};
-const intReset = () => { INT.integrations = INT.apikeys = INT.smtp = INT.webhooks = INT.msg = INT.newKey = INT.hookEdit = null; INT.keyForm = false; };
+const intReset = () => { if (typeof AUD !== "undefined") AUD.loaded = false; INT.integrations = INT.apikeys = INT.smtp = INT.webhooks = INT.msg = INT.newKey = INT.hookEdit = null; INT.keyForm = false; };
 const intDt = s => s ? new Date(s).toLocaleString("id-ID", {dateStyle: "medium", timeStyle: "short"}) : "–";
 const intMsg = () => INT.msg ? `<div class="msg ${INT.msg.ok ? "ok" : "err"}">${esc(INT.msg.t)}</div>` : "";
 async function intLoad(name, path) {
@@ -131,3 +131,40 @@ document.addEventListener("submit", async e => {
     }
   } catch (er) { INT.msg = {ok: false, t: (er && er.message) || String(er)}; render(false); }
 });
+/* ---------- Audit log: filter, daftar bertahap, ekspor CSV ---------- */
+const AUD = {rows: [], total: 0, users: [], f: {frm: "", to: "", who: "", q: ""}, loaded: false, busy: false};
+const audQs = (o = {}) => new URLSearchParams(Object.entries({...AUD.f, ...o}).filter(([, v]) => v !== "" && v != null)).toString();
+async function audLoad(more) {
+  if (AUD.busy) return; AUD.busy = true;
+  try {
+    const r = await api("/api/admin/audit?" + audQs({limit: 100, offset: more ? AUD.rows.length : 0}));
+    AUD.rows = more ? AUD.rows.concat(r.rows) : r.rows; AUD.total = r.total; AUD.users = r.users; AUD.err = "";
+  } catch (e) { AUD.err = e.message; }
+  AUD.loaded = true; AUD.busy = false; render(false);
+}
+function vAudit() {
+  if (!AUD.loaded) { audLoad(false); return intLoading(); }
+  const f = AUD.f, rows = AUD.rows.map(a => [a.at.replace("T", " ").slice(0, 19), a.by, a.t, a.ip || "–"]);
+  return `<p class="sub">Catatan aktivitas pengguna dan perubahan pengaturan. Ekspor memakai filter yang sedang dipilih.</p>${AUD.err ? `<div class="msg err">${esc(AUD.err)}</div>` : ""}
+    <form class="toolbar mbar" data-int-form="audit">
+      <label class="sub">Dari <input type="date" data-f="frm" value="${esc(f.frm)}"></label><label class="sub">Sampai <input type="date" data-f="to" value="${esc(f.to)}"></label>
+      <label class="sub">Pengguna <select data-f="who"><option value="">Semua</option>${AUD.users.map(u => `<option ${u === f.who ? "selected" : ""}>${esc(u)}</option>`).join("")}</select></label>
+      <input type="search" class="msearch" data-f="q" value="${esc(f.q)}" placeholder="Cari aktivitas atau pengguna" aria-label="Cari">
+      <button class="btn" type="submit">Terapkan</button><button class="btn ghost" type="button" data-int="audreset">Reset</button>
+      <span class="mtools"><button class="btn" type="button" data-int="audexport">Ekspor CSV</button></span></form>
+    <p class="sub">${fmt(AUD.total)} catatan${AUD.rows.length < AUD.total ? `, menampilkan ${fmt(AUD.rows.length)}` : ""}</p>
+    ${tbl(["Waktu (WIB)", "Pengguna", "Aktivitas", "IP"], rows, {tall: true, empty: "Tidak ada catatan untuk filter ini."})}
+    ${AUD.rows.length < AUD.total ? `<div class="toolbar"><button class="btn ghost" type="button" data-int="audmore">Tampilkan lebih banyak</button></div>` : ""}`;
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-int]"); if (!b) return;
+  const a = b.dataset.int;
+  if (a === "audreset") { AUD.f = {frm: "", to: "", who: "", q: ""}; AUD.loaded = false; render(false); }
+  else if (a === "audmore") audLoad(true);
+  else if (a === "audexport") { const l = document.createElement("a"); l.href = "/api/admin/audit/export?" + audQs(); l.download = ""; document.body.appendChild(l); l.click(); l.remove(); }
+});
+document.addEventListener("submit", e => {
+  const f = e.target.closest('[data-int-form="audit"]'); if (!f) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  AUD.f = intForm(f); AUD.loaded = false; render(false);
+}, true);
