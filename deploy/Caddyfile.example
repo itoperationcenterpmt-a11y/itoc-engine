@@ -1,28 +1,27 @@
-# Contoh Caddyfile untuk server yang sudah memakai Caddy sebagai pintu masuk bersama.
-# Satu blok per aplikasi (per nama host), jadi aplikasi lain tinggal ditambah blok baru tanpa menyentuh yang ini.
-# Aplikasi hanya perlu listen di 127.0.0.1:<port>; Caddy memegang 80/443, mengalihkan HTTP ke HTTPS, dan mengisi X-Forwarded-For/Proto.
+# Caddy berjalan sebagai container sendiri (compose terpisah) dan menjadi satu-satunya pintu 80/443 di server.
+# Caddy bergabung ke jaringan khusus tiap aplikasi, jadi aplikasi tidak perlu membuka port ke host sama sekali.
+# TERA membuat jaringan "tera-edge" saat `docker compose up`; container Caddy memanggil alias "tera-api".
 
-tera.pelindo.local {
+tera.pelindomultiterminal.co.id {
     # Pilih satu:
-    # 1) Sertifikat dari CA perusahaan (disarankan di jaringan internal):
-    tls C:/caddy/certs/tera.crt C:/caddy/certs/tera.key
-    # 2) CA internal milik Caddy (cepat untuk uji; root-nya harus dipasang di tiap klien):
+    # 1) Domain publik dan server terjangkau dari internet di port 80/443: hapus baris tls, Caddy meminta Let's Encrypt otomatis.
+    # 2) Sertifikat dari CA perusahaan (folder ./certs di-mount ke /certs pada container Caddy):
+    # tls /certs/tera.crt /certs/tera.key
+    # 3) CA internal Caddy (uji; root-nya harus dipasang di tiap klien):
     # tls internal
-    # 3) Domain publik: hapus baris tls, Caddy meminta sertifikat Let's Encrypt otomatis (butuh port 80/443 terjangkau dari internet, atau DNS challenge)
 
     encode zstd gzip
     request_body {
         max_size 50MB
     }
-    reverse_proxy 127.0.0.1:8000 {
+    reverse_proxy tera-api:8000 {
         transport http {
             response_header_timeout 900s   # sinkron manual (Panorama) bisa memakan beberapa menit
         }
     }
 }
 
-# Aplikasi berikutnya, contoh:
-# app2.pelindo.local {
-#     tls C:/caddy/certs/app2.crt C:/caddy/certs/app2.key
-#     reverse_proxy 127.0.0.1:8100
+# Aplikasi berikutnya: jaringan sendiri (mis. app2-edge) yang juga di-join Caddy, lalu blok baru:
+# app2.pelindomultiterminal.co.id {
+#     reverse_proxy app2-api:8100
 # }
