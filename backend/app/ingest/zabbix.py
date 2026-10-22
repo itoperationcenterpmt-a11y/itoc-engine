@@ -1,5 +1,5 @@
 """Zabbix 7.x lewat JSON-RPC: host group CCTV-* dan OPERASIONAL-* -> status terkini per perangkat (tabel zbx_host).
-Kredensial: API token (Admin -> Integrations, terenkripsi). Nama grup, prefix, dan nama trigger "down" semuanya parameter, bukan kode."""
+Kredensial: API token (Admin → Sumber Data → Integrasi, terenkripsi). Nama grup, prefix, dan nama trigger "down" semuanya parameter, bukan kode."""
 import re
 import time
 from datetime import datetime, timedelta
@@ -140,7 +140,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     c = src.config or {}
     token = vault.cred(db, "zabbix.token", c.get("token_env", "ZABBIX_TOKEN"))
     if not c.get("base_url") or not token:
-        raise RuntimeError("Base URL / API token Zabbix belum diatur (Admin -> Integrations)")
+        raise RuntimeError("Base URL / API token Zabbix belum diatur (Admin → Sumber Data → Integrasi)")
     prefixes = c.get("group_prefixes") or list(LABEL)
     pats = [p.lower() for p in (c.get("down_patterns") or [])]
     tz = cfg.p("tz_offset_hours", 7)

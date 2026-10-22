@@ -107,7 +107,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     c = src.config or {}
     user, pw = vault.cred(db, "pano.user", c.get("user_env", "PANO_USER")), vault.cred(db, "pano.pass", c.get("pass_env", "PANO_PASS"))
     if not c.get("base_url") or not user or not pw:
-        raise RuntimeError("Base URL / akun API Panorama belum diatur (Admin -> Integrations)")
+        raise RuntimeError("Base URL / akun API Panorama belum diatur (Admin → Sumber Data → Integrasi)")
     cur = dict(src.cursor or {})
     now = cfg.now()
     today, yesterday = now.date(), now.date() - timedelta(days=1)

@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api", tags=["dashboard"])
 
 @router.get("/public")
 def public(db: Session = Depends(get_db)):
-    """Tanpa login: hanya teks tampilan halaman login (nama, footer, kalimat, poin, keterangan lokasi). Nilainya dari parameter ui.* (Admin → Parameter)."""
+    """Tanpa login: hanya teks tampilan halaman login (nama, footer, kalimat, poin, keterangan lokasi). Nilainya dari parameter ui.* (Admin → Operasional → Target dan Parameter)."""
     c = load_config(db)
     return {"brand": c.p("ui.brand_name", ""), "brand_split": c.p("ui.brand_split", 2), "footer": c.p("ui.footer", ""), "tagline": c.p("ui.login_tagline", ""), "points": c.p("ui.login_points", []), "place": c.p("ui.login_place", ""), "eyebrow": c.p("ui.login_eyebrow", "")}
 

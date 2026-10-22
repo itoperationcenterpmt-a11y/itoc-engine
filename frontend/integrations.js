@@ -27,7 +27,7 @@ function vIntegrations() {
         ${intField(f + "_url", "Base URL", `<input id="${f}_url" data-f="base_url" type="text" autocomplete="off" placeholder="mis. 10.181.1.224 atau https://host/zabbix" value="${esc(s.base_url)}">`, true)}
         ${(s.extra || []).map(e => intField(f + "_x_" + e.key, e.label, `<textarea id="${f}_x_${e.key}" data-xlist="${esc(e.key)}" rows="3" spellcheck="false">${esc((e.value || []).join("\n"))}</textarea>`, true)).join("")}
         ${creds}
-        <div class="acts wide"><button class="btn" type="submit" data-w>Save</button><button class="btn ghost" type="button" data-int="test" data-key="${esc(s.key)}" data-w>Test connection</button><button class="btn ghost" type="button" data-int="sync" data-key="${esc(s.key)}" data-w>Sync now</button></div></form>`
+        <div class="acts wide"><button class="btn" type="submit" data-w>Simpan</button><button class="btn ghost" type="button" data-int="test" data-key="${esc(s.key)}" data-w>Uji koneksi</button><button class="btn ghost" type="button" data-int="sync" data-key="${esc(s.key)}" data-w>Sinkron sekarang</button></div></form>`
       : `<p class="sub">Sumber ini belum punya API. Data masuk lewat unggah RAW di menu Report → Data.</p>`;
     return `<article class="icard"><header><b>${esc(s.label)}</b><span class="tag ${s.enabled ? "on" : ""}">${s.enabled ? "Aktif" : "Nonaktif"}</span><span class="tag">${s.mode === "api" ? "API" : "Impor"}</span></header>
       <span class="sub">${esc(s.tip || "")}</span>
@@ -46,7 +46,7 @@ function vApiKeys(roles) {
       ${intField("k_role", "Hak akses (role) *", `<select id="k_role" data-f="role_key">${intOpt(rk, "")}</select>`)}
       ${intField("k_site", "Batasi lokasi", `<select id="k_site" data-f="site"><option value="">Semua sesuai role</option>${CFG.sites.map(x => `<option>${esc(x)}</option>`).join("")}</select>`)}
       ${intField("k_days", "Berlaku", `<select id="k_days" data-f="days">${intOpt([["", "Tanpa batas"], ["30", "30 hari"], ["90", "90 hari"], ["365", "1 tahun"]], "90")}</select>`)}
-      <div class="acts wide"><button class="btn" type="submit" data-w>Generate</button><button class="btn ghost" type="button" data-int="keyform">Cancel</button><span class="sub">Kunci hanya bisa membaca (GET) dan tidak punya akses Admin.</span></div></form>` : "";
+      <div class="acts wide"><button class="btn" type="submit" data-w>Generate</button><button class="btn ghost" type="button" data-int="keyform">Batal</button><span class="sub">Kunci hanya bisa membaca (GET) dan tidak punya akses Admin.</span></div></form>` : "";
   return intMsg() + `<div class="toolbar"><span class="sub">API key untuk sistem lain yang membaca data dashboard.</span><button class="btn" type="button" data-w data-int="keyform">+ Generate key</button></div>${nk}${form}
     <div class="mcards">${INT.apikeys.rows.map(k => `<article class="mcard ${k.revoked ? "off" : ""}"><div class="mh"><b>${esc(k.name)}</b><span class="mid">${esc(k.prefix)}…</span></div>
       <div class="mchips"><span class="mchip"><i>role</i>${esc(CFG.roles[k.role_key] ? CFG.roles[k.role_key].label : k.role_key)}</span>${k.site ? `<span class="mchip"><i>lokasi</i>${esc(k.site)}</span>` : ""}<span class="mchip"><i>dipakai</i>${esc(intDt(k.last_used_at))}</span><span class="mchip"><i>berakhir</i>${k.expires_at ? esc(intDt(k.expires_at)) : "tidak"}</span>${k.revoked ? `<span class="mchip">dicabut</span>` : ""}</div>
@@ -66,7 +66,7 @@ function vSmtp() {
       ${intField("m_pw", "Password " + (c.password_set ? "(tersimpan)" : ""), `<input id="m_pw" data-f="password" type="password" autocomplete="new-password" placeholder="${c.password_set ? "•••••••• (kosong = tidak diubah)" : ""}">`)}
       ${intField("m_from", "Alamat pengirim", `<input id="m_from" data-f="sender" type="email" placeholder="itoc@pelindo.co.id" value="${esc(c.sender)}">`)}
       ${intField("m_fn", "Nama pengirim", `<input id="m_fn" data-f="from_name" type="text" value="${esc(c.from_name)}">`)}
-      <div class="acts wide"><button class="btn" type="submit" data-w>Save</button></div></form>
+      <div class="acts wide"><button class="btn" type="submit" data-w>Simpan</button></div></form>
     <form class="form intform smtptest" data-int-form="smtptest"><div class="fld"><label for="m_to">Kirim email uji ke</label><input id="m_to" data-f="to" type="email" placeholder="nama@pelindo.co.id"></div><div class="acts"><button class="btn ghost" type="submit" data-w>Send test</button></div></form>`;
 }
 
@@ -79,11 +79,11 @@ function vWebhooks() {
       ${intField("w_url", "URL " + (e.id ? "(tersimpan, kosong = tidak diubah)" : "*"), `<input id="w_url" data-f="url" type="url" autocomplete="off" placeholder="${e.id ? esc(e.url) : "https://…"}">`, true)}
       <div class="fld wide"><span class="lbl">Kirim saat</span><div class="evs">${ev.map(([k, l]) => `<label class="chk"><input type="checkbox" data-ev="${esc(k)}" ${(e.events || []).includes(k) ? "checked" : ""}> ${esc(l)}</label>`).join("")}</div></div>
       ${intField("w_en", "Status", `<select id="w_en" data-f="enabled">${intOpt([["true", "Aktif"], ["false", "Nonaktif"]], String(e.enabled !== false))}</select>`)}
-      <div class="acts wide"><button class="btn" type="submit" data-w>Save</button><button class="btn ghost" type="button" data-int="hookform" data-id="x">Cancel</button><span class="sub">Telegram: pakai URL …/sendMessage?chat_id=ID. Teams/Slack: URL incoming webhook.</span></div></form>` : "";
-  return intMsg() + `<div class="toolbar"><span class="sub">Notifikasi otomatis ke chat atau sistem lain.</span><button class="btn" type="button" data-w data-int="hookform" data-id="new">+ Add webhook</button></div>${form}
+      <div class="acts wide"><button class="btn" type="submit" data-w>Simpan</button><button class="btn ghost" type="button" data-int="hookform" data-id="x">Batal</button><span class="sub">Telegram: pakai URL …/sendMessage?chat_id=ID. Teams/Slack: URL incoming webhook.</span></div></form>` : "";
+  return intMsg() + `<div class="toolbar"><span class="sub">Notifikasi otomatis ke chat atau sistem lain.</span><button class="btn" type="button" data-w data-int="hookform" data-id="new">+ Tambah webhook</button></div>${form}
     <div class="mcards">${W.rows.map(w => `<article class="mcard"><div class="mh"><b>${esc(w.name)}</b><span class="mid">${esc((W.kinds || {})[w.kind] || w.kind)}</span></div>
       <div class="mchips"><span class="mchip"><i>url</i>${esc(w.url)}</span>${w.events.map(k => `<span class="mchip">${esc((W.events || {})[k] || k)}</span>`).join("")}${w.enabled ? "" : `<span class="mchip">nonaktif</span>`}<span class="mchip"><i>terakhir</i>${esc(w.last_status || "belum pernah")}${w.last_at ? " · " + esc(intDt(w.last_at)) : ""}</span></div>
-      <span class="acts"><button class="btn ghost" type="button" data-w data-int="hookform" data-id="${w.id}">Edit</button><button class="btn ghost" type="button" data-w data-int="hooktest" data-id="${w.id}">Test</button><button class="btn ghost" type="button" data-w data-int="hookdel" data-id="${w.id}">Delete</button></span></article>`).join("") || `<div class="empty sm">Belum ada webhook.</div>`}</div>`;
+      <span class="acts"><button class="btn ghost" type="button" data-w data-int="hookform" data-id="${w.id}">Ubah</button><button class="btn ghost" type="button" data-w data-int="hooktest" data-id="${w.id}">Test</button><button class="btn ghost" type="button" data-w data-int="hookdel" data-id="${w.id}">Hapus</button></span></article>`).join("") || `<div class="empty sm">Belum ada webhook.</div>`}</div>`;
 }
 
 const intVal = el => el.type === "checkbox" ? el.checked : el.value;
@@ -150,7 +150,7 @@ function vAudit() {
       <label class="sub">Dari <input type="date" data-f="frm" value="${esc(f.frm)}"></label><label class="sub">Sampai <input type="date" data-f="to" value="${esc(f.to)}"></label>
       <label class="sub">Pengguna <select data-f="who"><option value="">Semua</option>${AUD.users.map(u => `<option ${u === f.who ? "selected" : ""}>${esc(u)}</option>`).join("")}</select></label>
       <input type="search" class="msearch" data-f="q" value="${esc(f.q)}" placeholder="Cari aktivitas atau pengguna" aria-label="Cari">
-      <button class="btn" type="submit">Terapkan</button><button class="btn ghost" type="button" data-int="audreset">Reset</button>
+      <button class="btn" type="submit">Terapkan</button><button class="btn ghost" type="button" data-int="audreset">Atur Ulang</button>
       <span class="mtools"><button class="btn" type="button" data-int="audexport">Ekspor CSV</button></span></form>
     <p class="sub">${fmt(AUD.total)} catatan${AUD.rows.length < AUD.total ? `, menampilkan ${fmt(AUD.rows.length)}` : ""}</p>
     ${tbl(["Waktu (WIB)", "Pengguna", "Aktivitas", "IP"], rows, {tall: true, empty: "Tidak ada catatan untuk filter ini."})}

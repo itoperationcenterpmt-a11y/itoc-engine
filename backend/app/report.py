@@ -88,7 +88,7 @@ SOC_IDS = ["soc_severity", "soc_daily_sev", "soc_action", "soc_category", "soc_c
 
 
 def _pick(cfg, section, ids, preset, charts):
-    """Pilih dan atur grafik menurut widget di database (Admin → Master data → Widget grafik): aktif, preset, judul, jenis, jumlah baris, urutan.
+    """Pilih dan atur grafik menurut widget di database (Admin → Sistem → Menu dan Widget): aktif, preset, judul, jenis, jumlah baris, urutan.
     Kode hanya menyediakan data tiap grafik (kunci widget). Tanpa widget terdaftar, semua grafik bawaan dipakai."""
     pool = {i: c for i, c in zip(ids, charts) if c and c["labels"] and any(any(v for v in s["values"]) for s in c["series"])}
     ws = [w for w in cfg.widgets if w["section"] == section]
@@ -404,7 +404,7 @@ def _xdr(db, cfg, f, preset="standar"):
 
 _BUILD = {"servicedesk": _servicedesk, "noc": _noc, "soc": _soc, "devices": _devices, "wifi": _wifi, "xdr": _xdr}
 
-# Jenis laporan (bisa diubah di Admin → Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
+# Jenis laporan (bisa diubah di Admin → Operasional → Target dan Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
     "summary": {"label": "Summary", "desc": "Ringkasan manajemen: KPI dan grafik utama semua bidang", "title": "Report ITOC : Summary", "subtitle": "Management Overview", "prefix": "Management", "sections": None, "summary": True},
     "noc": {"label": "PRTG (Link)", "desc": "Availability, downtime, link bermasalah, utilisasi", "title": "Report ITOC Network SLA & Traffic ISP", "subtitle": "Evaluasi Availability, Coverage Monitoring, Traffic", "prefix": "Network SLA", "sections": ["noc"]},

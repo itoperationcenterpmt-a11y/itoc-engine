@@ -505,7 +505,7 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
   <button class="more" id="moreBtn" type="button" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Menu</span></button>
   <div class="side-foot">
     <span id="duty"></span>
-    <div class="who"><span class="av" id="av"></span><div class="who-t"><div id="me"></div><small id="role"></small></div><div class="side-act"><button class="iconbtn" id="theme" type="button" aria-label="Ganti tema terang/gelap" title="Tema terang/gelap">◐</button><button class="iconbtn" id="logout" type="button" aria-label="Sign out" title="Sign out">⏻</button></div></div>
+    <div class="who"><span class="av" id="av"></span><div class="who-t"><div id="me"></div><small id="role"></small></div><div class="side-act"><button class="iconbtn" id="theme" type="button" aria-label="Ganti tema terang/gelap" title="Tema terang/gelap">◐</button><button class="iconbtn" id="logout" type="button" aria-label="Keluar" title="Keluar">⏻</button></div></div>
   </div>
 </aside>
 <div class="main">
@@ -520,15 +520,15 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
     <div class="fwrap" id="fwrap">
       <button class="fhead" id="fToggle" type="button" aria-expanded="false"><b><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>Filter</b><span class="sub" id="fSum"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
       <div id="fbar">
-        <div class="fg" id="gPeriode"><span class="k">Period</span><div class="seg" id="fPreset"></div><span class="dates"><input type="date" id="fFrom" aria-label="From date"> – <input type="date" id="fTo" aria-label="To date"></span></div>
+        <div class="fg" id="gPeriode"><span class="k">Periode</span><div class="seg" id="fPreset"></div><span class="dates"><input type="date" id="fFrom" aria-label="From date"> – <input type="date" id="fTo" aria-label="To date"></span></div>
         <div class="fg" id="gShift"><span class="k">Shift</span><div class="seg" id="fShift"></div></div>
-        <div class="fg" id="gSite"><span class="k">Location</span><select id="fSite" aria-label="Location"></select></div>
-        <div class="fg" id="gKind" hidden><span class="k">Category</span><div class="seg" id="fKind"></div></div>
-        <div class="fg" id="gGrp" hidden><span class="k">Group</span><select id="fGrp" aria-label="Group"></select></div>
-        <div class="fg" id="gTyp" hidden><span class="k">Type</span><select id="fTyp" aria-label="Device type"></select></div>
+        <div class="fg" id="gSite"><span class="k">Lokasi</span><select id="fSite" aria-label="Lokasi"></select></div>
+        <div class="fg" id="gKind" hidden><span class="k">Kategori</span><div class="seg" id="fKind"></div></div>
+        <div class="fg" id="gGrp" hidden><span class="k">Grup</span><select id="fGrp" aria-label="Grup"></select></div>
+        <div class="fg" id="gTyp" hidden><span class="k">Tipe</span><select id="fTyp" aria-label="Device type"></select></div>
         <div class="fg" id="gStat" hidden><span class="k">Status</span><div class="seg" id="fStat"></div></div>
-        <div class="fg" id="gCmp"><label class="chk"><input type="checkbox" id="fCmp"> Compare with previous period</label></div>
-        <button class="btn ghost" id="fReset" type="button">Reset</button><button class="btn ghost" id="layBtn" type="button" hidden>Customize</button>
+        <div class="fg" id="gCmp"><label class="chk"><input type="checkbox" id="fCmp"> Bandingkan dengan periode sebelumnya</label></div>
+        <button class="btn ghost" id="fReset" type="button">Atur Ulang</button><button class="btn ghost" id="layBtn" type="button" hidden>Atur Tampilan</button>
       </div>
       <div id="fApplies"></div>
     </div>
@@ -537,7 +537,7 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
   </div>
 </div>
 </div>
-<div id="sheet" hidden><div class="sheet-bg" data-close-sheet></div><div class="sheet-box" role="dialog" aria-label="All menu"><div class="sheet-h"><b>All menu</b><button type="button" class="iconbtn" data-close-sheet>Close</button></div><div class="sheet-g" id="sheetGrid"></div><div class="sheet-f"><button class="iconbtn" id="themeS" type="button">◐ Theme</button><button class="iconbtn" id="logoutS" type="button">Sign out</button></div></div></div>
+<div id="sheet" hidden><div class="sheet-bg" data-close-sheet></div><div class="sheet-box" role="dialog" aria-label="Semua menu"><div class="sheet-h"><b>Semua menu</b><button type="button" class="iconbtn" data-close-sheet>Tutup</button></div><div class="sheet-g" id="sheetGrid"></div><div class="sheet-f"><button class="iconbtn" id="themeS" type="button">◐ Theme</button><button class="iconbtn" id="logoutS" type="button">Keluar</button></div></div></div>
 <div id="tip" hidden></div>
 <script src="core.js"></script>
 <script src="views.js"></script>

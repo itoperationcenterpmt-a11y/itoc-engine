@@ -57,7 +57,7 @@
  {"key": "completeness.prtg_ok", "label": "Cakupan PRTG dianggap lengkap", "group": "kelengkapan", "editor": "percent", "ui": {"min": 0.5, "max": 1, "step": 0.001}, "value": 0.995},
  {"key": "completeness.prtg_warn", "label": "Cakupan PRTG minimal (di bawah = kurang)", "group": "kelengkapan", "editor": "percent", "ui": {"min": 0.5, "max": 1, "step": 0.01}, "value": 0.9},
 
- {"key": "ui.presets", "label": "Preset periode", "group": "tampilan", "editor": "json", "description": "kode: hari|kemarin|bulan|lalu|<angka hari>", "value": [["hari", "Today"], ["kemarin", "Yesterday"], ["7", "7 days"], ["30", "30 days"], ["bulan", "This month"], ["lalu", "Last month"]]},
+ {"key": "ui.presets", "label": "Preset periode", "group": "tampilan", "editor": "json", "description": "kode: hari|kemarin|bulan|lalu|<angka hari>", "value": [["hari", "Hari ini"], ["kemarin", "Kemarin"], ["7", "7 hari"], ["30", "30 hari"], ["bulan", "Bulan ini"], ["lalu", "Bulan lalu"]]},
  {"key": "ui.map_tiles", "label": "Alamat tile peta (kosong = peta dasar lokal tanpa internet)", "group": "tampilan", "editor": "text", "value": "", "description": "Contoh: https://tile.server-internal/{z}/{x}/{y}.png. Alamat harus HTTPS dan diizinkan di CSP (img-src)"},
  {"key": "ui.map_attribution", "label": "Keterangan sumber peta (hak cipta)", "group": "tampilan", "editor": "text", "value": ""},
  {"key": "ui.default_preset", "label": "Preset periode bawaan", "group": "tampilan", "editor": "text", "value": "30"},
@@ -84,7 +84,7 @@
  {"key": "wifi.history_days", "label": "Lama riwayat sesi dan tren WiFi disimpan (hari)", "group": "wifi", "editor": "number", "value": 90, "sort": 4},
  {"key": "dev.kind_labels", "label": "Label kategori perangkat (prefix host group Zabbix)", "group": "devices", "editor": "json", "value": {"CCTV": "CCTV", "OPERASIONAL": "Gate System"}, "sort": 1},
  {"key": "ui.footer", "label": "Teks footer ({year} = tahun berjalan)", "group": "tampilan", "editor": "text", "value": "© {year} Team IT Operation Center · Pelindo Multi Terminal"},
- {"key": "ui.login_tagline", "label": "Kalimat di halaman login", "group": "tampilan", "editor": "text", "value": "Pantau lebih dini, putuskan lebih cepat. Layanan TI, jaringan, dan keamanan siber seluruh terminal dalam satu layar."},
+ {"key": "ui.login_tagline", "label": "Kalimat di halaman login", "group": "tampilan", "editor": "text", "value": "Dashboard operasional IT Operation Center untuk memantau tiket, jaringan, keamanan siber, dan CCTV seluruh terminal."},
  {"key": "ui.login_points", "label": "Poin di halaman login (satu per baris)", "group": "tampilan", "editor": "list", "value": ["Ticketing dan SLA seluruh lokasi", "Availability dan traffic link ISP", "Event ancaman dan tindakan firewall", "Report Excel, PDF, dan PowerPoint"]},
  {"key": "ui.login_place", "label": "Keterangan lokasi foto di halaman login", "group": "tampilan", "editor": "text", "value": ""},
  {"key": "ui.login_eyebrow", "label": "Teks kecil di atas judul halaman login", "group": "tampilan", "editor": "text", "value": "Pelindo Multi Terminal"},
@@ -155,16 +155,16 @@
 "sla_targets": [{"name": "High SLA", "hours": 4}, {"name": "Medium SLA", "hours": 8}, {"name": "Low SLA", "hours": 24}],
 "formulas": [
  {"key": "tkIn", "label": "Tiket masuk", "source": "1_Dashboard_Service_Desk · Perhitungan", "text": "Tiket masuk = jumlah tiket dengan Created Time di dalam periode (dan shift/lokasi bila dipilih). Sheet Perhitungan, 1_Dashboard_Service_Desk."},
- {"key": "tkDone", "label": "Tingkat penyelesaian", "source": "1_Dashboard_Service_Desk · Perhitungan", "text": "Tingkat penyelesaian = (tiket masuk − tiket terbuka) ÷ tiket masuk. Terbuka = status di luar daftar status selesai (Admin → Parameter)."},
- {"key": "tkSla", "label": "% dalam target SLA", "source": "1_Dashboard_Service_Desk · Parameter A13:B17", "text": "% dalam target SLA = tiket dalam target ÷ (dalam target + melewati). Durasi = Resolved − Created − Onhold. Target per SLA Name (Admin → Target SLA). Tiket tanpa SLA tidak dinilai."},
+ {"key": "tkDone", "label": "Tingkat penyelesaian", "source": "1_Dashboard_Service_Desk · Perhitungan", "text": "Tingkat penyelesaian = (tiket masuk − tiket terbuka) ÷ tiket masuk. Terbuka = status di luar daftar status selesai (Admin → Operasional → Target dan Parameter)."},
+ {"key": "tkSla", "label": "% dalam target SLA", "source": "1_Dashboard_Service_Desk · Parameter A13:B17", "text": "% dalam target SLA = tiket dalam target ÷ (dalam target + melewati). Durasi = Resolved − Created − Onhold. Target per SLA Name (Admin → Operasional → Target dan Parameter). Tiket tanpa SLA tidak dinilai."},
  {"key": "tkMed", "label": "Median durasi", "source": "1_Dashboard_Service_Desk · Perhitungan", "text": "Median durasi penyelesaian (menit) dari tiket yang sudah selesai dengan durasi valid."},
  {"key": "av", "label": "Availability", "source": "2_Dashboard_Network_SLA · Perhitungan", "text": "Availability = Σ Up ÷ Σ (Up + Down) semua sensor dalam filter, dalam detik. Sheet Perhitungan, 2_Dashboard_Network_SLA."},
- {"key": "link", "label": "Status SLA link", "source": "2_Dashboard_Network_SLA · Parameter B9:B10", "text": "Link capai SLA bila availability ≥ target ISP (Admin → ISP, default target availability link). Data kurang bila cakupan pantau di bawah cakupan data minimal."},
+ {"key": "link", "label": "Status SLA link", "source": "2_Dashboard_Network_SLA · Parameter B9:B10", "text": "Link capai SLA bila availability ≥ target ISP (Admin → Sumber Data → Pemetaan → ISP, default target availability link). Data kurang bila cakupan pantau di bawah cakupan data minimal."},
  {"key": "down", "label": "Total downtime", "source": "2_Dashboard_Network_SLA · Perhitungan", "text": "Total downtime = Σ detik Down semua sensor ÷ 3600."},
- {"key": "util", "label": "Utilisasi", "source": "2_Dashboard_Network_SLA · Parameter B11:B12", "text": "Utilisasi puncak = Max total trafik ÷ kapasitas link. Ditandai bila melewati ambang puncak atau ambang rata-rata (Admin → Parameter)."},
+ {"key": "util", "label": "Utilisasi", "source": "2_Dashboard_Network_SLA · Parameter B11:B12", "text": "Utilisasi puncak = Max total trafik ÷ kapasitas link. Ditandai bila melewati ambang puncak atau ambang rata-rata (Admin → Operasional → Target dan Parameter)."},
  {"key": "socTot", "label": "Total event SOC", "source": "3_Dashboard_SOC · Perhitungan", "text": "Total event = Σ Count laporan SOC-Threat-Summary pada hari yang lolos validasi. Sheet Perhitungan, 3_Dashboard_SOC."},
  {"key": "socCH", "label": "Critical + High diblokir", "source": "3_Dashboard_SOC · Perhitungan", "text": "Critical + High diblokir = event critical/high dengan tindakan selain alert/allow ÷ seluruh event critical/high."},
- {"key": "socInt", "label": "Event internal", "source": "3_Dashboard_SOC · Parameter B9", "text": "Event bersumber internal = event dengan source di rentang internal (Admin → Parameter) ÷ total event."}
+ {"key": "socInt", "label": "Event internal", "source": "3_Dashboard_SOC · Parameter B9", "text": "Event bersumber internal = event dengan source di rentang internal (Admin → Operasional → Target dan Parameter) ÷ total event."}
 ],
 "data_sources": [
  {"key": "manageengine", "label": "ManageEngine", "mode": "api", "interval_min": 15, "tip": "ManageEngine ServiceDesk Plus API v3 · tiap 15 menit", "config": {

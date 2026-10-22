@@ -82,12 +82,12 @@ function applyLayout() {
   grid.querySelectorAll(".wblock").forEach(addTools);
   $("laybar").innerHTML = LAYBAR(); renderOff();
 }
-const LAYBAR = () => `<div class="laybar"><b>Customize</b><label>Apply to <select id="layRole"><option value="">All roles</option>${Object.values(CFG.roles).map(r => `<option value="${esc(r.key)}" ${r.key === S.layRole ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="layAdd">+ Add widget</button><button class="btn" type="button" id="laySave">Save</button><button class="btn ghost" type="button" id="layReset">Reset</button><button class="btn ghost" type="button" id="layCancel">Cancel</button></div><div class="layoff" id="layoff"></div><div class="laycat" id="laycat" hidden></div>`;
+const LAYBAR = () => `<div class="laybar"><b>Atur Tampilan</b><label>Terapkan ke <select id="layRole"><option value="">Semua role</option>${Object.values(CFG.roles).map(r => `<option value="${esc(r.key)}" ${r.key === S.layRole ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="layAdd">+ Tambah widget</button><button class="btn" type="button" id="laySave">Simpan</button><button class="btn ghost" type="button" id="layReset">Atur Ulang</button><button class="btn ghost" type="button" id="layCancel">Batal</button></div><div class="layoff" id="layoff"></div><div class="laycat" id="laycat" hidden></div>`;
 function addTools(blk) {
     const t = document.createElement("div"), cur = nearest(blk.dataset.size || blk.dataset.dsize); t.className = "wtools";
-    t.innerHTML = `<span class="wdrag" title="Drag to move">⠿ Move</span><button type="button" data-lay="up" title="Move up">▲</button><button type="button" data-lay="down" title="Move down">▼</button><select data-lay-size aria-label="Size">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Title" value="${esc(blk.dataset.title || "")}" aria-label="Title"><button type="button" data-lay="eye">${blk.classList.contains("off") ? "Show" : "Hide"}</button>${blk.dataset.wkey.startsWith("w-dev-map") ? `<select data-wgroup aria-label="Filter group" title="Filter group"><option value="">Semua group</option>${((V.dev && V.dev.groups) || []).map(g => `<option value="${esc(g.name)}" ${blk.dataset.wkey === "w-dev-map:" + encodeURIComponent(g.name) ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>` : ""}<button type="button" data-lay="rm" title="${blk.dataset.added ? "Remove widget" : "Remove from dashboard (can be added again)"}">Remove</button>`;
+    t.innerHTML = `<span class="wdrag" title="Seret untuk memindahkan">⠿ Pindah</span><button type="button" data-lay="up" title="Naik">▲</button><button type="button" data-lay="down" title="Turun">▼</button><select data-lay-size aria-label="Ukuran">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Judul" value="${esc(blk.dataset.title || "")}" aria-label="Judul"><button type="button" data-lay="eye">${blk.classList.contains("off") ? "Tampilkan" : "Sembunyikan"}</button>${blk.dataset.wkey.startsWith("w-dev-map") ? `<select data-wgroup aria-label="Grup filter" title="Grup filter"><option value="">Semua group</option>${((V.dev && V.dev.groups) || []).map(g => `<option value="${esc(g.name)}" ${blk.dataset.wkey === "w-dev-map:" + encodeURIComponent(g.name) ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>` : ""}<button type="button" data-lay="rm" title="${blk.dataset.added ? "Remove widget" : "Remove from dashboard (can be added again)"}">Remove</button>`;
     blk.appendChild(t);
-    const rz = document.createElement("span"); rz.className = "wresize"; rz.title = "Drag sideways to resize"; blk.appendChild(rz);
+    const rz = document.createElement("span"); rz.className = "wresize"; rz.title = "Seret ke samping untuk mengubah ukuran"; blk.appendChild(rz);
 }
 function toggleCatalog() { const c = $("laycat"); if (!c) return; c.hidden = !c.hidden; if (!c.hidden) c.innerHTML = catalogHtml(); }
 function addWidget(key) {
@@ -102,7 +102,7 @@ function renderOff() {
 }
 function moveBlock(b, dir) {
   const blk = b.closest(".wblock");
-  if (dir === "eye") { const off = blk.classList.toggle("off"); b.textContent = off ? "Show" : "Hide"; renderOff(); }
+  if (dir === "eye") { const off = blk.classList.toggle("off"); b.textContent = off ? "Tampilkan" : "Sembunyikan"; renderOff(); }
   else if (dir === "rm") { if (blk.dataset.added) blk.remove(); else { blk.classList.add("off"); blk.dataset.gone = "1"; } const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); renderOff(); }
   else if (dir === "up" && blk.previousElementSibling) blk.parentNode.insertBefore(blk, blk.previousElementSibling);
   else if (dir === "down" && blk.nextElementSibling) blk.parentNode.insertBefore(blk.nextElementSibling, blk);
@@ -136,7 +136,7 @@ async function saveLayout() {
   set({layEdit: false});
 }
 async function resetLayout() {
-  if (!confirm("Reset this page layout to default?")) return;
+  if (!confirm("Kembalikan tata letak halaman ini ke bawaan?")) return;
   await api("/api/admin/layout/" + S.tab + "?role=" + encodeURIComponent(S.layRole), {method: "DELETE"});
   CFG.layouts = (CFG.layouts || []).filter(x => !(x.page === S.tab && x.role === S.layRole));
   set({layEdit: false});
@@ -163,7 +163,7 @@ function paramForm() {
   if (!S.params) { loadParams(); return `<div class="empty sm">Memuat parameter…</div>`; }
   const groups = [...new Set(S.params.map(p => p.group))];
   return `<form id="pF" class="form">${groups.map(g => `<div class="fld wide pgh"><span class="lbl">${esc(g)}</span></div>` + S.params.filter(p => p.group === g).map(paramField).join("")).join("")}
-    <div class="acts wide"><button class="btn" type="submit">Save Parameters</button><span class="sub">Hanya nilai yang berubah yang dikirim. Semua halaman dihitung ulang dan perubahan tercatat di audit log.</span><span class="msg ok" id="pMsg">${esc(S.msg)}</span></div></form>`;
+    <div class="acts wide"><button class="btn" type="submit">Simpan Parameter</button><span class="sub">Hanya nilai yang berubah yang dikirim. Semua halaman dihitung ulang dan perubahan tercatat di audit log.</span><span class="msg ok" id="pMsg">${esc(S.msg)}</span></div></form>`;
 }
 function readParam(el) {
   const ed = el.dataset.ed, v = el.value;
@@ -220,8 +220,8 @@ document.addEventListener("click", async e => {
     else if (b.id === "layAdd") toggleCatalog();
     else if (d.wadd) { const sel = b.closest(".catw").querySelector("[data-wparam]"); addWidget(sel && sel.value ? d.wadd + ":" + encodeURIComponent(sel.value) : d.wadd); }
     else if (b.id === "layCancel") set({layEdit: false});
-    else if (d.layShow) { const blk = document.querySelector(`.grid.lay > .wblock[data-wkey="${CSS.escape(d.layShow)}"]`); if (blk) { blk.classList.remove("off"); delete blk.dataset.gone; const eye = blk.querySelector('[data-lay="eye"]'); if (eye) eye.textContent = "Hide"; renderOff(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); } }
-    else if (d.layHide) { const blk = document.querySelector(`.grid.lay > .wblock[data-wkey="${CSS.escape(d.layHide)}"]`); if (blk) { blk.classList.add("off"); const eye = blk.querySelector('[data-lay="eye"]'); if (eye) eye.textContent = "Show"; renderOff(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); } }
+    else if (d.layShow) { const blk = document.querySelector(`.grid.lay > .wblock[data-wkey="${CSS.escape(d.layShow)}"]`); if (blk) { blk.classList.remove("off"); delete blk.dataset.gone; const eye = blk.querySelector('[data-lay="eye"]'); if (eye) eye.textContent = "Sembunyikan"; renderOff(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); } }
+    else if (d.layHide) { const blk = document.querySelector(`.grid.lay > .wblock[data-wkey="${CSS.escape(d.layHide)}"]`); if (blk) { blk.classList.add("off"); const eye = blk.querySelector('[data-lay="eye"]'); if (eye) eye.textContent = "Tampilkan"; renderOff(); const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); } }
     else if (d.wkill) await wifiKill(d.wkill, d.mode);
     else if (d.lay) moveBlock(b, d.lay);
     else if (b.id === "moreBtn") { openSheet(true); }
@@ -348,12 +348,12 @@ setInterval(() => { if (!CFG || $("app").hidden || document.hidden) return; rend
 function showLogin(msg, change) {
   $("app").hidden = true; $("login").hidden = false;
   const form = change
-    ? `<form id="pwF" class="loginbox"><div class="brand"><span class="mk"><img src="assets/logo.png" alt=""></span><h1>Change password</h1></div><span class="sub">Password awal wajib diganti sebelum memakai dashboard.</span>
+    ? `<form id="pwF" class="loginbox"><div class="brand"><span class="mk"><img src="assets/logo.png" alt=""></span><h1>Ganti Password</h1></div><span class="sub">Password awal wajib diganti sebelum memakai dashboard.</span>
       <div class="fld"><label for="oP">Current password</label><input type="password" id="oP" autocomplete="current-password"></div><div class="fld"><label for="nP">New password</label><input type="password" id="nP" autocomplete="new-password"></div><div class="fld"><label for="nP2">Repeat new password</label><input type="password" id="nP2" autocomplete="new-password"></div>
-      <button class="btn" type="submit">Save</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`
-    : `<form id="loginF" class="loginbox"><div class="lhead"><h1>Sign in</h1></div>
+      <button class="btn" type="submit">Simpan</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`
+    : `<form id="loginF" class="loginbox"><div class="lhead"><h1>Masuk</h1></div>
       <div class="fld"><label for="lU">Username</label><input type="text" id="lU" autocomplete="username"></div><div class="fld"><label for="lP">Password</label><input type="password" id="lP" autocomplete="current-password"></div>
-      <button class="btn" type="submit">Sign in</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`;
+      <button class="btn" type="submit">Masuk</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`;
       $("login").innerHTML = `<div class="lg"><div class="lg-bg"></div><div class="lg-wrap">
     <section class="lg-card lg-info"><button type="button" class="lg-theme" id="themeL" aria-label="Ganti tema terang/gelap">◐</button>
       ${LOGIN.eyebrow ? `<span class="lg-eyebrow">${esc(LOGIN.eyebrow)}</span>` : ""}<h2>${brandHtml()}</h2>${LOGIN.tagline ? `<p>${esc(LOGIN.tagline)}</p>` : ""}

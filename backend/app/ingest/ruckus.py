@@ -1,5 +1,5 @@
 """Ruckus SmartZone (vSZ) lewat Public REST API: client WiFi yang sedang terhubung -> tabel wifi_client.
-Login memakai akun API khusus (Admin -> Integrations, terenkripsi). Versi API dideteksi dari apiInfo; bentuk field dipetakan longgar karena beda versi."""
+Login memakai akun API khusus (Admin → Sumber Data → Integrasi, terenkripsi). Versi API dideteksi dari apiInfo; bentuk field dipetakan longgar karena beda versi."""
 import re
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
@@ -121,7 +121,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     c = src.config or {}
     user, pw = vault.cred(db, "vsz.user", c.get("user_env", "VSZ_USER")), vault.cred(db, "vsz.pass", c.get("pass_env", "VSZ_PASS"))
     if not c.get("base_url") or not user or not pw:
-        raise RuntimeError("Base URL / akun vSZ belum diatur (Admin -> Integrations)")
+        raise RuntimeError("Base URL / akun vSZ belum diatur (Admin → Sumber Data → Integrasi)")
     rt, tz = root(c["base_url"]), cfg.p("tz_offset_hours", 7)
     with httpx.Client(timeout=c.get("timeout_s", 60), verify=c.get("verify_tls", True)) as cl:
         ver, ticket = login(cl, rt, user, pw)

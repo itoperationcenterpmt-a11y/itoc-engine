@@ -1,5 +1,5 @@
 """Milestone XProtect lewat RESTful API (API Gateway) dengan login OAuth2 dari IDP bawaan Milestone.
-Kredensial: akun Basic user (hanya baca), disimpan terenkripsi di Admin -> Integrations. Base URL = alamat server, mis. https://10.181.3.1"""
+Kredensial: akun Basic user (hanya baca), disimpan terenkripsi di Admin → Sumber Data → Integrasi. Base URL = alamat server, mis. https://10.181.3.1"""
 import re
 from datetime import datetime, timedelta
 import httpx
@@ -123,7 +123,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     user, pw = vault.cred(db, "ms.user", c.get("user_env", "MS_USER")), vault.cred(db, "ms.pass", c.get("pass_env", "MS_PASS"))
     srv = servers(c)
     if not srv or not user or not pw:
-        raise RuntimeError("Daftar server / akun Milestone belum diatur (Admin -> Integrations)")
+        raise RuntimeError("Daftar server / akun Milestone belum diatur (Admin → Sumber Data → Integrasi)")
     tz, total, parts, fails = cfg.p("tz_offset_hours", 7), 0, [], []
     for name, url in srv:
         try:

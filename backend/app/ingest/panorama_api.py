@@ -1,5 +1,5 @@
 """Panorama (PAN-OS XML API): uji koneksi dan pengambilan custom report. Tahap ini hanya untuk Test; sinkron otomatis menyusul setelah bentuk hasil report terkonfirmasi.
-Login memakai akun API khusus (Admin -> Integrations, terenkripsi): key dibuat lewat keygen setiap kali dipakai, tidak disimpan."""
+Login memakai akun API khusus (Admin → Sumber Data → Integrasi, terenkripsi): key dibuat lewat keygen setiap kali dipakai, tidak disimpan."""
 import re
 import time
 import xml.etree.ElementTree as ET

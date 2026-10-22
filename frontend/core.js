@@ -37,7 +37,7 @@ function applyConfig(c) {
   TABS = c.modules.map(m => [m.key, m.label, m.badge]);
   APPLY = Object.fromEntries(c.modules.map(m => [m.key, Object.assign({p: 0, s: 0, l: 0, c: 0}, m.filters, {note: m.note, why: m.why})]));
   PRESETS = P["ui.presets"];
-  SN = ["All", ...c.shifts.map(s => s.name)]; SC = ["", ...c.shifts.map(s => s.code)]; NS = c.shifts.length;
+  SN = ["Semua", ...c.shifts.map(s => s.name)]; SC = ["", ...c.shifts.map(s => s.code)]; NS = c.shifts.length;
   OFFC = (c.rotation || {}).off_code || "O"; CODES = [...c.shifts.map(s => s.code), OFFC]; OFF = NS;
   TEAMS = c.teams.map(t => t.code);
   ROLES = Object.fromEntries(Object.values(c.roles).map(r => [r.key, r.label]));
@@ -50,7 +50,7 @@ const shiftOf = h => { const L = SHIFTS(); let cur = L[L.length - 1]; for (const
 const shiftHours = i => { const L = SHIFTS(), k = L.findIndex(s => s.no === i); return k < 0 ? "" : pad(L[k].start) + ".00–" + pad(L[(k + 1) % L.length].start) + ".00"; };
 const nowMs = () => Date.now() + (CFG ? CFG.params.tz_offset_hours : 7) * 36e5;
 function nowShift() { const j = nowMs(), h = new Date(j).getUTCHours(); return {date: iso(j - SHIFTS()[0].start * 36e5), today: iso(j), shift: shiftOf(h), clock: hm(j)}; }
-/* indeks kode shift (0..NS-1) atau OFF, menurut pola rotasi di Admin → Parameter → rotation */
+/* indeks kode shift (0..NS-1) atau OFF, menurut pola rotasi di Admin → Operasional → Target dan Parameter → rotation */
 function codeOf(g, date) {
   const R = CFG.rotation || {}, t = CFG.teams.find(x => x.code === String(g)); if (!R.pattern || !t) return OFF;
   const diff = Math.round((dayMs(date) - dayMs(R.anchor)) / 864e5) + (t.offset || 0) * (R.team_step || 0), L = R.pattern.length;
@@ -59,7 +59,7 @@ function codeOf(g, date) {
 const teamOn = (date, shift) => TEAMS.find(g => codeOf(g, date) === shift - 1) || "–";
 const crew = g => CFG.people.filter(p => p.team_code === String(g)).sort((a, b) => b.is_coordinator - a.is_coordinator);
 const prTone = v => ((CFG.params["ho.priorities"] || []).find(x => x.value === v) || {}).tone || "low";
-const roleAccess = k => { const r = CFG.roles[k]; if (!r) return "–"; return r.modules.includes("*") ? "All" : r.modules.map(m => (MODS[m] || {label: m}).label).join(", "); };
+const roleAccess = k => { const r = CFG.roles[k]; if (!r) return "–"; return r.modules.includes("*") ? "Semua" : r.modules.map(m => (MODS[m] || {label: m}).label).join(", "); };
 
 /* ---------- state + filter seragam ---------- */
 const S = {tab: "", pers: "", rkind: "", rpreset: "standar", layEdit: false, layRole: "", preset: "", from: "", to: "", sf: 0, site: "", kind: "", dstat: "", grp: "", dtype: "", cmp: false, dim: "kategori", sdim: "type", stop: "", sensor: "", hoSt: "open", adm: "pengguna", hoForm: false, closing: null, msg: "", addUser: false, params: null, mkey: "", mdata: null, medit: null};

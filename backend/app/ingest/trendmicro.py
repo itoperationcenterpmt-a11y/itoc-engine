@@ -1,5 +1,5 @@
 """Trend Micro Vision One (XDR) lewat REST API v3: alert Workbench -> tabel xdr_alert (disimpan di database dashboard, tidak dibaca langsung saat halaman dibuka).
-Kredensial: API key (Authorization: Bearer), disimpan terenkripsi di Admin -> Integrations. Base URL = alamat regional Vision One."""
+Kredensial: API key (Authorization: Bearer), disimpan terenkripsi di Admin → Sumber Data → Integrasi. Base URL = alamat regional Vision One."""
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -94,7 +94,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     c = src.config or {}
     token = vault.cred(db, "tm.token", c.get("token_env", "TMV1_TOKEN"))
     if not c.get("base_url") or not token:
-        raise RuntimeError("Base URL / API key Trend Micro belum diatur (Admin -> Integrations)")
+        raise RuntimeError("Base URL / API key Trend Micro belum diatur (Admin → Sumber Data → Integrasi)")
     tz, cur = cfg.p("tz_offset_hours", 7), dict(src.cursor or {})
     now = datetime.now(timezone.utc)
     since = datetime.fromisoformat(cur["last_update"]) if cur.get("last_update") else now - timedelta(days=min(int(c.get("backfill_days", 30)), 365))

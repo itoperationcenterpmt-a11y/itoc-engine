@@ -1,4 +1,4 @@
-"""Notifikasi webhook. Tujuan, jenis, dan peristiwa diatur di Admin -> Webhooks. Kegagalan hanya dicatat, tidak mengganggu proses utama."""
+"""Notifikasi webhook. Tujuan, jenis, dan peristiwa diatur di Admin → Notifikasi → Webhook. Kegagalan hanya dicatat, tidak mengganggu proses utama."""
 import logging
 import threading
 from datetime import datetime

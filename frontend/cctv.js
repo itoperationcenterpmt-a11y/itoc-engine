@@ -13,7 +13,7 @@ function cctvPanels(C) {
 function vCctv() {
   const C = V.cctv, grid = h => `<div class="grid">${h}</div>`;
   if (!C) return grid(`<section class="panel c12">${empty()}</section>`);
-  if (!C.configured || !C.total) return grid(panel("c12", "CCTV", "", `<div class="empty"><b>Belum ada data CCTV</b><span>${C.error ? "Sinkron terakhir gagal: " + esc(C.error) : "Isi akun Basic user Milestone di Admin → Integrations → Milestone XProtect (CCTV), aktifkan, lalu klik Sync now."}</span></div>`));
+  if (!C.configured || !C.total) return grid(panel("c12", "CCTV", "", `<div class="empty"><b>Belum ada data CCTV</b><span>${C.error ? "Sinkron terakhir gagal: " + esc(C.error) : "Isi akun Basic user Milestone di Admin → Sumber Data → Integrasi → Milestone XProtect (CCTV), aktifkan, lalu klik Sinkron sekarang."}</span></div>`));
   const warns = [], off = C.total - C.camEnabled, norec = C.camEnabled - C.recording;
   if (C.error) warns.push(`<li class="crit"><span><b>Sinkron Milestone gagal:</b> ${esc(C.error)}</span></li>`);
   else if (C.stale) warns.push(`<li class="warn"><span><b>Data belum diperbarui</b> sejak ${esc(dtime(C.updated))}. Cek konektor Milestone.</span></li>`);
@@ -23,5 +23,5 @@ function vCctv() {
   const rows = C.list.map(x => [x.server, x.name, x.hw, x.ip || "-", x.ch == null ? "-" : x.ch, {h: x.enabled ? pill("good", "Aktif") : pill("idle", "Nonaktif")}, {h: x.rec ? pill("good", "Ya") : pill("idle", "Tidak")}, x.fps || "-", x.mod ? dtime(x.mod) : "-"]);
   return (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
     (C.servers.length > 1 ? P.srv() : "") + P.hw() + P.rec() +
-    panel("c12", "Camera List", C.total + " kamera", `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari server, nama kamera, hardware, atau IP" aria-label="Cari kamera"><span class="sub">Data konfigurasi Milestone; status online per perangkat ada di menu Devices</span></div><div id="dlist">${tbl(["Server", "Kamera", "Hardware", "IP", "Ch", "Status", "Rekam di Pusat", "FPS", "Diubah"], rows, {tall: true, empty: "Belum ada kamera."})}</div>`));
+    panel("c12", "Daftar Kamera", C.total + " kamera", `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari server, nama kamera, hardware, atau IP" aria-label="Cari kamera"><span class="sub">Data konfigurasi Milestone; status online per perangkat ada di menu Devices</span></div><div id="dlist">${tbl(["Server", "Kamera", "Hardware", "IP", "Ch", "Status", "Rekam di Pusat", "FPS", "Diubah"], rows, {tall: true, empty: "Belum ada kamera."})}</div>`));
 }

@@ -27,7 +27,7 @@ const basemapPath = (B, X, Y) => (BASEMAP || []).filter(r => r.some(([lo, la]) =
 /* Peta lokasi perangkat memakai Leaflet + OpenStreetMap. Markup hanya menyiapkan wadah; peta dibuat oleh initDevMaps() setelah halaman dirender. */
 const DMAPS = {};
 function mapSvg(D) {
-  if (!D.map.length) return empty("Belum ada lokasi berkoordinat. Isi lat dan lon di Admin → Master Data → Lokasi.");
+  if (!D.map.length) return empty("Belum ada lokasi berkoordinat. Isi lat dan lon di Admin → Sumber Data → Pemetaan → Lokasi.");
   const id = "dmap" + Object.keys(DMAPS).length + "x" + Math.random().toString(36).slice(2, 8);
   DMAPS[id] = D.map;
   return `<div class="dmapbox" id="${id}" role="img" aria-label="Peta lokasi perangkat"></div>` + (D.noCoord.length ? `<span class="sub">Belum punya koordinat: ${esc(D.noCoord.slice(0, 8).join(", "))}${D.noCoord.length > 8 ? ", …" : ""}</span>` : "");
@@ -82,25 +82,25 @@ function vDevices() {
   const D = V.dev, grid = h => `<div class="grid">${h}</div>`;
   if (!D) return grid(`<section class="panel c12">${empty()}</section>`);
   const A = D.all;
-  if (!D.configured || !(A.total || D.byKind.length)) return grid(panel("c12", "Devices", "", `<div class="empty"><b>Belum ada data perangkat</b><span>${D.error ? "Sinkron terakhir gagal: " + esc(D.error) : "Isi URL dan token Zabbix di Admin → Integrations → Zabbix, aktifkan, lalu klik Sync now."}</span></div>`));
+  if (!D.configured || !(A.total || D.byKind.length)) return grid(panel("c12", "Devices", "", `<div class="empty"><b>Belum ada data perangkat</b><span>${D.error ? "Sinkron terakhir gagal: " + esc(D.error) : "Isi URL dan token Zabbix di Admin → Sumber Data → Integrasi → Zabbix, aktifkan, lalu klik Sinkron sekarang."}</span></div>`));
   const warns = [];
   if (D.error) warns.push(`<li class="crit"><span><b>Sinkron Zabbix gagal:</b> ${esc(D.error)}</span></li>`);
   else if (D.stale) warns.push(`<li class="warn"><span><b>Data belum diperbarui</b> sejak ${esc(dtime(D.updated))}. Cek konektor Zabbix.</span></li>`);
-  if (D.unmapped.length) warns.push(`<li class="warn"><span><b>${D.unmapped.length} kode lokasi Zabbix belum dipetakan</b> (${esc(D.unmapped.slice(0, 6).map(u => u.code + " " + u.n).join(", "))}${D.unmapped.length > 6 ? ", …" : ""}). Isi lokasinya di Admin → Master Data → Zabbix: kode ke lokasi.</span></li>`);
+  if (D.unmapped.length) warns.push(`<li class="warn"><span><b>${D.unmapped.length} kode lokasi Zabbix belum dipetakan</b> (${esc(D.unmapped.slice(0, 6).map(u => u.code + " " + u.n).join(", "))}${D.unmapped.length > 6 ? ", …" : ""}). Isi lokasinya di Admin → Sumber Data → Pemetaan → Kode Lokasi Zabbix.</span></li>`);
   const oldest = D.down.find(x => x.ageH != null);
-  const kp = `<div class="kpis k6">${kpi("Devices", fmt(A.total), "dipantau dari Zabbix")}${kpi("Online", fmt(A.up), A.avail != null ? pc(A.avail, 1) + " dari yang aktif" : "")}${kpi("Down", fmt(A.down), oldest ? "tertua " + durTxt(oldest.ageH) + " · " + fmt(D.chronic) + " lebih dari " + D.chronicDays + " hari" : "tidak ada", {cls: A.down ? "warnv" : ""})}${kpi("Availability Now", A.avail != null ? pc(A.avail, 2) : "-", "online ÷ (online + down)")}${kpi("Interface Issue", fmt(A.deg || 0), "ping normal, SNMP/agent tidak tersedia")}${kpi("Maintenance", fmt(A.maint), "nonaktif di Zabbix: " + fmt(A.off))}</div>`;
+  const kp = `<div class="kpis k6">${kpi("Devices", fmt(A.total), "dipantau dari Zabbix")}${kpi("Online", fmt(A.up), A.avail != null ? pc(A.avail, 1) + " dari yang aktif" : "")}${kpi("Down", fmt(A.down), oldest ? "tertua " + durTxt(oldest.ageH) + " · " + fmt(D.chronic) + " lebih dari " + D.chronicDays + " hari" : "tidak ada", {cls: A.down ? "warnv" : ""})}${kpi("Availability Now", A.avail != null ? pc(A.avail, 2) : "-", "online ÷ (online + down)")}${kpi("Masalah Interface", fmt(A.deg || 0), "ping normal, SNMP/agent tidak tersedia")}${kpi("Maintenance", fmt(A.maint), "nonaktif di Zabbix: " + fmt(A.off))}</div>`;
   const kinds = D.byKind.map(r => `<div class="strow"><b>${esc(r.k)}</b>${stBar(r)}<span class="num">${fmt(r.up)} / ${fmt(r.total)} · <span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span></span></div>`).join("");
   const locs = D.byLoc.map(r => [r.k, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, r.deg || 0, r.maint, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}, {h: stBar(r)}]);
   const downByLoc = D.byLoc.filter(r => r.down).slice(0, 12).map(r => [r.k, r.down, 0, r.down + " / " + r.total]);
   const rows = D.list.map(x => [x.name, x.typeLabel, x.loc, {h: devPill(x.status)}, x.since ? dtime(x.since) : "-", {h: `<span class="${x.ageH != null && x.ageH > 24 ? "crit-t" : ""}">${durTxt(x.ageH)}</span>`}, x.problem]);
   return (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
     panel("c7", "Site Map", D.map.length + " lokasi", mapLegend() + mapSvg(D)) +
-    panel("c5", "Status by Category", "Pembaruan " + dtime(D.updated), devLegend() + kinds) +
-    panel("c4", "Down Duration", D.downN + " perangkat down", hbars(D.ageDist.map(x => [x.k, x.n, 0, fmt(x.n)]))) +
-    panel("c8", "Down by Location", "perangkat down / total", hbars(downByLoc)) +
-    panel("c12", "By Device Type", D.byType.length + " tipe", tbl(["Tipe", "Kode", "Perangkat", "Down", "Interface", "Availability", "Status"], D.byType.map(r => [r.k, r.code === "-" ? "-" : r.code, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, r.deg || 0, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}, {h: stBar(r)}]), {r: [2, 3, 4, 5], tall: true, empty: "Belum ada data."})) +
-    panel("c12", "Per Location", D.byLoc.length + " lokasi", tbl(["Lokasi", "Perangkat", "Down", "Interface", "Maintenance", "Availability", "Status"], locs, {r: [1, 2, 3, 4, 5], tall: true, empty: "Belum ada data."})) +
-    panel("c12", "Device List", D.listN + " perangkat" + (D.listN > D.list.length ? ", menampilkan " + D.list.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari nama, lokasi, atau masalah" aria-label="Cari perangkat"><span class="sub">Filter lokasi, kategori, dan status di bar filter atas</span></div><div id="dlist">${tbl(["Perangkat", "Tipe", "Lokasi", "Status", "Down sejak", "Lama", "Masalah"], rows, {tall: true, empty: "Tidak ada perangkat untuk filter ini."})}</div>`)) + (D.hist ? grid(devHist(D.hist)) : "");
+    panel("c5", "Status menurut Kategori", "Pembaruan " + dtime(D.updated), devLegend() + kinds) +
+    panel("c4", "Lama Down", D.downN + " perangkat down", hbars(D.ageDist.map(x => [x.k, x.n, 0, fmt(x.n)]))) +
+    panel("c8", "Down per Lokasi", "perangkat down / total", hbars(downByLoc)) +
+    panel("c12", "Menurut Tipe Perangkat", D.byType.length + " tipe", tbl(["Tipe", "Kode", "Perangkat", "Down", "Interface", "Availability", "Status"], D.byType.map(r => [r.k, r.code === "-" ? "-" : r.code, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, r.deg || 0, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}, {h: stBar(r)}]), {r: [2, 3, 4, 5], tall: true, empty: "Belum ada data."})) +
+    panel("c12", "Per Lokasi", D.byLoc.length + " lokasi", tbl(["Lokasi", "Perangkat", "Down", "Interface", "Maintenance", "Availability", "Status"], locs, {r: [1, 2, 3, 4, 5], tall: true, empty: "Belum ada data."})) +
+    panel("c12", "Daftar Perangkat", D.listN + " perangkat" + (D.listN > D.list.length ? ", menampilkan " + D.list.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Cari nama, lokasi, atau masalah" aria-label="Cari perangkat"><span class="sub">Filter lokasi, kategori, dan status di bar filter atas</span></div><div id="dlist">${tbl(["Perangkat", "Tipe", "Lokasi", "Status", "Down sejak", "Lama", "Masalah"], rows, {tall: true, empty: "Tidak ada perangkat untuk filter ini."})}</div>`)) + (D.hist ? grid(devHist(D.hist)) : "");
 }
 /* Garis pantai dasar untuk peta (Natural Earth, domain publik), dimuat sekali dari file lokal. */
 let LAND = null;

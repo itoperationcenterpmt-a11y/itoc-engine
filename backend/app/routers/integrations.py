@@ -1,4 +1,4 @@
-"""Admin -> Integrations, API Keys, Email (SMTP), Webhooks. Rahasia disimpan terenkripsi (app/vault.py) dan tidak pernah dikirim balik."""
+"""Admin → Sumber Data → Integrasi, API Keys, Email (SMTP), Webhooks. Rahasia disimpan terenkripsi (app/vault.py) dan tidak pernah dikirim balik."""
 import hashlib
 import secrets
 from datetime import datetime, timedelta

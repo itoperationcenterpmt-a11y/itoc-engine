@@ -3,7 +3,7 @@
 const ADM = [
   ["akses", "Akses", [["pengguna", "Pengguna"], ["roles", "Role"], ["apikeys", "Kunci API"]]],
   ["sumber", "Sumber Data", [["integrasi", "Integrasi"], ["pemetaan", "Pemetaan"], ["dilengkapi", "Perlu Dilengkapi"]]],
-  ["operasional", "Operasional", [["personel", "Personel"], ["tim", "Tim dan Shift"], ["parameter", "Target dan Parameter"], ["rumus", "Rumus"]]],
+  ["operasional", "Operasional", [["personel", "Personnel"], ["tim", "Tim dan Shift"], ["parameter", "Target dan Parameter"], ["rumus", "Rumus"]]],
   ["notifikasi", "Notifikasi", [["smtp", "Email"], ["webhooks", "Webhook"]]],
   ["sistem", "Sistem", [["audit", "Audit Log"], ["status", "Status Sumber"], ["menu", "Menu dan Widget"]]]
 ];

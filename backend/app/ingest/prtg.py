@@ -32,7 +32,7 @@ def _dt(v: str) -> datetime | None:
 
 
 def discover(cl: httpx.Client, db: Session, c: dict, auth: dict) -> int:
-    """Daftar sensor dari PRTG (berdasarkan tag). Kapasitas tetap diisi di Admin → Sensor & kapasitas."""
+    """Daftar sensor dari PRTG (berdasarkan tag). Kapasitas tetap diisi di Admin → Sumber Data → Pemetaan → Sensor dan Kapasitas."""
     if not c.get("sensor_tag"):
         return 0
     r = cl.get("/api/table.json", params={"content": "sensors", "columns": "objid,sensor,device", "filter_tags": c["sensor_tag"], "count": 5000, **auth})
