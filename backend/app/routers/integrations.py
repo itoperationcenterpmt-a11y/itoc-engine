@@ -29,7 +29,7 @@ CREDS = {
               ("vsz.kill_user", "Username akun putus-sesi (opsional, role dengan hak disconnect)", "kill_user_env", "VSZ_KILL_USER"), ("vsz.kill_pass", "Password akun putus-sesi", "kill_pass_env", "VSZ_KILL_PASS")],
 }
 # isian daftar tambahan per konektor (disimpan di config sumber data): (kunci, label)
-EXTRA = {"panorama": [("test_reports", "Nama report Panorama untuk uji (satu per baris, persis seperti di Monitor > Manage Custom Reports)")], "zabbix": [("group_prefixes", "Prefix host group (satu per baris)"), ("down_patterns", "Nama trigger yang berarti perangkat down (satu per baris, cocok sebagian)")]}
+EXTRA = {"milestone": [("servers", "Server Milestone (satu per baris, format Nama|alamat, mis. Belawan|https://10.181.3.1). Akun Basic user yang sama dipakai di semua server")], "panorama": [("test_reports", "Nama report Panorama untuk uji (satu per baris, persis seperti di Monitor > Manage Custom Reports)")], "zabbix": [("group_prefixes", "Prefix host group (satu per baris)"), ("down_patterns", "Nama trigger yang berarti perangkat down (satu per baris, cocok sebagian)")]}
 
 
 def _cred_state(db: Session, src: DataSource):
@@ -97,6 +97,12 @@ def integration_set(key: str, body: IntegrationIn, db: Session = Depends(get_db)
     for k, vals in body.config_lists.items():
         if k in {e[0] for e in EXTRA.get(key, [])}:
             cfg[k] = [x.strip() for x in vals if x.strip()]
+            if key == "milestone" and k == "servers":
+                for ln in cfg[k]:
+                    try:
+                        check_url(ln.partition("|")[2].strip() or ln, "Alamat server Milestone")
+                    except ValueError as e:
+                        raise HTTPException(422, str(e))
     s.config = cfg
     allowed = {c[0] for c in CREDS.get(key, [])}
     for name, val in body.secrets.items():
@@ -117,7 +123,7 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
     if not s or key not in CREDS:
         raise HTTPException(404, "Sumber ini tidak punya koneksi API")
     c = s.config or {}
-    if not c.get("base_url"):
+    if not c.get("base_url") and not (key == "milestone" and c.get("servers")):
         raise HTTPException(422, "Base URL belum diisi")
     try:
         if key == "zabbix":
@@ -192,10 +198,19 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
             u, pw = vault.cred(db, "ms.user", c.get("user_env", "MS_USER")), vault.cred(db, "ms.pass", c.get("pass_env", "MS_PASS"))
             if not u or not pw:
                 raise HTTPException(422, "Username/password Milestone belum diisi")
-            with httpx.Client(timeout=30, verify=c.get("verify_tls", False), follow_redirects=False) as cl:
-                tk = milestone.login(cl, c["base_url"], u, pw)
-                out = milestone.probe(cl, c["base_url"], tk)
-            return {"ok": True, "msg": "Login Milestone berhasil. " + " ".join(out)}
+            out, good = [], 0
+            for nm, url in milestone.servers(c):
+                try:
+                    with httpx.Client(timeout=30, verify=c.get("verify_tls", False), follow_redirects=False) as cl:
+                        tk = milestone.login(cl, url, u, pw)
+                        r = milestone.probe(cl, url, tk)
+                    good += 1
+                    out.append(f"[{nm}] login OK. " + " ".join(r[:4]))
+                except (RuntimeError, httpx.HTTPError) as e:
+                    out.append(f"[{nm}] GAGAL: {str(e)[:120]}.")
+            if not good:
+                raise HTTPException(502, " ".join(out))
+            return {"ok": True, "msg": f"{good} dari {len(out)} server Milestone terhubung. " + " ".join(out)}
         if key == "ruckus":
             u, pw = vault.cred(db, "vsz.user", c.get("user_env", "VSZ_USER")), vault.cred(db, "vsz.pass", c.get("pass_env", "VSZ_PASS"))
             if not u or not pw:

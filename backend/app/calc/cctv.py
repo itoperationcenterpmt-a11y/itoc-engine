@@ -6,7 +6,7 @@ from ..timeutil import ms
 
 
 def build(db, cfg) -> dict:
-    cams = db.query(CctvCamera).order_by(CctvCamera.hardware, CctvCamera.channel, CctvCamera.name).all()
+    cams = db.query(CctvCamera).order_by(CctvCamera.server, CctvCamera.hardware, CctvCamera.channel, CctvCamera.name).all()
     hws = db.query(CctvHardware).order_by(CctvHardware.cameras.desc(), CctvHardware.name).all()
     src = db.get(DataSource, "milestone")
     last = max((c.fetched_at for c in cams), default=None)
@@ -16,11 +16,20 @@ def build(db, cfg) -> dict:
         x = per.setdefault(c.hardware_id, {"rec": 0, "off": 0})
         x["rec"] += 1 if c.recording else 0
         x["off"] += 0 if c.enabled else 1
-    hw = [{"id": h.id, "name": h.name, "host": h.host or "-", "model": h.model or "-", "enabled": h.enabled, "cameras": h.cameras, "camEnabled": h.cameras_enabled,
+    hw = [{"id": h.id, "server": h.server, "name": h.name, "host": h.host or "-", "model": h.model or "-", "enabled": h.enabled, "cameras": h.cameras, "camEnabled": h.cameras_enabled,
            "rec": per.get(h.id, {}).get("rec", 0), "off": per.get(h.id, {}).get("off", 0)} for h in hws]
+    sv: dict = {}
+    for c in cams:
+        s = sv.setdefault(c.server, {"name": c.server, "cameras": 0, "hw": 0, "enabled": 0, "rec": 0, "updated": None})
+        s["cameras"] += 1
+        s["enabled"] += 1 if c.enabled else 0
+        s["rec"] += 1 if c.recording else 0
+        s["updated"] = max(s["updated"] or c.fetched_at, c.fetched_at)
+    for h in hws:
+        sv.setdefault(h.server, {"name": h.server, "cameras": 0, "hw": 0, "enabled": 0, "rec": 0, "updated": None})["hw"] += 1
     now = cfg.now()
     return {"configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled), "error": src.last_error if src else None,
             "total": len(cams), "camEnabled": sum(1 for c in cams if c.enabled), "recording": sum(1 for c in cams if c.recording), "noIp": sum(1 for c in cams if not c.ip),
-            "nHw": len(hws), "hwOff": sum(1 for h in hws if not h.enabled), "hw": hw,
-            "list": [{"name": c.name, "hw": c.hardware or "-", "ip": c.ip or "", "ch": c.channel, "enabled": c.enabled, "rec": c.recording, "fps": c.fps or "", "mod": ms(c.modified_at)} for c in cams],
+            "nHw": len(hws), "servers": [{**s, "updated": ms(s["updated"] + (now - datetime.utcnow())) if s["updated"] else None} for s in sv.values()], "hwOff": sum(1 for h in hws if not h.enabled), "hw": hw,
+            "list": [{"name": c.name, "server": c.server, "hw": c.hardware or "-", "ip": c.ip or "", "ch": c.channel, "enabled": c.enabled, "rec": c.recording, "fps": c.fps or "", "mod": ms(c.modified_at)} for c in cams],
             "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": bool(last) and (datetime.utcnow() - last).total_seconds() > every * 60 * 3}

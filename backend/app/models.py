@@ -527,6 +527,7 @@ class CctvHardware(Base):
     """Hardware di Milestone XProtect (NVR/interconnect per lokasi): inventaris dari RESTful API, bukan status real-time."""
     __tablename__ = "cctv_hardware"
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    server: Mapped[str] = mapped_column(String(80), default="HO")
     name: Mapped[str] = mapped_column(String(200))
     address: Mapped[str | None] = mapped_column(String(300))
     host: Mapped[str | None] = mapped_column(String(120))
@@ -543,6 +544,7 @@ class CctvCamera(Base):
     """Kamera di Milestone XProtect: satu baris per kamera, lokasi dan IP diurai dari nama kamera."""
     __tablename__ = "cctv_camera"
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    server: Mapped[str] = mapped_column(String(80), default="HO")
     name: Mapped[str] = mapped_column(String(300))
     location: Mapped[str | None] = mapped_column(String(160))
     ip: Mapped[str | None] = mapped_column(String(45), index=True)

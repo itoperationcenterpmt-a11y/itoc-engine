@@ -76,43 +76,71 @@ def _ts(s, tz: float = 7):
         return None
 
 
-def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
-    """Inventaris hardware dan kamera -> cctv_hardware, cctv_camera. REST XProtect 2022 R2 hanya menyediakan konfigurasi (bukan status online real-time)."""
-    c = src.config or {}
-    user, pw = vault.cred(db, "ms.user", c.get("user_env", "MS_USER")), vault.cred(db, "ms.pass", c.get("pass_env", "MS_PASS"))
-    if not c.get("base_url") or not user or not pw:
-        raise RuntimeError("Base URL / akun Milestone belum diatur (Admin -> Integrations)")
-    tz = cfg.p("tz_offset_hours", 7)
-    with httpx.Client(timeout=c.get("timeout_s", 60), verify=c.get("verify_tls", False), follow_redirects=False) as cl:
-        tk = login(cl, c["base_url"], user, pw)
-        cams, hws, recs = (items(get(cl, c["base_url"], tk, p)) for p in ("cameras", "hardware", "recordingServers"))
+def servers(c: dict) -> list[tuple[str, str]]:
+    """Daftar server Milestone dari config: baris 'Nama|alamat' (atau alamat saja); bila kosong dipakai base_url sebagai satu server."""
+    out = []
+    for ln in c.get("servers") or []:
+        nm, sep, url = str(ln).partition("|")
+        nm, url = (nm.strip(), url.strip()) if sep else ("", nm.strip())
+        if url:
+            out.append(((nm or re.sub(r"^https?://", "", url).strip("/"))[:80], url))
+    if not out and c.get("base_url"):
+        out.append(("HO", c["base_url"]))
+    return out
+
+
+def fetch_server(cl: httpx.Client, url: str, user: str, pw: str, name: str, tz: float):
+    tk = login(cl, url, user, pw)
+    cams, hws, recs = (items(get(cl, url, tk, p)) for p in ("cameras", "hardware", "recordingServers"))
     rec = {r["id"]: r.get("displayName") or r.get("name") for r in recs}
+    hname = {h["id"]: h.get("displayName") or h.get("name") for h in hws}
     cnt: dict[str, list[int]] = {}
     crow = []
     for a in cams:
         hid = ((a.get("relations") or {}).get("parent") or {}).get("id")
         n = a.get("displayName") or a.get("name") or ""
         m = re.search(r"\((\d{1,3}(?:\.\d{1,3}){3})\)", n)
-        loc = n.split(" - ", 1)[0].strip()[:160] if " - " in n else None
         k = cnt.setdefault(hid or "", [0, 0])
         k[0] += 1
         k[1] += 1 if a.get("enabled", True) else 0
-        crow.append({"id": a["id"], "name": n[:300], "location": loc, "ip": m.group(1) if m else None, "channel": a.get("channel"), "hardware_id": hid, "enabled": bool(a.get("enabled", True)),
-                     "recording": bool(a.get("recordingEnabled")), "fps": str(a.get("recordingFramerate") or "")[:10] or None, "modified_at": _ts(a.get("lastModified"), tz)})
-    hname = {h["id"]: h.get("displayName") or h.get("name") for h in hws}
-    for r in crow:
-        r["hardware"] = (hname.get(r["hardware_id"]) or "")[:200] or None
+        crow.append({"id": a["id"], "server": name, "name": n[:300], "location": n.split(" - ", 1)[0].strip()[:160] if " - " in n else None, "ip": m.group(1) if m else None, "channel": a.get("channel"),
+                     "hardware_id": hid, "hardware": (hname.get(hid) or "")[:200] or None, "enabled": bool(a.get("enabled", True)), "recording": bool(a.get("recordingEnabled")),
+                     "fps": str(a.get("recordingFramerate") or "")[:10] or None, "modified_at": _ts(a.get("lastModified"), tz)})
     hrow = []
     for h in hws:
         addr = h.get("address") or ""
         hm = re.search(r"//([^/:]+)", addr)
-        hrow.append({"id": h["id"], "name": (h.get("displayName") or h.get("name") or "")[:200], "address": addr[:300], "host": hm.group(1)[:120] if hm else None, "model": (h.get("model") or "")[:80],
+        hrow.append({"id": h["id"], "server": name, "name": (h.get("displayName") or h.get("name") or "")[:200], "address": addr[:300], "host": hm.group(1)[:120] if hm else None, "model": (h.get("model") or "")[:80],
                      "enabled": bool(h.get("enabled", True)), "recorder": (rec.get(((h.get("relations") or {}).get("parent") or {}).get("id")) or "")[:120] or None,
                      "cameras": cnt.get(h["id"], [0, 0])[0], "cameras_enabled": cnt.get(h["id"], [0, 0])[1], "modified_at": _ts(h.get("lastModified"), tz)})
-    now = datetime.utcnow()
-    for model, rows in ((CctvHardware, hrow), (CctvCamera, crow)):
-        for i in range(0, len(rows), 500):
-            ins = insert(model).values(rows[i:i + 500])
-            db.execute(ins.on_conflict_do_update(index_elements=["id"], set_={k: getattr(ins.excluded, k) for k in rows[0] if k != "id"} | {"fetched_at": now}))
-        db.query(model).filter(model.fetched_at < now - timedelta(seconds=1)).delete(synchronize_session=False)   # yang sudah dihapus di Milestone ikut hilang
-    return len(crow), f"{len(crow)} kamera, {len(hrow)} hardware, {len(recs)} recording server"
+    return crow, hrow, len(recs)
+
+
+def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
+    """Inventaris hardware dan kamera tiap server Milestone -> cctv_hardware, cctv_camera. REST XProtect 2022 R2 hanya menyediakan konfigurasi (bukan status online real-time).
+    Server yang gagal tidak menghapus data lamanya; server lain tetap disinkron, lalu kegagalan dilaporkan."""
+    c = src.config or {}
+    user, pw = vault.cred(db, "ms.user", c.get("user_env", "MS_USER")), vault.cred(db, "ms.pass", c.get("pass_env", "MS_PASS"))
+    srv = servers(c)
+    if not srv or not user or not pw:
+        raise RuntimeError("Daftar server / akun Milestone belum diatur (Admin -> Integrations)")
+    tz, total, parts, fails = cfg.p("tz_offset_hours", 7), 0, [], []
+    for name, url in srv:
+        try:
+            with httpx.Client(timeout=c.get("timeout_s", 60), verify=c.get("verify_tls", False), follow_redirects=False) as cl:
+                crow, hrow, nrec = fetch_server(cl, url, user, pw, name, tz)
+        except (RuntimeError, httpx.HTTPError, ValueError, KeyError) as e:
+            fails.append(f"{name}: {str(e)[:100]}")
+            continue
+        now = datetime.utcnow()
+        for model, rows in ((CctvHardware, hrow), (CctvCamera, crow)):
+            for i in range(0, len(rows), 500):
+                ins = insert(model).values(rows[i:i + 500])
+                db.execute(ins.on_conflict_do_update(index_elements=["id"], set_={k: getattr(ins.excluded, k) for k in rows[0] if k != "id"} | {"fetched_at": now}))
+            db.query(model).filter(model.server == name, model.fetched_at < now - timedelta(seconds=1)).delete(synchronize_session=False)   # yang sudah dihapus di Milestone ikut hilang
+        db.commit()
+        total += len(crow)
+        parts.append(f"{name}: {len(crow)} kamera, {len(hrow)} hardware")
+    if fails and not parts:
+        raise RuntimeError("Semua server gagal. " + "; ".join(fails))
+    return total, "; ".join(parts) + (" | GAGAL " + "; ".join(fails) if fails else "")
