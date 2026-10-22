@@ -8,6 +8,7 @@
   seed-users [--reset]       buat satu akun per role (password123, tanpa wajib ganti password); --reset menimpa akun yang sudah ada. Hanya untuk uji/demo!
   sync SUMBER                jalankan sinkron sekali (manageengine | prtg)
   security-check             periksa konfigurasi keamanan (password lemah, rahasia, TLS, dan lain-lain) tanpa menampilkan rahasia
+  rotate-key                 enkripsi ulang semua rahasia dengan ITOC_SECRET_KEY (kunci lama di ITOC_SECRET_KEY_OLD), lihat panduan keamanan
 """
 import os
 import json
@@ -108,6 +109,11 @@ def main(argv):
         for f in fs:
             print(f"[{f['level'].upper():8}] {f['title']}" + (f" -- {f['detail']}" if f["detail"] else ""))
         print(f"{sum(1 for f in fs if f['level'] in ('critical', 'high'))} temuan critical/high")
+    elif cmd == "rotate-key":
+        from . import vault
+        with session_scope() as db:
+            r = vault.rotate_all(db)
+        print(f"{r['rotated']} nilai dienkripsi ulang" + (f"; TIDAK TERBACA (kunci lama belum diisi di ITOC_SECRET_KEY_OLD?): {', '.join(r['unreadable'])}" if r["unreadable"] else ""))
     elif cmd == "sync":
         from .jobs import run_source
         print(run_source(args[0]))

@@ -33,6 +33,25 @@ services:
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./certs:/certs:ro
     restart: unless-stopped
+  backup:
+    profiles: ["backup"]                     # opsional: docker compose --profile backup up -d (lihat docs/Panduan-Backup.md)
+    build: ./deploy/backup
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      TZ: Asia/Jakarta
+      DB_PASSWORD: ${DB_PASSWORD:-itoc}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      BACKUP_AT: ${BACKUP_AT:-02:00}
+    volumes: [./backups:/backups]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups -name 'itoc-*.dump.age' -mmin -1560 | grep -q ."]   # ada backup dalam 26 jam terakhir
+      interval: 1h
+      start_period: 26h
   worker:
     build: .
     env_file: .env
