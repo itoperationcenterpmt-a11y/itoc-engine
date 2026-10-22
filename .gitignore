@@ -23,3 +23,6 @@ backups/
 
 # file kunci Office
 ~$*
+
+# sertifikat TLS lokal
+certs/

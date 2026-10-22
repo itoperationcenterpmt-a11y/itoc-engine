@@ -10,7 +10,7 @@ docker compose up -d --build  # db + api (migrasi & seed konfigurasi otomatis) +
 docker compose exec api python -m app.cli create-user superadmin1 "Super Admin 1" superadmin
 docker compose exec api python -m app.cli seed-demo     # opsional, data dummy untuk mencoba
 ```
-Buka http://localhost:8000, login dengan password awal yang dicetak, lalu ganti password.
+Buka https://localhost (sertifikat uji self-signed: buat dulu dengan `sh deploy/gen-cert.sh <nama-host-atau-IP>`; browser akan memberi peringatan sampai sertifikat resmi dipasang), login dengan password awal yang dicetak, lalu ganti password. HTTP di port 80 dialihkan otomatis ke HTTPS.
 
 Setelah memperbarui kode dari versi sebelumnya (jalankan `docker compose up -d --build`; tabel `prtg_daily` dibuat otomatis oleh migrasi) (label menu, filter Jadwal, badge SOC), terapkan sekali ke database yang sudah ada. Perintah ini hanya menimpa tabel menu dan role, parameter yang sudah Anda ubah di Admin tidak disentuh:
 ```bash
@@ -120,7 +120,7 @@ Semua tabel di atas bisa diubah dari **Admin → Master data** dan **Admin → P
 ## Produksi (checklist sebelum naik server)
 - **Rahasia:** salin `.env.example` ke `.env`, isi `ITOC_JWT_SECRET` dan `ITOC_SECRET_KEY` dengan string acak panjang (48+ karakter) dan `DB_PASSWORD` yang kuat. `.env` tidak ikut repository (`.gitignore`). Mengganti `ITOC_SECRET_KEY` setelah ada rahasia tersimpan membuat rahasia itu harus diisi ulang di Admin.
 - **Mode produksi:** set `ITOC_ENV=production` agar `seed-demo`, `seed-demo-itcare`, dan `seed-users` (akun uji `password123`) diblokir. Buat akun asli dengan `python -m app.cli create-user`.
-- **HTTPS:** jalankan di belakang reverse proxy (Nginx, Caddy, atau Traefik) dengan TLS. Jangan mengekspos port 8000 langsung. Port PostgreSQL hanya listen di `127.0.0.1`; di server, jangan dipublikasikan sama sekali (hapus bagian `ports` db di compose).
+- **HTTPS:** sudah bawaan: container `proxy` (Nginx, `deploy/nginx.conf`) memegang port 80 dan 443, port 8000 tidak dibuka ke luar. Ganti `certs/tls.crt` (fullchain) dan `certs/tls.key` dengan sertifikat dari CA perusahaan, lalu `docker compose restart proxy`. Port PostgreSQL hanya listen di `127.0.0.1`; di server, jangan dipublikasikan sama sekali (hapus bagian `ports` db di compose).
 - **Dokumentasi API** (`/docs`) mati; nyalakan sementara dengan `ITOC_DOCS=true` hanya bila perlu.
 - **Backup:** jadwalkan `pg_dump` harian dan uji restore. Volume `pgdata` adalah satu-satunya tempat data.
 - **Akun uji:** nonaktifkan atau hapus semua akun `password123` sebelum dipakai pengguna sungguhan.

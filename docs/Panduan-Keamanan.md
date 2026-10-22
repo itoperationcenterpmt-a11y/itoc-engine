@@ -39,7 +39,7 @@ Pemeriksaan otomatis konfigurasi: `docker compose exec api python -m app.cli sec
 ## 3. Yang harus dibereskan sebelum VAPT (butuh tindakan Anda)
 1. **Password akun uji.** Akun bawaan seed (`superadmin`, `admin`, `itoc`, `itcare`, `eos`, `management`, `superadmin1`) memakai `password123`. Ini temuan Critical. Reset lewat Admin → Pengguna (Reset password) atau nonaktifkan, dan jangan jalankan `seed-users` lagi.
 2. **`ITOC_ENV=production`** di `.env` server.
-3. **HTTPS di depan aplikasi** (lihat contoh Nginx di bawah). Tanpa HTTPS, cookie tidak bertanda Secure dan HSTS tidak terkirim. Port 8000 jangan dibuka langsung ke jaringan; ubah pemetaan port menjadi `127.0.0.1:8000:8000` bila proxy ada di mesin yang sama.
+3. **HTTPS di depan aplikasi:** sudah disediakan container `proxy` (Nginx, TLS 1.2/1.3, 80 dialihkan ke 443, IP asli klien diteruskan untuk lockout dan rate limit). Port 8000 tidak dipublikasikan. Pasang sertifikat resmi di `certs/` (lihat README). Contoh Nginx di bawah untuk proxy yang terpisah dari compose.
 4. **Rahasia**: `ITOC_JWT_SECRET` (min. 32 karakter acak), `ITOC_SECRET_KEY` terpisah, `DB_PASSWORD` kuat. Simpan `.env` dengan izin 600.
 5. **Verifikasi TLS konektor** saat ini Tidak (sertifikat internal). Pasang sertifikat CA internal di server lalu aktifkan verifikasi bila memungkinkan; bila tidak, catat sebagai risiko yang diterima (jaringan internal).
 6. **Jumlah Super Admin** dibatasi seperlunya, dan beri akun terpisah per orang.
