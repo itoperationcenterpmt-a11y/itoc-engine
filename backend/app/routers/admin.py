@@ -349,3 +349,59 @@ def audit_export(frm: date | None = None, to: date | None = None, who: str = "",
 
     name = f"audit-log-{cfg.now():%Y%m%d-%H%M}.csv"
     return StreamingResponse(gen(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+
+# ---------------- Perlu dilengkapi dan status sumber data ----------------
+@router.get("/todo")
+def admin_todo(db: Session = Depends(get_db)):
+    """Data yang masuk otomatis dari API tetapi masih perlu dilengkapi admin (pemetaan lokasi, label, kapasitas, koordinat)."""
+    from datetime import timedelta
+    from sqlalchemy import func
+    from ..models import Site, ZbxLocMap, DevCode, PrtgSensor, Ticket, DataSource
+    cfg = load_config(db)
+    out = []
+
+    def add(key, title, rows, hint, go, show=lambda x: str(x)):
+        if rows:
+            out.append({"key": key, "title": title, "count": len(rows), "hint": hint, "go": go, "examples": [show(x) for x in rows[:8]]})
+
+    add("zbx_loc", "Kode lokasi Zabbix belum dipetakan ke lokasi", db.scalars(select(ZbxLocMap.code).where(ZbxLocMap.site.is_(None)).order_by(ZbxLocMap.code)).all(),
+        "Perangkat dengan kode ini belum masuk hitungan per lokasi. Pilih lokasinya di Pemetaan.", ["pemetaan", "zbx_loc"])
+    add("dev_code", "Kode perangkat belum punya label", db.scalars(select(DevCode.code).where((DevCode.label.is_(None)) | (DevCode.label == "")).order_by(DevCode.code)).all(),
+        "Label dipakai sebagai nama kategori di halaman Devices.", ["pemetaan", "dev_code"])
+    add("prtg_cap", "Sensor PRTG aktif tanpa kapasitas", db.execute(select(PrtgSensor.device, PrtgSensor.name).where(PrtgSensor.active.is_(True), PrtgSensor.capacity_mbps.is_(None)).order_by(PrtgSensor.device)).all(),
+        "Tanpa kapasitas, persentase utilisasi link tidak bisa dihitung.", ["pemetaan", "prtg_sensor"], lambda r: f"{r[0]} / {r[1]}")
+    add("site_geo", "Lokasi aktif belum berkoordinat", db.scalars(select(Site.name).where(Site.active.is_(True), (Site.lat.is_(None)) | (Site.lon.is_(None))).order_by(Site.name)).all(),
+        "Lokasi tanpa koordinat tidak tampil di peta Devices. Isi lat dan lon.", ["pemetaan", "site"])
+    known = set()
+    for s in db.scalars(select(Site)):
+        known.add(s.name.strip().lower())
+        known.update(a.strip().lower() for a in (s.aliases or []))
+    since = cfg.now() - timedelta(days=90)
+    unk = [(n, c) for n, c in db.execute(select(Ticket.site, func.count()).where(Ticket.created_at >= since, Ticket.site != "").group_by(Ticket.site).order_by(func.count().desc())).all() if n.strip().lower() not in known]
+    add("ticket_site", "Lokasi pada tiket tidak dikenal (90 hari terakhir)", unk, "Tambahkan sebagai lokasi atau alias lokasi supaya tiketnya ikut dihitung per lokasi.", ["pemetaan", "site"], lambda r: f"{r[0]} ({r[1]} tiket)")
+    stale = []
+    for s in db.scalars(select(DataSource).where(DataSource.enabled.is_(True), DataSource.mode == "api")):
+        age = (cfg.now() - s.last_ok_at).total_seconds() / 60 if s.last_ok_at else None
+        sched = bool((s.config or {}).get("schedule"))
+        if s.last_error or age is None or age > (13 * 60 if sched else s.interval_min * 3 + 5):
+            stale.append(s.label)
+    add("source", "Sumber data aktif yang gagal atau belum segar", stale, "Cek pesan galat di Status Sumber.", ["status", ""])
+    return {"items": out, "total": sum(i["count"] for i in out)}
+
+
+@router.get("/status")
+def admin_status(db: Session = Depends(get_db)):
+    from ..models import DataSource, SyncLog
+    cfg = load_config(db)
+    now, rows = cfg.now(), []
+    for s in db.scalars(select(DataSource).order_by(DataSource.label)):
+        age = int((now - s.last_ok_at).total_seconds() / 60) if s.last_ok_at else None
+        sched = bool((s.config or {}).get("schedule"))
+        limit = 13 * 60 if sched else (s.interval_min or 60) * 3 + 5
+        state = "off" if not s.enabled or s.mode != "api" else "crit" if s.last_error else "warn" if age is None or age > limit else "ok"
+        last = db.scalar(select(SyncLog).where(SyncLog.source == s.label).order_by(SyncLog.id.desc()).limit(1))
+        rows.append({"key": s.key, "label": s.label, "mode": s.mode, "enabled": s.enabled, "interval": s.interval_min, "schedule": (s.config or {}).get("schedule") or [], "last_ok": s.last_ok_at.isoformat() if s.last_ok_at else None,
+                     "age_min": age, "error": s.last_error, "state": state, "last_msg": last.message[:200] if last else "", "last_rows": last.rows if last else 0})
+    logs = [{"at": x.at.isoformat(), "source": x.source, "ok": x.ok, "rows": x.rows, "ms": x.ms, "msg": x.message[:160]} for x in db.scalars(select(SyncLog).order_by(SyncLog.id.desc()).limit(30))]
+    return {"sources": rows, "log": logs}

@@ -485,6 +485,15 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
 .stile b{font-size:16px;font-weight:700}
 .stile.good{border-left-color:var(--good)}.stile.warn{border-left-color:var(--warn)}.stile.crit{border-left-color:var(--crit)}
 .stile.crit b{color:var(--crit)}.stile.warn b{color:var(--warn)}
+.admnav{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}.admnav .subtabs{margin:0}.admgrp button{font-weight:600}
+.admhead{margin:4px 0 14px}.admhead h3{font:700 18px var(--f-display);margin:0 0 3px}.admsub{font:700 15px var(--f-display);margin:22px 0 8px}
+.rolecards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin:12px 0}.rcard{background:var(--sunken);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.rcard header{display:flex;align-items:baseline;gap:8px}.rcard header b{font-size:15px}.rcard header .btn{margin-left:auto}.rcard p{margin:0;font-size:13px;color:var(--ink2);line-height:1.5}
+.rflags{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--ink2)}.ok-t{color:var(--good-text);font-weight:600}
+.matrix{border-collapse:collapse;font-size:12.5px;min-width:100%}.matrix th,.matrix td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}.matrix th:first-child,.matrix td:first-child{text-align:left;position:sticky;left:0;background:var(--surface)}.matrix td.yes{color:var(--good-text);font-weight:700}
+.chkgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 14px}.chk{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400}.chk input{width:auto}
+.todohead{padding:12px 16px;border-radius:12px;font-weight:600;margin-bottom:12px;background:var(--sunken);border-left:5px solid var(--good)}.todohead.warn{border-left-color:var(--warn)}
+.todolist{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}.todo{background:var(--sunken);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}.todo header{display:flex;align-items:center;gap:8px}.todo header b{font-size:14px}.todo header .tag{margin-left:auto}.todo p{margin:0}
 </style>
 </head>
 <body>
@@ -533,6 +542,7 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
 <script src="core.js"></script>
 <script src="views.js"></script>
 <script src="integrations.js"></script>
+<script src="admin.js"></script>
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="devices.js"></script>
 <script src="wifi.js"></script>

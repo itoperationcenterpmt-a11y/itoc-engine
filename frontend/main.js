@@ -184,26 +184,27 @@ function mField(c, row, isNew) {
   else if (c.kind === "json") inp = `<textarea ${a} rows="3" class="jsed">${esc(v == null ? "" : JSON.stringify(v, null, 1))}</textarea>`;
   else if (c.kind === "text") inp = `<textarea ${a} rows="2">${esc(v ?? "")}</textarea>`;
   else inp = `<input type="${c.kind === "int" || c.kind === "float" ? "number" : c.kind === "date" ? "date" : "text"}" ${c.kind === "float" ? `step="any"` : ""} ${a} value="${esc(v ?? "")}">`;
-  return `<div class="fld ${c.kind === "json" || c.kind === "text" ? "wide" : ""}"><label for="${id}">${esc(c.name)}${c.nullable ? "" : " *"}</label>${inp}</div>`;
+  return `<div class="fld ${c.kind === "json" || c.kind === "text" ? "wide" : ""}"><label for="${id}">${esc(colLabel(c.name))}${c.nullable ? "" : " *"}</label>${inp}</div>`;
 }
 const mTitle = cols => ["name", "label", "keyword", "key", "title", "code", "username"].map(n => cols.find(c => c.name === n)).find(Boolean) || cols.find(c => c.name !== "id") || cols[0];
 function mCard(r, i, cols) {
   const tc = mTitle(cols), skip = new Set([tc.name, "id", "sort"]);
   const meta = cols.filter(c => !skip.has(c.name)).map(c => [c, r[c.name]]).filter(([c, x]) => x != null && x !== "" && x !== false && !(Array.isArray(x) && !x.length));
   const val = ([c, x]) => c.kind === "bool" ? "" : c.kind === "json" ? JSON.stringify(x).replace(/[\[\]"{}]/g, "").slice(0, 46) : String(x).slice(0, 46);
-  const chips = meta.slice(0, 5).map(a => `<span class="mchip" title="${esc(a[0].name + ": " + (a[0].kind === "json" ? JSON.stringify(a[1]) : a[1]))}"><i>${esc(a[0].name.replace(/_/g, " "))}</i>${esc(val(a))}</span>`).join("") + (meta.length > 5 ? `<span class="mchip more">+${meta.length - 5}</span>` : "");
+  const chips = meta.slice(0, 5).map(a => `<span class="mchip" title="${esc(a[0].name + ": " + (a[0].kind === "json" ? JSON.stringify(a[1]) : a[1]))}"><i>${esc(colLabel(a[0].name))}</i>${esc(val(a))}</span>`).join("") + (meta.length > 5 ? `<span class="mchip more">+${meta.length - 5}</span>` : "");
   const q = cols.map(c => r[c.name]).join(" ").toLowerCase();
-  return `<article class="mcard" data-q="${esc(q)}"><div class="mh"><b>${esc(String(r[tc.name] ?? "–"))}</b>${r.id != null ? `<span class="mid">#${esc(r.id)}</span>` : ""}</div><div class="mchips">${chips || `<span class="sub">–</span>`}</div><button class="btn ghost" type="button" data-medit="${i}">Edit</button></article>`;
+  return `<article class="mcard" data-q="${esc(q)}"><div class="mh"><b>${esc(String(r[tc.name] ?? "–"))}</b>${r.id != null ? `<span class="mid">#${esc(r.id)}</span>` : ""}</div><div class="mchips">${chips || `<span class="sub">–</span>`}</div><button class="btn ghost" type="button" data-medit="${i}">Ubah</button></article>`;
 }
-function masterView(fixed) {
-  if (fixed) S.mkey = fixed; else if (!S.mkey) S.mkey = (CFG.master[0] || {}).key;
+function masterView(fixed, keys) {
+  const list = keys ? CFG.master.filter(m => keys.includes(m.key)) : CFG.master;
+  if (fixed) S.mkey = fixed; else if (!S.mkey || !list.some(m => m.key === S.mkey)) S.mkey = (list[0] || {}).key;
   const M = S.mdata && S.mdata.key === S.mkey ? S.mdata : null;
-  const pick = fixed ? `<b>${esc(((CFG.master || []).find(x => x.key === fixed) || {}).label || fixed)}</b>` : `<div class="mpick">${CFG.master.map(m => `<button type="button" data-mkey="${m.key}" aria-pressed="${m.key === S.mkey}">${esc(m.label)}</button>`).join("")}</div>`;
+  const pick = fixed ? `<b>${esc(((CFG.master || []).find(x => x.key === fixed) || {}).label || fixed)}</b>` : `<div class="mpick">${list.map(m => `<button type="button" data-mkey="${m.key}" aria-pressed="${m.key === S.mkey}">${esc(m.label)}</button>`).join("")}</div>`;
   if (!M) { loadMaster(); return pick + `<div class="empty sm">Memuat…</div>`; }
   const cols = M.columns, isNew = S.medit && S.medit.__i == null;
   const form = S.medit ? `<form id="mF" class="form formbox">${cols.filter(c => !(c.auto && isNew)).map(c => mField(c, S.medit, isNew)).join("")}
-    <div class="acts wide"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-medit="x">Cancel</button>${isNew ? "" : `<button class="btn ghost" type="button" data-mdel>Delete</button>`}<span class="msg err" id="mMsg"></span></div></form>` : "";
-  return `<div class="toolbar mbar">${pick}<span class="mtools"><input type="search" id="mq" class="msearch" placeholder="Search ${M.rows.length} rows" aria-label="Search"><button class="btn" type="button" data-medit="new">+ Add</button></span></div>${S.msg ? `<div class="msg">${esc(S.msg)}</div>` : ""}${form}
+    <div class="acts wide"><button class="btn" type="submit">Simpan</button><button class="btn ghost" type="button" data-medit="x">Batal</button>${isNew ? "" : `<button class="btn ghost" type="button" data-mdel>Hapus</button>`}<span class="msg err" id="mMsg"></span></div></form>` : "";
+  return `<div class="toolbar mbar">${pick}<span class="mtools"><input type="search" id="mq" class="msearch" placeholder="Cari ${M.rows.length} baris" aria-label="Cari"><button class="btn" type="button" data-medit="new">+ Tambah</button></span></div>${S.msg ? `<div class="msg">${esc(S.msg)}</div>` : ""}${form}
     <div class="mcards">${M.rows.map((r, i) => mCard(r, i, cols)).join("") || `<div class="empty sm">Belum ada data.</div>`}</div>`;
 }
 const pkOf = row => S.mdata.pk.map(k => row[k]).join("");

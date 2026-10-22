@@ -46,6 +46,7 @@ class Role(Base):
     __tablename__ = "role"
     key: Mapped[str] = mapped_column(String(40), primary_key=True)
     label: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str | None] = mapped_column(String(300))               # siapa yang memakai role ini, tampil di Admin
     modules: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)  # ["*"] = semua
     can_write: Mapped[bool] = mapped_column(Boolean, default=True)           # serah terima, unggah
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -323,9 +324,9 @@ class AuditLog(Base):
 # tabel master yang boleh di-CRUD dari menu Admin (urutan = urutan tampil)
 MASTER = {
     "site": (Site, "Lokasi"), "person": (Person, "Personel"), "team": (Team, "Tim"), "shift": (Shift, "Shift"),
-    "isp": (Isp, "ISP"), "sla_target": (SlaTarget, "Target SLA"), "prtg_sensor": (PrtgSensor, "Sensor & kapasitas"),
-    "module": (Module, "Modul / menu"), "widget": (Widget, "Widget grafik"), "role": (Role, "Role & akses"), "formula": (Formula, "Definisi rumus"),
-    "data_source": (DataSource, "Sumber data"),
+    "isp": (Isp, "ISP"), "sla_target": (SlaTarget, "Target SLA"), "prtg_sensor": (PrtgSensor, "Sensor dan Kapasitas"),
+    "module": (Module, "Menu"), "widget": (Widget, "Widget"), "role": (Role, "Role"), "formula": (Formula, "Rumus"),
+    "data_source": (DataSource, "Sumber Data"),
 }
 
 
@@ -392,7 +393,7 @@ class ZbxLocMap(Base):
     note: Mapped[str | None] = mapped_column(String(200))
 
 
-MASTER["zbx_loc"] = (ZbxLocMap, "Zabbix: kode ke lokasi")
+MASTER["zbx_loc"] = (ZbxLocMap, "Kode Lokasi Zabbix")
 
 class DevCode(Base):
     """Kamus kode perangkat pada nama host (mis. CFIX = CCTV Fixed). Kode baru terdaftar otomatis saat sinkron; Admin mengisi labelnya."""
@@ -402,7 +403,7 @@ class DevCode(Base):
     note: Mapped[str | None] = mapped_column(String(200))
 
 
-MASTER["dev_code"] = (DevCode, "Zabbix: kode perangkat")
+MASTER["dev_code"] = (DevCode, "Kode Perangkat")
 class WifiClient(Base):
     """Client WiFi yang sedang terhubung menurut Ruckus SmartZone (vSZ): snapshot dari sinkron terakhir."""
     __tablename__ = "wifi_client"

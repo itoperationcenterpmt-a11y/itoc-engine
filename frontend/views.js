@@ -389,7 +389,6 @@ function vReport() {
 }
 /* ---------- Admin ---------- */
 function vAdmin() {
-  const sub = [["pengguna", "Users"], ["roles", "Roles"], ["integrasi", "Integrations"], ["apikeys", "API Keys"], ["smtp", "Email"], ["webhooks", "Webhooks"], ["parameter", "Parameters & Targets"], ["rumus", "Formula Definitions"], ["audit", "Audit Log"], ["master", "Master Data"]];
   let body = "";
   const eu = S.editUser ? (V.users || []).find(x => x.u === S.editUser) : null;
   if (S.adm === "pengguna") body = `${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}<div class="toolbar"><button class="btn" data-adduser>+ Add User</button></div>
@@ -399,11 +398,15 @@ function vAdmin() {
   if (S.adm === "apikeys") body = vApiKeys();
   if (S.adm === "smtp") body = vSmtp();
   if (S.adm === "webhooks") body = vWebhooks();
-  if (S.adm === "roles") body = `<p class="sub">Menu, hak tulis, lingkup lokasi, dan izin unggah per role. Tambah role baru untuk akses khusus.</p>${masterView("role")}`;
-  if (S.adm === "parameter") body = paramForm();
-  if (S.adm === "rumus") body = masterView("formula");
-  if (S.adm === "master") body = masterView();
+  if (S.adm === "roles") body = vRoles();
+  if (S.adm === "parameter") body = admTitle("Target dan Parameter", "Nilai yang dipakai dalam perhitungan dan tampilan. Perubahan langsung berlaku di semua halaman.") + paramForm() + `<h4 class="admsub">Target SLA</h4>` + masterView("sla_target");
+  if (S.adm === "rumus") body = admTitle("Rumus", "Keterangan rumus yang tampil pada tanda info di halaman.") + masterView("formula");
+  if (S.adm === "pemetaan") body = admTitle("Pemetaan", "Lokasi, kode dari Zabbix, sensor PRTG, dan ISP. Kode baru dari API terdaftar otomatis dan perlu diberi lokasi atau label di sini.") + masterView(null, ["site", "zbx_loc", "dev_code", "prtg_sensor", "isp"]);
+  if (S.adm === "personel") body = admTitle("Personel", "Daftar personel dan kontak yang tampil di halaman Personel dan Overview.") + masterView("person");
+  if (S.adm === "tim") body = admTitle("Tim dan Shift", "Pola rotasi tim diatur di Target dan Parameter.") + masterView(null, ["team", "shift"]);
+  if (S.adm === "menu") body = admTitle("Menu dan Widget", "Susunan menu dan widget bawaan. Ubah dengan hati-hati, perubahan terlihat oleh semua pengguna.") + masterView(null, ["module", "widget"]);
+  if (S.adm === "dilengkapi") body = vTodo();
+  if (S.adm === "status") body = vSourceStatus();
   if (S.adm === "audit") body = vAudit();
-  return `<div class="grid"><section class="panel c12"><div class="subtabs">${sub.map(([k, l]) => `<button type="button" data-adm="${k}" aria-selected="${S.adm === k}">${l}</button>`).join("")}</div>${body}</section></div>`;
+  return `<div class="grid"><section class="panel c12">${admNav()}${body}</section></div>`;
 }
-

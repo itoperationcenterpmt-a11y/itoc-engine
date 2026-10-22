@@ -1,7 +1,7 @@
 /* IT Pelindo Multi Terminal Dashboard — Admin: Integrations, API Keys, Email (SMTP), Webhooks. Rahasia hanya ditulis, tidak pernah ditampilkan ulang. */
 "use strict";
 const INT = {integrations: null, apikeys: null, smtp: null, webhooks: null, msg: null, newKey: null, hookEdit: null, keyForm: false, busy: {}};
-const intReset = () => { if (typeof AUD !== "undefined") AUD.loaded = false; INT.integrations = INT.apikeys = INT.smtp = INT.webhooks = INT.msg = INT.newKey = INT.hookEdit = null; INT.keyForm = false; };
+const intReset = () => { if (typeof AUD !== "undefined") AUD.loaded = false; INT.integrations = INT.apikeys = INT.smtp = INT.webhooks = INT.msg = INT.newKey = INT.hookEdit = INT.todo = INT.status = INT.roles = INT.roleEdit = null; INT.keyForm = false; };
 const intDt = s => s ? new Date(s).toLocaleString("id-ID", {dateStyle: "medium", timeStyle: "short"}) : "–";
 const intMsg = () => INT.msg ? `<div class="msg ${INT.msg.ok ? "ok" : "err"}">${esc(INT.msg.t)}</div>` : "";
 async function intLoad(name, path) {
