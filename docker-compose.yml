@@ -19,9 +19,10 @@ services:
       ITOC_RUN_SCHEDULER: "false"
     depends_on:
       db: {condition: service_healthy}
-    expose: ["8000"]
+    ports: ["127.0.0.1:8000:8000"]          # hanya proxy di mesin ini (Caddy atau container proxy) yang boleh menjangkau api
     command: sh -c "python -m app.cli migrate && python -m app.cli seed-config && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --no-server-header --proxy-headers --forwarded-allow-ips='*'"
   proxy:
+    profiles: ["proxy"]                      # opsional, hanya bila server tidak punya Caddy/proxy lain: docker compose --profile proxy up -d
     image: nginx:1.27-alpine
     depends_on: [api]
     ports: ["80:80", "443:443"]

@@ -1,0 +1,28 @@
+# Contoh Caddyfile untuk server yang sudah memakai Caddy sebagai pintu masuk bersama.
+# Satu blok per aplikasi (per nama host), jadi aplikasi lain tinggal ditambah blok baru tanpa menyentuh yang ini.
+# Aplikasi hanya perlu listen di 127.0.0.1:<port>; Caddy memegang 80/443, mengalihkan HTTP ke HTTPS, dan mengisi X-Forwarded-For/Proto.
+
+tera.pelindo.local {
+    # Pilih satu:
+    # 1) Sertifikat dari CA perusahaan (disarankan di jaringan internal):
+    tls C:/caddy/certs/tera.crt C:/caddy/certs/tera.key
+    # 2) CA internal milik Caddy (cepat untuk uji; root-nya harus dipasang di tiap klien):
+    # tls internal
+    # 3) Domain publik: hapus baris tls, Caddy meminta sertifikat Let's Encrypt otomatis (butuh port 80/443 terjangkau dari internet, atau DNS challenge)
+
+    encode zstd gzip
+    request_body {
+        max_size 50MB
+    }
+    reverse_proxy 127.0.0.1:8000 {
+        transport http {
+            response_header_timeout 900s   # sinkron manual (Panorama) bisa memakan beberapa menit
+        }
+    }
+}
+
+# Aplikasi berikutnya, contoh:
+# app2.pelindo.local {
+#     tls C:/caddy/certs/app2.crt C:/caddy/certs/app2.key
+#     reverse_proxy 127.0.0.1:8100
+# }
