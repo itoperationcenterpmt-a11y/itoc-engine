@@ -22,7 +22,7 @@ const intField = (id, label, inp, wide) => `<div class="fld ${wide ? "wide" : ""
 
 function vIntegrations() {
   if (!INT.integrations) { intLoad("integrations", "integrations"); return intLoading(); }
-  return intMsg() + `<p class="sub">Data source connectors. Credentials are stored encrypted and never shown again; leave a field empty to keep the stored value.</p><div class="icards">${INT.integrations.rows.map(s => {
+  return intMsg() + `<div class="icards">${INT.integrations.rows.map(s => {
     const f = "i_" + s.key;
     const creds = s.creds.map(c => `<div class="fld"><label for="${f}_${c.name}">${esc(c.label)} ${c.set ? `<span class="tag">saved</span>` : c.env_set ? `<span class="tag">from .env (${esc(c.env)})</span>` : `<span class="tag warn">not set</span>`}</label>
       <input id="${f}_${c.name}" data-secret="${esc(c.name)}" type="password" autocomplete="new-password" placeholder="${c.set ? "•••••••• (leave empty = unchanged)" : "Fill in to save"}">${c.set ? `<button type="button" class="btn ghost sm" data-w data-int="clear" data-key="${esc(s.key)}" data-name="${esc(c.name)}">Remove saved</button>` : ""}</div>`).join("");
@@ -68,7 +68,7 @@ function vApiKeys(roles) {
 function vSmtp() {
   if (!INT.smtp) { intLoad("smtp", "smtp"); return intLoading(); }
   const c = INT.smtp;
-  return intMsg() + `<p class="sub">Used for test emails now, and later for scheduled reports and password resets. The password is stored encrypted.</p>
+  return intMsg() + `
     <form class="form formbox intform" data-int-form="smtp">
       ${intField("m_host", "Host", `<input id="m_host" data-f="host" type="text" placeholder="smtp.pelindo.co.id" value="${esc(c.host)}">`)}
       ${intField("m_port", "Port", `<input id="m_port" data-f="port" type="number" value="${esc(c.port)}">`)}
@@ -161,7 +161,7 @@ async function audLoad(more) {
 function vAudit() {
   if (!AUD.loaded) { audLoad(false); return intLoading(); }
   const f = AUD.f, rows = AUD.rows.map(a => [a.at.replace("T", " ").slice(0, 19), a.by, a.t, a.ip || "–"]);
-  return `<p class="sub">Log of user activity and settings changes. Export uses the current filters.</p>${AUD.err ? `<div class="msg err">${esc(AUD.err)}</div>` : ""}
+  return `${AUD.err ? `<div class="msg err">${esc(AUD.err)}</div>` : ""}
     <form class="toolbar mbar" data-int-form="audit">
       <label class="sub">Dari <input type="date" data-f="frm" value="${esc(f.frm)}"></label><label class="sub">Sampai <input type="date" data-f="to" value="${esc(f.to)}"></label>
       <label class="sub">User <select data-f="who"><option value="">All</option>${AUD.users.map(u => `<option ${u === f.who ? "selected" : ""}>${esc(u)}</option>`).join("")}</select></label>

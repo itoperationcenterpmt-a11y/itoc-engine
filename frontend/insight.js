@@ -38,7 +38,7 @@ function vInsight() {
   const I = V.insight, grid = h => `<div class="grid">${h}</div>`;
   if (!I) return subnav("report") + grid(`<section class="panel c12">${empty()}</section>`);
   const c = I.counts, tab = S.insTab || "findings", tabs = [["findings", "Findings (" + I.open.length + ")"], ["rankings", "Rankings"], ["health", "Location Health"], ["summary", "Shift Summary"], ["history", "History"]];
-  const kp = `<div class="kpis k6">${kpi("Critical", fmt(c.crit), "need action now", {cls: c.crit ? "warnv" : ""})}${kpi("Warning", fmt(c.warn), "need checking", {cls: c.warn ? "warnv" : ""})}${kpi("Info", fmt(c.info), "good to know")}${kpi("New", fmt(I.new), "not yet read")}${kpi("Dismissed", fmt((I.dismissed || []).length), "hidden for now")}${kpi("Last analysis", I.updated ? hm(I.updated) : "-", (I.updated ? dtime(I.updated).replace(/, \d\d:\d\d$/, "") + " · " : "") + "runs every 30 min")}</div>`;
+  const kp = `<div class="kpis k6">${kpi("Critical", fmt(c.crit), "", {cls: c.crit ? "warnv" : ""})}${kpi("Warning", fmt(c.warn), "", {cls: c.warn ? "warnv" : ""})}${kpi("Info", fmt(c.info), "")}${kpi("New", fmt(I.new), "")}${kpi("Dismissed", fmt((I.dismissed || []).length), "")}${kpi("Last analysis", I.updated ? hm(I.updated) : "-", (I.updated ? dtime(I.updated).replace(/, \d\d:\d\d$/, "") + " · " : "") + "runs every 30 min")}</div>`;
   const nav = `<div class="seg insnav">${tabs.map(([k, l]) => `<button type="button" data-ins-tab="${k}" aria-pressed="${k === tab}">${esc(l)}</button>`).join("")}</div>`;
   let body = "";
   if (tab === "findings") {
@@ -48,23 +48,23 @@ function vInsight() {
     body = `<div class="insbar">${chips}</div>` + (rows.length ? `<div class="icards">${rows.map(r => insCard(r)).join("")}</div>` : `<div class="empty"><b>No findings</b><span>${I.open.length ? "Nothing matches this filter." : "Every indicator is within its normal range."}</span></div>`);
   } else if (tab === "rankings") {
     const R = I.rank;
-    body = `<div class="grid" style="padding:0">${panel("c7", "Problem Links", "last 30 days · score = downtime minutes × (1 + 0.1 × outages)", tbl(["Link", "Downtime (min)", "Outages", "Availability", "Score"], R.links.map(x => [x.name, x.downMin, x.events, pc(x.avail, 2), x.score]), {r: [1, 2, 3, 4], empty: "No link problems in the last 30 days."}))}
-      ${panel("c5", "Repeat Offender Devices", "last 30 days · maintenance devices excluded", tbl(["Device", "Location", "Down events", "Hours down"], R.hosts.map(x => [x.name, x.site, x.events, x.downH]), {r: [2, 3], empty: "No repeat offenders."}))}</div>`;
+    body = `<div class="grid" style="padding:0">${panel("c7", "Problem Links", "", tbl(["Link", "Downtime (min)", "Outages", "Availability", "Score"], R.links.map(x => [x.name, x.downMin, x.events, pc(x.avail, 2), x.score]), {r: [1, 2, 3, 4], empty: "No link problems in the last 30 days."}))}
+      ${panel("c5", "Repeat Offender Devices", "", tbl(["Device", "Location", "Down events", "Hours down"], R.hosts.map(x => [x.name, x.site, x.events, x.downH]), {r: [2, 3], empty: "No repeat offenders."}))}</div>`;
   } else if (tab === "health") {
     const H = I.rank.health;
-    body = `<p class="sub">Score 0 to 100 per location: link availability 45%, device availability 35%, ticket load 20% (open tickets past SLA). Lowest first. Links use the last 7 days; devices and tickets use the current state.</p>` +
+    body = `` +
       tbl(["Location", "Health", "Score", "Link availability", "Devices down", "Tickets past SLA"], H.map(x => [x.site, {h: insBar(x.score)}, x.score, x.link == null ? "–" : pc(x.link, 2), x.devTotal ? x.devDown + " / " + x.devTotal : "–", x.overdue]), {r: [2, 3, 4, 5], tall: true, empty: "No location data yet."});
   } else if (tab === "summary") {
     const sc = S.sumScope || "24h", wins = I.windows || [];
-    body = `<p class="sub">Plain text built from stored numbers, ready to paste into the shift report or WhatsApp (Indonesian, with English technical terms). No AI: every figure comes from the database.</p>
+    body = `
       <div class="insbar"><label class="sub">Period <select id="sumScope" aria-label="Summary period">${wins.map(w => `<option value="${esc(w.key)}" ${w.key === sc ? "selected" : ""}>${esc(w.label)}</option>`).join("")}</select></label>
       ${sc === "24h" ? "" : `<label class="sub">Date <input type="date" id="sumDay" value="${esc(S.sumDay || nowShift().today)}" max="${esc(nowShift().today)}" min="${esc(CFG.params.data_start)}"></label>`}</div>
       <pre class="sumtxt" id="sumTxt">${esc(S.sumText || I.summary)}</pre><div class="acts"><button type="button" class="btn" data-ins-copy>Copy text</button><button type="button" class="btn ghost" data-ins-refresh>Regenerate</button></div>`;
   } else {
     const st = Object.entries(I.stats || {}).sort((a, b) => b[1].total - a[1].total);
     body = `<div class="grid" style="padding:0">${panel("c12", "Resolved in the last 14 days", "", I.done.length ? tbl(["Resolved", "Finding", "Detail"], I.done.map(r => [dtime(r.resolved), r.title, r.detail]), {tall: true}) : `<div class="empty sm">Nothing resolved yet.</div>`)}
-      ${panel("c7", "Dismissed", "hidden until the date shown; reopen any time", I.dismissed.length ? `<div class="icards">${I.dismissed.map(r => insCard(r, {hist: true, compact: true})).join("")}</div>` : `<div class="empty sm">No dismissed findings.</div>`)}
-      ${panel("c5", "Tuning", "last 30 days · a high dismissed rate means the threshold is too sensitive", tbl(["Type", "Findings", "Dismissed", "Rate"], st.map(([k, v]) => [INS_KIND[k] || k, v.total, v.dismissed, pc(v.dismissed / v.total, 0)]), {r: [1, 2, 3], empty: "No data yet."}))}</div>`;
+      ${panel("c7", "Dismissed", "", I.dismissed.length ? `<div class="icards">${I.dismissed.map(r => insCard(r, {hist: true, compact: true})).join("")}</div>` : `<div class="empty sm">No dismissed findings.</div>`)}
+      ${panel("c5", "Tuning", "", tbl(["Type", "Findings", "Dismissed", "Rate"], st.map(([k, v]) => [INS_KIND[k] || k, v.total, v.dismissed, pc(v.dismissed / v.total, 0)]), {r: [1, 2, 3], empty: "No data yet."}))}</div>`;
   }
   const how = `<details class="panel c12 how"><summary>How it works</summary><p class="sub">The analysis runs every 30 minutes on stored data, with no external service. The latest value is compared with what is normal (median and deviation of the previous 4 to 8 weeks, same weekday when there is a weekly pattern). A finding appears only when the difference is large and the absolute change is meaningful. Trends use the slope of the last 21 days to forecast when a target is crossed. Devices in maintenance are excluded. A finding that stops appearing is closed automatically.${CFG.me.is_admin ? `</p><button type="button" class="btn ghost sm" data-ins-run>Run analysis now</button>` : "</p>"}</details>`;
   return subnav("report") + (S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : "") + kp + grid(`<section class="panel c12"><div class="insbar">${nav}</div>${body}</section>` + how);

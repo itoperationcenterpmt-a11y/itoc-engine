@@ -81,6 +81,7 @@
  {"key": "wifi.weak_rssi", "label": "Sinyal client lemah bila di bawah (dBm)", "group": "wifi", "editor": "number", "value": -75, "sort": 3},
  {"key": "wifi.history_days", "label": "How long WiFi session history and trends are kept (days)", "group": "wifi", "editor": "number", "value": 90, "sort": 4},
 {"key": "ms.pa_patterns", "label": "Milestone devices counted as Public Announcers (text found in model, hardware, or device name; one per line)", "group": "devices", "editor": "list", "value": ["speaker"], "sort": 10},
+ {"key": "ms.ptz_patterns", "label": "Milestone devices counted as PTZ (text found in model, hardware, or device name; one per line). Everything else is FIX", "group": "devices", "editor": "list", "value": ["ptz"], "sort": 12},
  {"key": "ms.no_license_models", "label": "Milestone models that do not use a licence on this server (Interconnect hardware; one per line)", "group": "devices", "editor": "list", "value": ["ICPDriver"], "sort": 11},
  {"key": "dev.tab_kinds", "label": "Devices sub-menu to Zabbix category", "group": "devices", "editor": "json", "description": "menu key: category code (Zabbix host group prefix)", "value": {"devnet": "NETWORK", "devcctv": "CCTV", "devops": "OPERASIONAL"}, "sort": 2},
  {"key": "dev.kind_labels", "label": "Device category labels (Zabbix host group prefix)", "group": "devices", "editor": "json", "value": {"CCTV": "CCTV", "OPERASIONAL": "Gate System"}, "sort": 1},
