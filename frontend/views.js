@@ -48,7 +48,8 @@ function tbl(heads, rows, o = {}) {
   if (!rows.length) return `<div class="empty sm">${o.empty || "No data for this filter."}</div>`;
   const isN = heads.map((h, i) => rows.some(r => typeof r[i] === "number") || (o.r || []).includes(i));
   const cell = c => c == null ? "–" : typeof c === "number" ? (Number.isInteger(c) ? fmt(c) : fx(c, 2)) : c.h != null ? c.h : esc(c);
-  return `<div class="scroll ${o.tall ? "tall" : ""}"><table><thead><tr>${heads.map((h, i) => `<th class="${isN[i] ? "r" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>` + rows.map(r => `<tr>${r.map((c, i) => `<td class="${isN[i] ? "r num" : "t"}">${cell(c)}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>`;
+  const auto = rows.length > (o.max || 12) && o.tall !== false;      // long tables scroll inside their own box instead of stretching the page
+  return `<div class="scroll ${o.tall || auto ? "tall" : ""}"><table><thead><tr>${heads.map((h, i) => `<th class="${isN[i] ? "r" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>` + rows.map(r => `<tr>${r.map((c, i) => `<td class="${isN[i] ? "r num" : "t"}">${cell(c)}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>` + (auto ? `<div class="sub tcount">${fmt(rows.length)} rows · scroll inside the table to see more</div>` : "");
 }
 const dayB = arr => arr.map(x => ({label: dmon(x.date), full: dlong(x.date)}));
 const stPill = s => ({h: s === NST.ok ? pill("good", s) : s === NST.bad ? pill("crit", s) : pill("idle", s)});
