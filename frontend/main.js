@@ -39,13 +39,23 @@ async function downloadReport(kind, btn) {
 const LAYOUT_PAGES = ["ringkasan", "servicedesk", "network", "noc", "wifi", "cyber", "soc", "xdr", "devices", "devnet", "devcctv", "devops", "cctv"], SIZES = [["c3", "S"], ["c4", "M"], ["c6", "L"], ["c8", "XL"], ["c12", "Full"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
 const slug = s => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const nearest = c => { const n = +(String(c).slice(1)) || 12; return SIZES.reduce((a, s) => Math.abs(+s[0].slice(1) - n) < Math.abs(+a[0].slice(1) - n) ? s : a)[0]; };
+const curProfile = () => (CFG.me && CFG.me.profile) || "default";
+/* A profile only needs to hold the pages it changes: a page without rows in the chosen profile falls back to the Default profile. */
 function layoutRows(page, role) {
-  const L = CFG.layouts || [], mine = L.filter(r => r.page === page && r.role === role);
-  return mine.length ? mine : L.filter(r => r.page === page && r.role === "");
+  const L = CFG.layouts || [], prof = S.layEdit ? (S.layProfile || curProfile()) : curProfile();
+  const pick = p => { const m = L.filter(r => r.profile === p && r.page === page && r.role === role); return m.length ? m : L.filter(r => r.profile === p && r.page === page && r.role === ""); };
+  const own = pick(prof);
+  return own.length || prof === "default" ? own : pick("default");
+}
+function profileSwitcher(on) {
+  const w = $("profWrap"), P = CFG.profiles || [];
+  w.hidden = !(on && P.length > 1);
+  if (w.hidden) return;
+  $("profSel").innerHTML = P.map(p => `<option value="${esc(p.key)}" ${p.key === curProfile() ? "selected" : ""} title="${esc(p.description || "")}">${esc(p.name)}</option>`).join("");
 }
 function applyLayout() {
   const v = $("view"), on = LAYOUT_PAGES.includes(S.tab);
-  $("layBtn").hidden = !(on && CFG.me.is_admin); $("laybar").innerHTML = "";
+  $("layBtn").hidden = !(on && CFG.me.is_admin); $("laybar").innerHTML = ""; profileSwitcher(on);
   if (!on) return;
   const els = [...v.querySelectorAll(":scope > .grid > .panel, :scope > .grid > .stack > .panel, :scope > .kpis")];
   if (!els.length) return;
@@ -82,7 +92,7 @@ function applyLayout() {
   grid.querySelectorAll(".wblock").forEach(addTools);
   $("laybar").innerHTML = LAYBAR(); renderOff();
 }
-const LAYBAR = () => `<div class="laybar"><b>Customize</b><label>Apply to <select id="layRole"><option value="">All roles</option>${Object.values(CFG.roles).map(r => `<option value="${esc(r.key)}" ${r.key === S.layRole ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="layAdd">+ Add widget</button><button class="btn" type="button" id="laySave">Save</button><button class="btn ghost" type="button" id="layReset">Reset</button><button class="btn ghost" type="button" id="layCancel">Cancel</button></div><div class="layoff" id="layoff"></div><div class="laycat" id="laycat" hidden></div>`;
+const LAYBAR = () => `<div class="laybar"><b>Customize</b><label>Profile <select id="layProf">${(CFG.profiles || []).map(p => `<option value="${esc(p.key)}" ${p.key === (S.layProfile || curProfile()) ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="profNew" title="Create a new profile as a copy of the selected one">New</button><button class="btn ghost" type="button" id="profRename">Rename</button><button class="btn ghost" type="button" id="profDel">Delete</button><label>Apply to <select id="layRole"><option value="">All roles</option>${Object.values(CFG.roles).map(r => `<option value="${esc(r.key)}" ${r.key === S.layRole ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="layAdd">+ Add widget</button><button class="btn" type="button" id="laySave">Save</button><button class="btn ghost" type="button" id="layReset">Reset</button><button class="btn ghost" type="button" id="layCancel">Cancel</button></div><div class="layoff" id="layoff"></div><div class="laycat" id="laycat" hidden></div>`;
 function addTools(blk) {
     const t = document.createElement("div"), cur = nearest(blk.dataset.size || blk.dataset.dsize); t.className = "wtools";
     t.innerHTML = `<span class="wdrag" title="Drag to move">⠿ Move</span><button type="button" data-lay="up" title="Move up">▲</button><button type="button" data-lay="down" title="Move down">▼</button><select data-lay-size aria-label="Size">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Title" value="${esc(blk.dataset.title || "")}" aria-label="Title"><button type="button" data-lay="eye">${blk.classList.contains("off") ? "Show" : "Hide"}</button>${blk.dataset.wkey.startsWith("w-dev-map") ? `<select data-wgroup aria-label="Filter group" title="Filter group"><option value="">All groups</option>${((V.dev && V.dev.groups) || []).map(g => `<option value="${esc(g.name)}" ${blk.dataset.wkey === "w-dev-map:" + encodeURIComponent(g.name) ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>` : ""}<button type="button" data-lay="rm" title="${blk.dataset.added ? "Remove widget" : "Remove from dashboard (can be added again)"}">Remove</button>`;
@@ -131,14 +141,15 @@ document.addEventListener("pointerup", endDrag); document.addEventListener("poin
 document.addEventListener("dragstart", e => { if (LDRAG) e.preventDefault(); });
 async function saveLayout() {
   const blocks = [...$("view").querySelectorAll(".grid.lay > .wblock")].map(b => { const t = (b.dataset.title || "").trim(); return {key: b.dataset.wkey, title: t === (b.dataset.dtitle || "") ? "" : t, size: b.dataset.size || "", enabled: !b.classList.contains("off")}; });
-  const r = await send("/api/admin/layout", {page: S.tab, role: S.layRole, blocks}, "PUT");
-  CFG.layouts = (CFG.layouts || []).filter(x => !(x.page === S.tab && x.role === S.layRole)).concat(r.rows || []);   // used immediately, without waiting for another worker
+  const r = await send("/api/admin/layout", {page: S.tab, role: S.layRole, profile: S.layProfile || curProfile(), blocks}, "PUT");
+  CFG.layouts = (CFG.layouts || []).filter(x => !(x.profile === (S.layProfile || curProfile()) && x.page === S.tab && x.role === S.layRole)).concat(r.rows || []);   // used immediately, without waiting for another worker
   set({layEdit: false});
 }
 async function resetLayout() {
   if (!confirm("Reset this page layout to default?")) return;
-  await api("/api/admin/layout/" + S.tab + "?role=" + encodeURIComponent(S.layRole), {method: "DELETE"});
-  CFG.layouts = (CFG.layouts || []).filter(x => !(x.page === S.tab && x.role === S.layRole));
+  const pf = S.layProfile || curProfile();
+  await api("/api/admin/layout/" + S.tab + "?role=" + encodeURIComponent(S.layRole) + "&profile=" + encodeURIComponent(pf), {method: "DELETE"});
+  CFG.layouts = (CFG.layouts || []).filter(x => !(x.profile === pf && x.page === S.tab && x.role === S.layRole));
   set({layEdit: false});
 }
 document.addEventListener("input", e => { const t = e.target; if (t.id === "wpq") { applyWP(); return; } if (t.id === "dq" && S.tab === "wifi") { applyWF(); return; } if (t.id === "dq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll("#dlist tbody tr").forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); return; } if (t.id === "mq") { const q = t.value.trim().toLowerCase(); document.querySelectorAll(".mcard,.pcard").forEach(c => { c.hidden = !!q && !c.dataset.q.includes(q); }); return; } if (t.dataset && t.dataset.layTitle !== undefined) t.closest(".wblock").dataset.title = t.value; });
@@ -214,7 +225,10 @@ document.addEventListener("click", async e => {
   const b = e.target.closest("button"); if (!b || b.disabled) return;
   const d = b.dataset;
   try {
-    if (b.id === "layBtn") set({layEdit: !S.layEdit, layRole: ""});
+    if (b.id === "layBtn") set({layEdit: !S.layEdit, layRole: "", layProfile: curProfile()});
+    else if (b.id === "profNew") await profileNew();
+    else if (b.id === "profRename") await profileRename();
+    else if (b.id === "profDel") await profileDelete();
     else if (b.id === "laySave") await saveLayout();
     else if (b.id === "layReset") await resetLayout();
     else if (b.id === "layAdd") toggleCatalog();
@@ -267,6 +281,8 @@ document.addEventListener("change", async e => {
   else if (t.dataset.rkind) set({rkind: t.dataset.rkind});
   else if (t.dataset.rsec) set({rsecs: [...document.querySelectorAll("[data-rsec]:checked")].map(x => x.dataset.rsec)});
   else if (t.id === "layRole") set({layRole: t.value});
+  else if (t.id === "layProf") set({layProfile: t.value});
+  else if (t.id === "profSel") { await send("/api/me/profile", {profile: t.value}, "PUT"); CFG.me.profile = t.value; render(false); }
   else if (t.dataset.wf !== undefined) applyWF();
   else if (t.dataset.wp !== undefined) applyWP();
   else if (t.dataset.wgroup !== undefined) {   // change the group filter on a map widget without adding a new widget
@@ -399,3 +415,20 @@ async function checkBuild() {
 }
 checkBuild(); setInterval(checkBuild, 120000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) checkBuild(); });
+
+/* Dashboard profiles: create (copy of the selected one), rename, delete. Only Super Admin sees these in Customize. */
+const profName = k => ((CFG.profiles || []).find(p => p.key === k) || {}).name || k;
+async function profileNew() {
+  const from = S.layProfile || curProfile(), name = prompt("Name of the new profile (a copy of " + profName(from) + "):", ""); if (!name || !name.trim()) return;
+  const r = await send("/api/admin/profiles", {name: name.trim(), clone_from: from}); await reloadConfig(); S.layProfile = r.key; render(false);
+}
+async function profileRename() {
+  const k = S.layProfile || curProfile(), name = prompt("New name for " + profName(k) + ":", profName(k)); if (!name || !name.trim()) return;
+  await send("/api/admin/profiles/" + encodeURIComponent(k), {name: name.trim(), description: ((CFG.profiles || []).find(p => p.key === k) || {}).description || ""}, "PUT"); await reloadConfig(); render(false);
+}
+async function profileDelete() {
+  const k = S.layProfile || curProfile(), p = (CFG.profiles || []).find(x => x.key === k);
+  if (p && p.builtin) { alert("Built-in profiles cannot be deleted. You can edit them or reset a page instead."); return; }
+  if (!confirm("Delete the profile " + profName(k) + "? Users on it switch to Default.")) return;
+  await api("/api/admin/profiles/" + encodeURIComponent(k), {method: "DELETE"}); S.layProfile = "default"; if (curProfile() === k) CFG.me.profile = "default"; await reloadConfig(); render(false);
+}

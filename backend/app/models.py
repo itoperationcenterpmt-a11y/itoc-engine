@@ -67,6 +67,7 @@ class User(Base):
     must_change_pw: Mapped[bool] = mapped_column(Boolean, default=True)
     last_login: Mapped[datetime | None] = mapped_column(DateTime)
     site: Mapped[str | None] = mapped_column(String(120))  # untuk role EOS: batasi ke branch sendiri
+    profile: Mapped[str] = mapped_column(String(40), default="default", server_default="default")   # chosen dashboard profile
     role: Mapped[Role] = relationship(lazy="joined")
 
 
@@ -152,9 +153,20 @@ class Widget(Base):
     sort: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class LayoutProfile(Base):
+    """Dashboard profile: a named set of page layouts (for example NOC wall, Management). Each user picks one; Super Admin edits them with Customize."""
+    __tablename__ = "layout_profile"
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str | None] = mapped_column(String(200))
+    builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Layout(Base):
-    """Tata letak halaman dashboard (Overview, Service Desk, NOC, SOC): urutan, ukuran, judul, tampil/sembunyi tiap blok. Diatur lewat tombol Customize."""
+    """Page layout (Overview, Ticketing, ...) inside one profile: order, size, title, and show/hide of each block. Edited with the Customize button."""
     __tablename__ = "layout"
+    profile: Mapped[str] = mapped_column(String(40), primary_key=True, default="default")
     page: Mapped[str] = mapped_column(String(40), primary_key=True)
     role: Mapped[str] = mapped_column(String(40), primary_key=True, default="")   # "" = berlaku untuk semua role
     key: Mapped[str] = mapped_column(String(80), primary_key=True)                 # kunci blok (dari judul bawaan)

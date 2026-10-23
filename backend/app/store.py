@@ -56,6 +56,7 @@ class Config:
     clock: ShiftClock = field(repr=False)
     widgets: list = field(default_factory=list)
     layouts: list = field(default_factory=list)
+    profiles: list = field(default_factory=list)
 
     def p(self, key, default=None):
         return self.params.get(key, default)
@@ -97,7 +98,8 @@ def load_config(db: Session) -> Config:
         formulas=[_row(f, ["key", "label", "text", "source"]) for f in db.query(M.Formula).order_by(M.Formula.sort)],
         sources={s.key: _row(s, ["key", "label", "mode", "enabled", "interval_min", "tip", "last_ok_at", "last_error", "config"]) for s in db.query(M.DataSource)},
         clock=ShiftClock(shifts, teams, params.get("rotation", {})),
-        layouts=[_row(l, ["page", "role", "key", "title", "size", "enabled", "sort"]) for l in db.query(M.Layout).order_by(M.Layout.page, M.Layout.role, M.Layout.sort)],
+        layouts=[_row(l, ["profile", "page", "role", "key", "title", "size", "enabled", "sort"]) for l in db.query(M.Layout).order_by(M.Layout.profile, M.Layout.page, M.Layout.role, M.Layout.sort)],
+        profiles=[_row(p, ["key", "name", "description", "builtin", "sort"]) for p in db.query(M.LayoutProfile).order_by(M.LayoutProfile.sort, M.LayoutProfile.name)],
         widgets=[_row(w, ["key", "section", "title", "kind", "top_n", "hero", "presets", "sort"]) for w in db.query(M.Widget).filter_by(enabled=True).order_by(M.Widget.section, M.Widget.sort)],
     )
     with _lock:

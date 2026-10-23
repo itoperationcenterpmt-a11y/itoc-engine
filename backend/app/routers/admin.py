@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from ..db import get_db
-from ..models import MASTER, Parameter, User, Role, Layout
+from ..models import MASTER, Parameter, User, Role, Layout, LayoutProfile
 from ..security import require_admin, require_admin_area, hash_pw, random_pw
 from ..store import load_config, audit, bump_config, bump_data
 
@@ -138,6 +138,7 @@ class LayoutBlock(BaseModel):
 
 class LayoutIn(BaseModel):
     page: str
+    profile: str = "default"
     role: str = ""
     blocks: list[LayoutBlock]
 
@@ -159,25 +160,27 @@ def layout_set(body: LayoutIn, db: Session = Depends(get_db), user: User = Depen
     """Simpan tata letak satu halaman untuk satu role (role kosong = semua role). Menggantikan pengaturan lama halaman+role itu."""
     if body.role and not db.get(Role, body.role):
         raise HTTPException(404, "Unknown role")
-    db.query(Layout).filter_by(page=body.page, role=body.role).delete()
+    if not db.get(LayoutProfile, body.profile):
+        raise HTTPException(404, "Unknown profile")
+    db.query(Layout).filter_by(profile=body.profile, page=body.page, role=body.role).delete()
     seen, rows = set(), []
     for b in body.blocks:
         if b.key in seen or b.size not in ("", "c3", "c4", "c6", "c8", "c12"):
             continue
         seen.add(b.key)
-        r = {"page": body.page, "role": body.role, "key": b.key[:80], "title": b.title.strip()[:120], "size": b.size, "enabled": b.enabled, "sort": len(seen)}
+        r = {"profile": body.profile, "page": body.page, "role": body.role, "key": b.key[:80], "title": b.title.strip()[:120], "size": b.size, "enabled": b.enabled, "sort": len(seen)}
         rows.append(r)
         db.add(Layout(**r))
-    audit(db, user.username, f"Mengatur tata letak {body.page}" + (f" untuk role {body.role}" if body.role else " (all roles)"))
+    audit(db, user.username, f"Edited layout {body.page} in profile {body.profile}" + (f" for role {body.role}" if body.role else " (all roles)"))
     db.commit()
     bump_config()
     return {"ok": True, "n": len(seen), "rows": rows}
 
 
 @router.delete("/layout/{page}")
-def layout_reset(page: str, role: str = "", db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    db.query(Layout).filter_by(page=page, role=role).delete()
-    audit(db, user.username, f"Mengembalikan tata letak {page} ke bawaan" + (f" untuk role {role}" if role else " (all roles)"))
+def layout_reset(page: str, role: str = "", profile: str = "default", db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    db.query(Layout).filter_by(profile=profile, page=page, role=role).delete()
+    audit(db, user.username, f"Reset layout {page} in profile {profile}" + (f" for role {role}" if role else " (all roles)"))
     db.commit()
     bump_config()
     return {"ok": True}
@@ -405,3 +408,72 @@ def admin_status(db: Session = Depends(get_db)):
                      "age_min": age, "error": s.last_error, "state": state, "last_msg": last.message[:200] if last else "", "last_rows": last.rows if last else 0})
     logs = [{"at": x.at.isoformat(), "source": x.source, "ok": x.ok, "rows": x.rows, "ms": x.ms, "msg": x.message[:160]} for x in db.scalars(select(SyncLog).order_by(SyncLog.id.desc()).limit(30))]
     return {"sources": rows, "log": logs}
+
+
+# ---------------- dashboard profiles ----------------
+class ProfileNew(BaseModel):
+    name: str
+    description: str = ""
+    clone_from: str = "default"
+
+
+class ProfileEdit(BaseModel):
+    name: str
+    description: str = ""
+
+
+def _pkey(name: str, db: Session) -> str:
+    import re
+    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:30] or "profile"
+    key, n = base, 2
+    while db.get(LayoutProfile, key):
+        key, n = f"{base}-{n}", n + 1
+    return key
+
+
+@router.post("/profiles")
+def profile_create(body: ProfileNew, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """New dashboard profile, copied from an existing one (all pages)."""
+    if not body.name.strip():
+        raise HTTPException(422, "A profile name is required")
+    if not db.get(LayoutProfile, body.clone_from):
+        raise HTTPException(404, "The profile to copy from does not exist")
+    key = _pkey(body.name, db)
+    db.add(LayoutProfile(key=key, name=body.name.strip()[:80], description=body.description.strip()[:200] or None, builtin=False, sort=(db.query(LayoutProfile).count() + 1) * 10))
+    db.flush()
+    for r in db.query(Layout).filter_by(profile=body.clone_from).all():
+        db.add(Layout(profile=key, page=r.page, role=r.role, key=r.key, title=r.title, size=r.size, enabled=r.enabled, sort=r.sort))
+    audit(db, user.username, f"Created dashboard profile {body.name.strip()} (copied from {body.clone_from})")
+    db.commit()
+    bump_config()
+    return {"ok": True, "key": key}
+
+
+@router.put("/profiles/{key}")
+def profile_edit(key: str, body: ProfileEdit, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    p = db.get(LayoutProfile, key)
+    if not p:
+        raise HTTPException(404, "Unknown profile")
+    if not body.name.strip():
+        raise HTTPException(422, "A profile name is required")
+    p.name, p.description = body.name.strip()[:80], body.description.strip()[:200] or None
+    audit(db, user.username, f"Renamed dashboard profile {key} to {p.name}")
+    db.commit()
+    bump_config()
+    return {"ok": True}
+
+
+@router.delete("/profiles/{key}")
+def profile_delete(key: str, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    p = db.get(LayoutProfile, key)
+    if not p:
+        raise HTTPException(404, "Unknown profile")
+    if key == "default" or p.builtin:
+        raise HTTPException(409, "Built-in profiles cannot be deleted; you can edit them instead")
+    db.query(Layout).filter_by(profile=key).delete()
+    db.query(User).filter_by(profile=key).update({"profile": "default"})
+    db.delete(p)
+    audit(db, user.username, f"Deleted dashboard profile {p.name}")
+    db.commit()
+    bump_config()
+    return {"ok": True}

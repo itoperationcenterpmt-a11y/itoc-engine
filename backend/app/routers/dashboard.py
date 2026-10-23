@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from ..db import get_db
-from ..models import User, Handover, MASTER
+from ..models import User, Handover, MASTER, LayoutProfile
 from ..security import current_user, can_see, require_write, effective_site, ADMIN_MASTER_PAGE, locked_pages
 from ..store import load_config, audit, bump_data
 from .. import views
@@ -50,11 +50,11 @@ def config(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return {
         "me": {"username": user.username, "name": user.full_name, "role": user.role_key, "site": effective_site(user, db), "is_admin": user.role.is_admin, "admin_view": user.role.admin_view,
                "can_write": user.role.can_write, "must_change_pw": user.must_change_pw, "wifi_kill": wifi_calc.can_kill(user, c),
-               "uploads": ["*"] if user.role.is_admin else (user.role.uploads or [])},
+               "uploads": ["*"] if user.role.is_admin else (user.role.uploads or []), "profile": user.profile or "default"},
         "modules": [m for m in c.modules if can_see(user, m["key"])],
         "roles": c.roles if (user.role.is_admin or user.role.admin_view) else {user.role_key: c.roles.get(user.role_key)},
         "shifts": c.shifts, "teams": c.teams, "rotation": P.get("rotation"), "sites": c.sites, "people": c.people,
-        "layouts": c.layouts, "build": BUILD,
+        "layouts": c.layouts, "profiles": c.profiles, "build": BUILD,
         "formulas": c.formulas, "sla": c.sla, "isps": c.isps,
         "par": {"slaH": c.sla, "target": P["net.target"], "minCov": P["net.min_cov"], "utilPeak": P["net.util_peak"], "utilAvg": P["net.util_avg"]},
         "params": {k: v for k, v in P.items() if user.role.is_admin or user.role.admin_view or not _hidden_param(user, k)},  # tanpa rahasia; parameter modul yang tidak boleh dilihat role ini ikut disembunyikan
@@ -142,3 +142,18 @@ def ho_close(hid: int, body: HoClose, user: User = Depends(require_write), db: S
     if tone == "crit":
         notify.fire("handover_high", txt)
     return views.ho_json(h)
+
+
+class ProfileIn(BaseModel):
+    profile: str
+
+
+@router.put("/me/profile")
+def my_profile(body: ProfileIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Each user chooses which dashboard profile (layout set) to see."""
+    if not db.get(LayoutProfile, body.profile):
+        raise HTTPException(404, "Unknown profile")
+    u = db.get(User, user.id)
+    u.profile = body.profile
+    db.commit()
+    return {"ok": True}

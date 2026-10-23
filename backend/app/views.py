@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from . import models as M
 from .store import Config, cached
 from .timeutil import ms
-from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR, cctv as CCTV, insight as INSIGHT
+from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR, cctv as CCTV, insight as INSIGHT, viz as VIZ
 from .calc.common import iso
 from .security import can_see, locked_pages
 
@@ -141,6 +141,8 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
             V["dev"]["hist"] = DEV.history(db, cfg, f.d_from, f.d_to, st, dkind, f.dtype)
     if tab == "xdr" or (tab in ("ringkasan", "cyber") and ok("xdr")):
         V["xdr"] = XDR.build(db, cfg, a, b, f.kind if tab == "xdr" and f.kind in XDR.SEV else "")
+    if tab in ("ringkasan", "servicedesk", "noc", "network", "cyber", "devices"):
+        V["viz"] = VIZ.build(db, cfg, a, b, _tsite(db, st) if st else None)
     if tab == "insight" or (tab in INSIGHT_TABS and ok("insight")):
         V["insight"] = INSIGHT.build(db, cfg, full=tab == "insight")
     if tab == "cctv" or (tab == "ringkasan" and ok("cctv")):
