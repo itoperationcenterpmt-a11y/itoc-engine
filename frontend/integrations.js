@@ -36,10 +36,13 @@ function vIntegrations() {
         ${creds}
         <div class="acts wide"><button class="btn" type="submit" data-w>Save</button><button class="btn ghost" type="button" data-int="test" data-key="${esc(s.key)}" data-w>Test connection</button><button class="btn ghost" type="button" data-int="sync" data-key="${esc(s.key)}" data-w>Sync now</button></div></form>`
       : `<p class="sub">This source has no API. Data comes in through RAW upload in Report → Data.</p>`;
-    return `<article class="icard ${s.key === "milestone" ? "wide" : ""}"><header><b>${esc(s.label)}</b><span class="tag ${s.enabled ? "on" : ""}">${s.enabled ? "Active" : "Inactive"}</span><span class="tag">${s.mode === "api" ? "API" : "Impor"}</span></header>
+    const tone = s.last_error ? "crit" : !s.enabled ? "idle" : s.last_ok_at ? "good" : "warn";
+    const sum = s.servers ? s.servers.length + " servers · " + fmt(s.servers.reduce((a, x) => a + (x.cameras || 0), 0)) + " cameras" : s.stats ? fmt(s.stats.total) + " devices · " + fmt(s.stats.down) + " down" : "";
+    return `<details class="icard isrc" data-isrc="${esc(s.key)}" ${INT.open && INT.open.has(s.key) ? "open" : ""}><summary><span class="idot ${tone}"></span><b>${esc(s.label)}</b><span class="tag ${s.enabled ? "on" : ""}">${s.enabled ? "Active" : "Inactive"}</span><span class="tag">${s.mode === "api" ? "API" : "Import"}</span>
+      <span class="sub isum">${s.last_error ? `<b class="errtx">error: ${esc(String(s.last_error).slice(0, 70))}</b>` : s.last_ok_at ? "synced " + esc(intDt(s.last_ok_at)) : "never synced"}${sum ? " · " + sum : ""}</span><span class="cfg">Configure</span></summary>
       <span class="sub">${esc(s.tip || "")}</span>
       ${s.stats ? `<span class="sub">Devices: <b>${s.stats.total}</b> · up ${s.stats.up} · down <b class="${s.stats.down ? "errtx" : ""}">${s.stats.down}</b> · maintenance ${s.stats.maintenance} · disabled ${s.stats.disabled}</span>` : ""}
-      <span class="sub">Last successful sync: ${esc(intDt(s.last_ok_at))}${s.last_error ? ` · <b class="errtx">error: ${esc(String(s.last_error).slice(0, 120))}</b>` : ""}</span>${body}</article>`;
+      <span class="sub">Last successful sync: ${esc(intDt(s.last_ok_at))}${s.last_error ? ` · <b class="errtx">error: ${esc(String(s.last_error).slice(0, 120))}</b>` : ""}</span>${body}</details>`;
   }).join("")}</div>`;
 }
 
@@ -179,4 +182,9 @@ document.addEventListener("submit", e => {
   const f = e.target.closest('[data-int-form="audit"]'); if (!f) return;
   e.preventDefault(); e.stopImmediatePropagation();
   AUD.f = intForm(f); AUD.loaded = false; render(false);
+}, true);
+
+document.addEventListener("toggle", e => {                    /* remember which source cards are open across re-renders */
+  const d = e.target; if (!d.matches || !d.matches("details.isrc")) return;
+  (INT.open = INT.open || new Set())[d.open ? "add" : "delete"](d.dataset.isrc);
 }, true);

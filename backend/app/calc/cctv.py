@@ -11,8 +11,8 @@ def build(db, cfg, server: str = "", hw_name: str = "", state: str = "") -> dict
     all_hws = db.query(CctvHardware).order_by(CctvHardware.cameras.desc(), CctvHardware.name).all()
     opts = {"servers": sorted({c.server for c in all_cams} | {h.server for h in all_hws}), "hardware": sorted({(h.server, h.name) for h in all_hws})}
     opts["hardware"] = [{"server": s, "name": n} for s, n in opts["hardware"]]
-    zmap = {ip: st for ip, st in db.query(ZbxHost.ip, ZbxHost.status).filter(ZbxHost.ip != "")}      # online status comes from Zabbix, matched by IP
-    z = lambda c: zmap.get(c.ip or "", "")
+    zrows = {h.ip: h for h in db.query(ZbxHost).filter(ZbxHost.ip != "")}                        # online status comes from Zabbix, matched by IP
+    z = lambda c: zrows[c.ip].status if c.ip in zrows else ""
     ok = {"": lambda c: True, "rec": lambda c: c.recording, "norec": lambda c: c.enabled and not c.recording, "off": lambda c: not c.enabled,
           "down": lambda c: z(c) in ("down", "degraded"), "nozbx": lambda c: not z(c)}.get(state, lambda c: True)
     cams = [c for c in all_cams if (not server or c.server == server) and (not hw_name or c.hardware == hw_name) and ok(c)]
@@ -42,5 +42,5 @@ def build(db, cfg, server: str = "", hw_name: str = "", state: str = "") -> dict
             "total": len(cams), "camEnabled": sum(1 for c in cams if c.enabled), "recording": sum(1 for c in cams if c.recording), "noIp": sum(1 for c in cams if not c.ip),
             "opts": opts, "zbx": {"matched": sum(1 for c in cams if z(c)), "up": sum(1 for c in cams if z(c) == "up"), "down": sum(1 for c in cams if z(c) in ("down", "degraded")), "other": sum(1 for c in cams if z(c) in ("maintenance", "disabled")), "none": sum(1 for c in cams if not z(c))},
             "nHw": len(hws), "servers": [{**s, "updated": ms(s["updated"] + (now - datetime.utcnow())) if s["updated"] else None} for s in sv.values()], "hwOff": sum(1 for h in hws if not h.enabled), "hw": hw,
-            "list": [{"name": c.name, "server": c.server, "hw": c.hardware or "-", "ip": c.ip or "", "ch": c.channel, "enabled": c.enabled, "rec": c.recording, "fps": c.fps or "", "zbx": z(c), "mod": ms(c.modified_at)} for c in cams],
+            "list": [{"name": c.name, "server": c.server, "hw": c.hardware or "-", "ip": c.ip or "", "ch": c.channel, "enabled": c.enabled, "rec": c.recording, "fps": c.fps or "", "zbx": z(c), "zprob": (zrows[c.ip].problem or "") if c.ip in zrows else "", "zsince": ms(zrows[c.ip].down_since) if c.ip in zrows and zrows[c.ip].down_since else None, "mod": ms(c.modified_at)} for c in cams],
             "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": bool(last) and (datetime.utcnow() - last).total_seconds() > every * 60 * 3}

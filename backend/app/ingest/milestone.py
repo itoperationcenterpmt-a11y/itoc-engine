@@ -39,6 +39,8 @@ def get(cl: httpx.Client, base: str, token: str, path: str, params: dict | None 
     r = cl.get(root(base) + "/API/rest/v1/" + path.lstrip("/"), params=params, headers={"Authorization": "Bearer " + token, "Accept": "application/json"})
     if r.status_code in (401, 403):
         raise RuntimeError("HTTP %d (token rejected or the account has no permission)" % r.status_code)
+    if r.status_code == 404 and "json" not in r.headers.get("content-type", "").lower():
+        raise RuntimeError("REST API not available on this server (HTTP 404 from IIS: the XProtect API Gateway is not installed, or the version is older than 2022 R2)")
     if r.status_code >= 400:
         raise RuntimeError("HTTP %d" % r.status_code)
     return r.json()
@@ -64,7 +66,7 @@ def probe(cl: httpx.Client, base: str, token: str) -> list[str]:
             keys = sorted(rows[0].keys())[:16] if rows and isinstance(rows[0], dict) else (sorted(j.keys())[:10] if isinstance(j, dict) else [])
             out.append("%s (/%s): %d records, fields: %s." % (label, path, len(rows), ", ".join(keys) or "-"))
         except (RuntimeError, httpx.HTTPError, ValueError) as e:
-            out.append("%s (/%s): not available (%s)." % (label, path, str(e)[:60]))
+            out.append("%s (/%s): not available (%s)." % (label, path, str(e)[:170]))
     return out
 
 
