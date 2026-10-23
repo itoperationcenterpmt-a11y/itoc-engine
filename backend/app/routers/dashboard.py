@@ -9,6 +9,21 @@ from ..store import load_config, audit, bump_data
 from .. import views
 from ..calc import wifi as wifi_calc
 
+def _build_stamp() -> str:
+    """Newest change time of the frontend files, shown in the footer so it is clear which version a browser is running."""
+    from datetime import datetime, timedelta
+    from pathlib import Path
+    fe = Path(__file__).resolve().parent.parent.parent / "../frontend"
+    try:
+        t = max(p.stat().st_mtime for p in fe.resolve().glob('*') if p.is_file())
+        return (datetime.utcfromtimestamp(t) + timedelta(hours=7)).strftime('%d %b %H:%M')
+    except (ValueError, OSError):
+        return ''
+
+
+BUILD = _build_stamp()
+
+
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
 
@@ -39,7 +54,7 @@ def config(user: User = Depends(current_user), db: Session = Depends(get_db)):
         "modules": [m for m in c.modules if can_see(user, m["key"])],
         "roles": c.roles if (user.role.is_admin or user.role.admin_view) else {user.role_key: c.roles.get(user.role_key)},
         "shifts": c.shifts, "teams": c.teams, "rotation": P.get("rotation"), "sites": c.sites, "people": c.people,
-        "layouts": c.layouts,
+        "layouts": c.layouts, "build": BUILD,
         "formulas": c.formulas, "sla": c.sla, "isps": c.isps,
         "par": {"slaH": c.sla, "target": P["net.target"], "minCov": P["net.min_cov"], "utilPeak": P["net.util_peak"], "utilAvg": P["net.util_avg"]},
         "params": {k: v for k, v in P.items() if user.role.is_admin or user.role.admin_view or not _hidden_param(user, k)},  # tanpa rahasia; parameter modul yang tidak boleh dilihat role ini ikut disembunyikan

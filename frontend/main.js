@@ -362,7 +362,7 @@ function showLogin(msg, change) {
     <section class="lg-card lg-form"><img class="lg-logo lg-l" src="assets/logo-g2.png" alt="IT Operation Center"><img class="lg-logo lg-d" src="assets/logo-g2-dark.png" alt="">${form}<div class="loginfoot">${esc(footText())}</div></section></div></div>`;
   const first = $("login").querySelector("input"); if (first) first.focus();
 }function logout(msg) { fetch("/api/auth/logout", {method: "POST", credentials: "same-origin", headers: {"X-Requested-With": "itoc"}}).catch(() => {}); CFG = null; showLogin(typeof msg === "string" ? msg : ""); }
-const footText = () => FOOT.replace("{year}", new Date().getFullYear());
+const footText = () => FOOT.replace("{year}", new Date().getFullYear()) + (CFG && CFG.build ? " · build " + CFG.build : "");
 /* First line is the main name (not truncated), the last word ("Dashboard") goes on the second line */
 /* The name shown in the sidebar and login page is the first BSPLIT words ("Dashboard IT"); the full name is used in the tab title, reports, and email. */
 const brandHtml = () => { const w = BRAND.trim().split(/\s+/), n = Math.max(1, Math.min(typeof BSPLIT === "number" ? BSPLIT : 2, w.length)); return `<span class="b1">${esc(w.slice(0, n).join(" "))}</span>`; };
