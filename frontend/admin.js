@@ -1,84 +1,98 @@
-/* Menu Admin: pengelompokan halaman, role dan hak akses, data yang perlu dilengkapi, dan status sumber data. */
+/* Admin menu: grouped pages, roles and access, data that needs completing, source status, and page access (Super Admin lock). */
 "use strict";
 const ADM = [
-  ["akses", "Akses", [["pengguna", "Pengguna"], ["roles", "Role"], ["apikeys", "Kunci API"]]],
-  ["sumber", "Sumber Data", [["integrasi", "Integrasi"], ["pemetaan", "Pemetaan"], ["dilengkapi", "Perlu Dilengkapi"]]],
-  ["operasional", "Operasional", [["personel", "Personnel"], ["tim", "Tim dan Shift"], ["parameter", "Target dan Parameter"], ["rumus", "Rumus"]]],
-  ["notifikasi", "Notifikasi", [["smtp", "Email"], ["webhooks", "Webhook"]]],
-  ["sistem", "Sistem", [["audit", "Audit Log"], ["status", "Status Sumber"], ["menu", "Menu dan Widget"]]]
+  ["akses", "Access", [["pengguna", "Users"], ["roles", "Roles"], ["apikeys", "API Keys"]]],
+  ["sumber", "Data Sources", [["integrasi", "Integrations"], ["pemetaan", "Mapping"], ["dilengkapi", "Needs Completion"]]],
+  ["operasional", "Operations", [["personel", "Personnel"], ["tim", "Teams & Shifts"], ["parameter", "Targets & Parameters"], ["rumus", "Formulas"]]],
+  ["notifikasi", "Notifications", [["smtp", "Email"], ["webhooks", "Webhooks"]]],
+  ["sistem", "System", [["audit", "Audit Log"], ["status", "Source Status"], ["menu", "Menus & Widgets"], ["akses", "Page Access"]]]
 ];
-const admGroup = k => ADM.find(g => g[2].some(s => s[0] === k)) || ADM[0];
-const COLN = {id: "ID", name: "Nama", kind: "Jenis", aliases: "Alias", active: "Aktif", sort: "Urutan", lat: "Lintang (lat)", lon: "Bujur (lon)", sys_name: "Nama di Sistem", unit: "Unit", job: "Jabatan",
-  team_code: "Kode Tim", branch: "Cabang", phone: "Telepon", is_coordinator: "Koordinator", is_shared: "Dipakai Bersama", exclude_rank: "Tidak Masuk Peringkat", code: "Kode", label: "Label",
-  rotation_offset: "Geser Rotasi", no: "No", start_hour: "Jam Mulai", keyword: "Kata Kunci", target: "Target", hours: "Batas (jam)", device: "Lokasi (Device PRTG)", capacity_mbps: "Kapasitas (Mbps)",
-  key: "Kunci", enabled: "Aktif", filters: "Filter", note: "Catatan", why: "Alasan", parent: "Menu Induk", icon: "Ikon", badge: "Lencana", notice: "Pemberitahuan", title: "Judul", section: "Bagian",
-  top_n: "Jumlah Teratas", hero: "Utama", presets: "Preset", modules: "Menu", can_write: "Boleh Menulis", is_admin: "Admin Penuh", uploads: "Jenis Unggah", admin_view: "Lihat Admin", scope: "Lingkup",
-  text: "Rumus", source: "Sumber", mode: "Mode", interval_min: "Interval (menit)", config: "Konfigurasi", tip: "Keterangan", site: "Lokasi", description: "Deskripsi"};
+const COLN = {id: "ID", name: "Name", kind: "Type", aliases: "Aliases", active: "Active", sort: "Order", lat: "Latitude", lon: "Longitude", sys_name: "System Name", unit: "Unit", job: "Job Title",
+  team_code: "Team Code", branch: "Branch", phone: "Phone", is_coordinator: "Coordinator", is_shared: "Shared", exclude_rank: "Exclude from Ranking", code: "Code", label: "Label",
+  rotation_offset: "Rotation Offset", no: "No.", start_hour: "Start Hour", keyword: "Keyword", target: "Target", hours: "Limit (hours)", device: "Location (PRTG Device)", capacity_mbps: "Capacity (Mbps)",
+  key: "Key", enabled: "Enabled", filters: "Filters", note: "Note", why: "Reason", parent: "Parent Menu", icon: "Icon", badge: "Badge", notice: "Notice", title: "Title", section: "Section",
+  top_n: "Top N", hero: "Featured", presets: "Presets", modules: "Menus", can_write: "Can Edit", is_admin: "Full Admin", uploads: "Upload Types", admin_view: "View Admin", scope: "Scope",
+  text: "Formula", source: "Source", mode: "Mode", interval_min: "Interval (min)", config: "Configuration", tip: "Description", site: "Location", description: "Description"};
 const colLabel = n => COLN[n] || n.replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+
+/* Crucial pages are hidden from every role except Super Admin; the list is set in System > Page Access. */
+const admVisible = k => CFG.me.is_admin || !((CFG.admin_locked || []).includes(k) || k === "akses");
+const admPages = () => ADM.map(([gk, gt, ps]) => [gk, gt, ps.filter(p => admVisible(p[0]))]).filter(g => g[2].length);
+const admGroup = k => admPages().find(g => g[2].some(s => s[0] === k)) || admPages()[0] || ADM[0];
+function admEnsure() { if (!admVisible(S.adm) || !ADM.some(g => g[2].some(p => p[0] === S.adm))) { const g = admPages()[0]; if (g) S.adm = g[2][0][0]; } }
 
 function admNav() {
   const g = admGroup(S.adm), todo = INT.todo ? INT.todo.total : 0;
-  return `<div class="admnav"><div class="subtabs admgrp">${ADM.map(([k, t]) => `<button type="button" data-admgrp="${k}" aria-selected="${g[0] === k}">${t}</button>`).join("")}</div>
+  return `<div class="admnav"><div class="subtabs admgrp">${admPages().map(([k, t]) => `<button type="button" data-admgrp="${k}" aria-selected="${g[0] === k}">${t}</button>`).join("")}</div>
     <div class="subtabs">${g[2].map(([k, t]) => `<button type="button" data-adm="${k}" aria-selected="${S.adm === k}">${t}${k === "dilengkapi" && todo ? ` <span class="tag warn">${todo}</span>` : ""}</button>`).join("")}</div></div>`;
 }
 const admTitle = (t, d) => `<div class="admhead"><h3>${esc(t)}</h3>${d ? `<span class="sub">${esc(d)}</span>` : ""}</div>`;
 const admGo = (adm, mkey) => set({adm, mkey: mkey || "", mdata: null, medit: null, msg: "", addUser: false, editUser: "", params: adm === "parameter" ? null : S.params});
 
-/* ---------- Role dan hak akses ---------- */
-const ROLE_SCOPE = [["all", "Semua lokasi"], ["ho", "Kantor pusat saja"], ["own", "Lokasi pada akun sendiri"]];
-const ROLE_UPLOAD = [["soc", "Data SOC (NDR)"], ["tickets", "Tiket"], ["prtg", "PRTG"]];
+/* ---------- Roles and access ---------- */
+const ROLE_SCOPE = [["all", "All locations"], ["ho", "Head office only"], ["own", "Account's own location"]];
+const ROLE_UPLOAD = [["soc", "SOC data (NDR)"], ["tickets", "Tickets"], ["prtg", "PRTG"]];
 const modName = m => { const x = MODS[m]; if (!x) return m; const p = x.parent ? MODS[x.parent] : null; return (p ? p.label + " › " : "") + x.label; };
 function vRoles() {
   if (!INT.roles) { intLoad("roles", "master/role"); return intLoading(); }
   const rows = INT.roles.rows.slice().sort((a, b) => (a.sort || 0) - (b.sort || 0)), mods = Object.values(MODS).filter(m => m.key !== "admin");
   const e = INT.roleEdit, can = CFG.me.is_admin;
-  const flag = (r, f) => r[f] ? `<span class="ok-t">Ya</span>` : `<span class="sub">–</span>`;
+  const flag = (r, f) => r[f] ? `<span class="ok-t">Yes</span>` : `<span class="sub">–</span>`;
   const form = !e ? "" : `<form class="form formbox" data-role-form>
-    <div class="fld"><label for="rK">Kunci${e.__new ? " *" : ""}</label><input id="rK" type="text" value="${esc(e.key || "")}" ${e.__new ? "" : "readonly"} placeholder="huruf kecil tanpa spasi, mis. auditor"></div>
-    <div class="fld"><label for="rL">Nama Role *</label><input id="rL" type="text" value="${esc(e.label || "")}"></div>
-    <div class="fld wide"><label for="rD">Keterangan (siapa yang memakai role ini)</label><input id="rD" type="text" value="${esc(e.description || "")}"></div>
-    <div class="fld wide"><label>Menu yang boleh dibuka</label><div class="chkgrid"><label class="chk"><input type="checkbox" id="rAll" ${(e.modules || []).includes("*") ? "checked" : ""}> Semua menu</label>
+    <div class="fld"><label for="rK">Key${e.__new ? " *" : ""}</label><input id="rK" type="text" value="${esc(e.key || "")}" ${e.__new ? "" : "readonly"} placeholder="lowercase, no spaces, e.g. auditor"></div>
+    <div class="fld"><label for="rL">Role Name *</label><input id="rL" type="text" value="${esc(e.label || "")}"></div>
+    <div class="fld wide"><label for="rD">Description (who uses this role)</label><input id="rD" type="text" value="${esc(e.description || "")}"></div>
+    <div class="fld wide"><label>Menus this role can open</label><div class="chkgrid"><label class="chk"><input type="checkbox" id="rAll" ${(e.modules || []).includes("*") ? "checked" : ""}> All menus</label>
       ${mods.map(m => `<label class="chk"><input type="checkbox" data-rmod="${esc(m.key)}" ${(e.modules || []).includes("*") || (e.modules || []).includes(m.key) ? "checked" : ""}> ${esc(modName(m.key))}</label>`).join("")}</div></div>
-    <div class="fld"><label for="rS">Lingkup lokasi</label><select id="rS">${intOpt(ROLE_SCOPE, e.scope || "all")}</select></div>
-    <div class="fld wide"><label>Izin</label><div class="chkgrid">
-      <label class="chk"><input type="checkbox" id="rW" ${e.can_write ? "checked" : ""}> Boleh menulis (serah terima dan unggah data)</label>
-      <label class="chk"><input type="checkbox" id="rA" ${e.is_admin ? "checked" : ""}> Admin penuh (kelola pengguna, pengaturan, integrasi)</label>
-      <label class="chk"><input type="checkbox" id="rV" ${e.admin_view ? "checked" : ""}> Boleh membuka menu Admin, hanya baca</label></div></div>
-    <div class="fld wide"><label>Jenis data yang boleh diunggah</label><div class="chkgrid">${ROLE_UPLOAD.map(([v, l]) => `<label class="chk"><input type="checkbox" data-rup="${v}" ${(e.uploads || []).includes("*") || (e.uploads || []).includes(v) ? "checked" : ""}> ${l}</label>`).join("")}</div></div>
-    <div class="acts wide"><button class="btn" type="submit">Simpan</button><button class="btn ghost" type="button" data-role="x">Batal</button>${e.__new || e.key === "superadmin" ? "" : `<button class="btn ghost" type="button" data-role="del">Hapus</button>`}<span class="msg err" id="rMsg"></span></div></form>`;
-  return intMsg() + admTitle("Role dan Hak Akses", "Role menentukan menu yang terlihat, hak mengubah data, dan lingkup lokasi. Tiap pengguna memiliki satu role.") + form + `<div class="toolbar">${can ? `<button class="btn" type="button" data-role="new">+ Tambah Role</button>` : ""}</div>
-    <div class="rolecards">${rows.map(r => `<article class="rcard"><header><b>${esc(r.label)}</b><span class="sub">${esc(r.key)}</span>${can ? `<button class="btn ghost sm" type="button" data-role="edit" data-key="${esc(r.key)}">Ubah</button>` : ""}</header>
-      <p>${esc(r.description || "Belum ada keterangan.")}</p>
-      <div class="rflags"><span>Lingkup: <b>${esc((ROLE_SCOPE.find(x => x[0] === r.scope) || ["", r.scope])[1])}</b></span><span>Tulis: ${flag(r, "can_write")}</span><span>Admin: ${r.is_admin ? `<span class="ok-t">Penuh</span>` : r.admin_view ? `<b>Baca saja</b>` : `<span class="sub">–</span>`}</span></div></article>`).join("")}</div>
-    <h4 class="admsub">Menu per role</h4><div class="scroll"><table class="matrix"><thead><tr><th>Role</th>${mods.map(m => `<th title="${esc(modName(m.key))}">${esc(m.label)}</th>`).join("")}</tr></thead><tbody>
+    <div class="fld"><label for="rS">Location scope</label><select id="rS">${intOpt(ROLE_SCOPE, e.scope || "all")}</select></div>
+    <div class="fld wide"><label>Permissions</label><div class="chkgrid">
+      <label class="chk"><input type="checkbox" id="rW" ${e.can_write ? "checked" : ""}> Can edit (handover and data upload)</label>
+      <label class="chk"><input type="checkbox" id="rA" ${e.is_admin ? "checked" : ""}> Super Admin (manage users, settings, integrations)</label>
+      <label class="chk"><input type="checkbox" id="rV" ${e.admin_view ? "checked" : ""}> Can open Admin, read-only (unlocked pages only)</label></div></div>
+    <div class="fld wide"><label>Data types this role can upload</label><div class="chkgrid">${ROLE_UPLOAD.map(([v, l]) => `<label class="chk"><input type="checkbox" data-rup="${v}" ${(e.uploads || []).includes("*") || (e.uploads || []).includes(v) ? "checked" : ""}> ${l}</label>`).join("")}</div></div>
+    <div class="acts wide"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-role="x">Cancel</button>${e.__new || e.key === "superadmin" ? "" : `<button class="btn ghost" type="button" data-role="del">Delete</button>`}<span class="msg err" id="rMsg"></span></div></form>`;
+  return intMsg() + admTitle("Roles & Access", "A role controls which menus are visible, whether data can be edited, and the location scope. Each user has one role.") + form + `<div class="toolbar">${can ? `<button class="btn" type="button" data-role="new">+ Add Role</button>` : ""}</div>
+    <div class="rolecards">${rows.map(r => `<article class="rcard"><header><b>${esc(r.label)}</b><span class="sub">${esc(r.key)}</span>${can ? `<button class="btn ghost sm" type="button" data-role="edit" data-key="${esc(r.key)}">Edit</button>` : ""}</header>
+      <p>${esc(r.description || "No description.")}</p>
+      <div class="rflags"><span>Scope: <b>${esc((ROLE_SCOPE.find(x => x[0] === r.scope) || ["", r.scope])[1])}</b></span><span>Edit: ${flag(r, "can_write")}</span><span>Admin: ${r.is_admin ? `<span class="ok-t">Full</span>` : r.admin_view ? `<b>Read-only</b>` : `<span class="sub">–</span>`}</span></div></article>`).join("")}</div>
+    <h4 class="admsub">Menus per role</h4><div class="scroll"><table class="matrix"><thead><tr><th>Role</th>${mods.map(m => `<th title="${esc(modName(m.key))}">${esc(m.label)}</th>`).join("")}</tr></thead><tbody>
       ${rows.map(r => `<tr><td><b>${esc(r.label)}</b></td>${mods.map(m => `<td class="${(r.modules || []).includes("*") || (r.modules || []).includes(m.key) ? "yes" : ""}">${(r.modules || []).includes("*") || (r.modules || []).includes(m.key) ? "✓" : ""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
-/* ---------- Perlu dilengkapi ---------- */
+/* ---------- Page access (Super Admin lock) ---------- */
+function vAccess() {
+  const locked = new Set(CFG.admin_locked || []);
+  const rows = ADM.flatMap(([, gt, ps]) => ps.filter(p => p[0] !== "akses").map(([k, t]) => [k, gt, t]));
+  return intMsg() + admTitle("Page Access", "Checked pages are visible to Super Admin only. Other roles that can open Admin (read-only) will not see them, and the server rejects their requests.") +
+    `<form class="form formbox" data-access-form><div class="chkgrid">${rows.map(([k, g, t]) => `<label class="chk"><input type="checkbox" data-lock="${esc(k)}" ${locked.has(k) ? "checked" : ""}> <b>${esc(t)}</b> <span class="sub">${esc(g)}</span></label>`).join("")}</div>
+    <div class="acts wide"><button class="btn" type="submit">Save</button><span class="sub">Page Access itself is always Super Admin only.</span></div></form>`;
+}
+
+/* ---------- Needs completion ---------- */
 function vTodo() {
   if (!INT.todo) { intLoad("todo", "todo"); return intLoading(); }
-  const T = INT.todo, head = T.total ? `${fmt(T.total)} hal perlu dilengkapi` : "Semua data sudah lengkap";
-  return admTitle("Perlu Dilengkapi", "Data baru dari API masuk otomatis, tetapi sebagian perlu dipetakan atau dilengkapi admin supaya ikut terhitung dengan benar.") + `<div class="todohead ${T.total ? "warn" : "good"}">${head}</div>
+  const T = INT.todo, head = T.total ? `${fmt(T.total)} items need completing` : "Everything is complete";
+  return admTitle("Needs Completion", "New data from the APIs is added automatically, but some of it must be mapped or completed here to be counted correctly.") + `<div class="todohead ${T.total ? "warn" : "good"}">${head}</div>
     <div class="todolist">${T.items.map(i => `<article class="todo"><header><b>${esc(i.title)}</b><span class="tag warn">${fmt(i.count)}</span></header><p class="sub">${esc(i.hint)}</p>
-      <div class="mchips">${i.examples.map(x => `<span class="mchip">${esc(x)}</span>`).join("")}${i.count > i.examples.length ? `<span class="sub">dan ${fmt(i.count - i.examples.length)} lainnya</span>` : ""}</div>
-      <button class="btn ghost sm" type="button" data-adm-go="${esc(i.go[0])}|${esc(i.go[1] || "")}">Buka</button></article>`).join("") || `<div class="empty sm">Tidak ada yang perlu dilengkapi.</div>`}</div>`;
+      <div class="mchips">${i.examples.map(x => `<span class="mchip">${esc(x)}</span>`).join("")}${i.count > i.examples.length ? `<span class="sub">and ${fmt(i.count - i.examples.length)} more</span>` : ""}</div>
+      <button class="btn ghost sm" type="button" data-adm-go="${esc(i.go[0])}|${esc(i.go[1] || "")}">Open</button></article>`).join("") || `<div class="empty sm">Nothing to complete.</div>`}</div>`;
 }
 
-/* ---------- Status sumber data ---------- */
+/* ---------- Source status ---------- */
 function vSourceStatus() {
   if (!INT.status) { intLoad("status", "status"); return intLoading(); }
-  const S_ = INT.status, tone = {ok: ["good", "Normal"], warn: ["warn", "Belum segar"], crit: ["crit", "Gagal"], off: ["idle", "Nonaktif"]};
-  const when = s => s.schedule.length ? "Setiap hari " + s.schedule.join(" dan ") : s.mode === "api" ? "Setiap " + s.interval + " menit" : "Impor manual";
-  const ago = m => m == null ? "–" : m < 1 ? "baru saja" : m < 60 ? m + " menit lalu" : m < 1440 ? Math.floor(m / 60) + " jam lalu" : Math.floor(m / 1440) + " hari lalu";
-  return admTitle("Status Sumber Data", "Kondisi sinkron tiap sumber dan 30 catatan sinkron terakhir.") + tbl(["Sumber", "Jadwal", "Terakhir berhasil", "Hasil terakhir", "Status"],
-    S_.sources.map(s => [s.label, when(s), ago(s.age_min), s.error ? {h: `<span class="errtx">${esc(String(s.error).slice(0, 140))}</span>`} : (s.last_msg || "–"), {h: pill(tone[s.state][0], tone[s.state][1])}]), {empty: "Belum ada sumber."})
-    + `<h4 class="admsub">Catatan sinkron</h4>` + tbl(["Waktu", "Sumber", "Hasil", "Baris", "Durasi", "Keterangan"], S_.log.map(l => [l.at.replace("T", " ").slice(0, 19), l.source, {h: l.ok ? pill("good", "Berhasil") : pill("crit", "Gagal")}, l.rows, (l.ms / 1000).toFixed(1) + " dtk", l.msg]), {r: [3, 4], tall: true, empty: "Belum ada catatan."});
+  const S_ = INT.status, tone = {ok: ["good", "Normal"], warn: ["warn", "Stale"], crit: ["crit", "Failed"], off: ["idle", "Disabled"]};
+  const when = s => s.schedule.length ? "Daily at " + s.schedule.join(" and ") : s.mode === "api" ? "Every " + s.interval + " min" : "Manual import";
+  const ago = m => m == null ? "–" : m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.floor(m / 60) + " h ago" : Math.floor(m / 1440) + " d ago";
+  return admTitle("Source Status", "Sync state of each source and the last 30 sync records.") + tbl(["Source", "Schedule", "Last success", "Last result", "Status"],
+    S_.sources.map(s => [s.label, when(s), ago(s.age_min), s.error ? {h: `<span class="errtx">${esc(String(s.error).slice(0, 140))}</span>`} : (s.last_msg || "–"), {h: pill(tone[s.state][0], tone[s.state][1])}]), {empty: "No sources."})
+    + `<h4 class="admsub">Sync Records</h4>` + tbl(["Time", "Source", "Result", "Rows", "Duration", "Message"], S_.log.map(l => [l.at.replace("T", " ").slice(0, 19), l.source, {h: l.ok ? pill("good", "Success") : pill("crit", "Failed")}, l.rows, (l.ms / 1000).toFixed(1) + " s", l.msg]), {r: [3, 4], tall: true, empty: "No records."});
 }
 
-/* ---------- peristiwa ---------- */
+/* ---------- events ---------- */
 document.addEventListener("click", async e => {
   const g = e.target.closest("[data-admgrp]");
-  if (g) { const grp = ADM.find(x => x[0] === g.dataset.admgrp); if (typeof intReset === "function") intReset(); admGo(grp[2][0][0]); return; }
+  if (g) { const grp = admPages().find(x => x[0] === g.dataset.admgrp); if (typeof intReset === "function") intReset(); admGo(grp[2][0][0]); return; }
   const go = e.target.closest("[data-adm-go]");
   if (go) { const [a, k] = go.dataset.admGo.split("|"); if (typeof intReset === "function") intReset(); admGo(a, k); return; }
   const b = e.target.closest("[data-role]"); if (!b) return;
@@ -87,21 +101,28 @@ document.addEventListener("click", async e => {
     if (a === "new") { INT.roleEdit = {__new: true, modules: [], uploads: [], scope: "all", can_write: false}; INT.msg = null; render(false); }
     else if (a === "edit") { INT.roleEdit = Object.assign({}, INT.roles.rows.find(r => r.key === b.dataset.key)); INT.msg = null; render(false); }
     else if (a === "x") { INT.roleEdit = null; render(false); }
-    else if (a === "del") { if (!confirm("Hapus role ini? Role yang masih dipakai pengguna tidak bisa dihapus.")) return; await api("/api/admin/master/role/" + encodeURIComponent(INT.roleEdit.key), {method: "DELETE"}); INT.roleEdit = null; INT.roles = null; await reloadConfig(); INT.msg = {ok: true, t: "Role dihapus."}; render(false); }
+    else if (a === "del") { if (!confirm("Delete this role? Roles still assigned to users cannot be deleted.")) return; await api("/api/admin/master/role/" + encodeURIComponent(INT.roleEdit.key), {method: "DELETE"}); INT.roleEdit = null; INT.roles = null; await reloadConfig(); INT.msg = {ok: true, t: "Role deleted."}; render(false); }
   } catch (er) { if (er) { $("rMsg").textContent = er.message || String(er); } }
 });
 document.addEventListener("change", e => {
   if (e.target.id === "rAll") document.querySelectorAll("[data-rmod]").forEach(c => { c.checked = e.target.checked; });
 });
 document.addEventListener("submit", async e => {
-  const f = e.target.closest("[data-role-form]"); if (!f) return;
+  const f = e.target.closest("[data-role-form]"), af = e.target.closest("[data-access-form]");
+  if (af) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    try { await send("/api/admin/params/admin.locked_pages", {value: [...af.querySelectorAll("[data-lock]:checked")].map(x => x.dataset.lock)}, "PUT"); await reloadConfig(); INT.msg = {ok: true, t: "Page access saved."}; }
+    catch (er) { INT.msg = {ok: false, t: er.message}; }
+    render(false); return;
+  }
+  if (!f) return;
   e.preventDefault(); e.stopImmediatePropagation();
   const v = id => $(id).value.trim(), isNew = !!INT.roleEdit.__new;
   const mods = $("rAll").checked ? ["*"] : [...f.querySelectorAll("[data-rmod]:checked")].map(x => x.dataset.rmod);
   const body = {key: v("rK"), label: v("rL"), description: v("rD") || null, modules: mods, scope: v("rS"), can_write: $("rW").checked, is_admin: $("rA").checked, admin_view: $("rV").checked,
     uploads: [...f.querySelectorAll("[data-rup]:checked")].map(x => x.dataset.rup), sort: isNew ? 99 : (INT.roleEdit.sort || 0)};
-  if (!/^[a-z][a-z0-9_]{1,38}$/.test(body.key)) { $("rMsg").textContent = "Kunci harus huruf kecil, angka, atau garis bawah (2 sampai 39 karakter)."; return; }
-  if (!body.label) { $("rMsg").textContent = "Nama role wajib diisi."; return; }
-  try { await send(isNew ? "/api/admin/master/role" : "/api/admin/master/role/" + encodeURIComponent(body.key), body, isNew ? "POST" : "PUT"); INT.roleEdit = null; INT.roles = null; await reloadConfig(); INT.msg = {ok: true, t: "Role tersimpan."}; render(false); }
+  if (!/^[a-z][a-z0-9_]{1,38}$/.test(body.key)) { $("rMsg").textContent = "Key must use lowercase letters, digits, or underscores (2 to 39 characters)."; return; }
+  if (!body.label) { $("rMsg").textContent = "Role name is required."; return; }
+  try { await send(isNew ? "/api/admin/master/role" : "/api/admin/master/role/" + encodeURIComponent(body.key), body, isNew ? "POST" : "PUT"); INT.roleEdit = null; INT.roles = null; await reloadConfig(); INT.msg = {ok: true, t: "Role saved."}; render(false); }
   catch (er) { $("rMsg").textContent = er.message; }
 }, true);

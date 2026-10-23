@@ -102,7 +102,7 @@ def calc(days: dict, cfg: Config, d_from: date, d_to: date) -> dict:
             row["total"] += c
             if blk: row["blk"] += c
             tot += c
-            put(sev, p[0], c, ch, blk); put(typ, p[1], c, ch, blk); put(act, p[3], c, ch, blk); put(cat, p[2] or "(kosong)", c, ch, blk)
+            put(sev, p[0], c, ch, blk); put(typ, p[1], c, ch, blk); put(act, p[3], c, ch, blk); put(cat, p[2] or "(blank)", c, ch, blk)
             put(dr, "int" if p[4] == "1" else "ext", c, ch, blk)
         for key, c in x["url"].items():
             p = key.split("|")

@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <style>
 [hidden]{display:none!important}
-/* Satu bar filter yang sama di semua halaman; tiap halaman menyatakan filter mana yang berlaku. */
+/* One filter bar shared by every page; each page declares which filters apply. */
 :root{
   --bg:#eef2f7; --surface:#ffffff; --sunken:#eef1f6; --ink:#0f1a2a; --ink2:#47566a; --muted:#6b7a8d;
   --line:#e1e7ef; --axis:#c3cdd9; --accent:#1c5cab; --accent-ink:#fff; --wash:rgba(28,92,171,.09);
@@ -232,7 +232,7 @@ td.t{min-width:90px;max-width:380px;overflow-wrap:break-word}
 .att b{font-weight:600}
 .att .lnk{white-space:nowrap;flex:none}
 
-/* bertugas, serah terima */
+/* on duty, handover */
 .duty-card .big{display:flex;gap:12px;align-items:center;padding-bottom:8px;border-bottom:1px solid var(--line)}
 .duty-card .big b{display:block;font-family:var(--f-display);font-size:17px}
 .code{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;font:600 18px var(--f-display);flex:none}
@@ -253,7 +253,7 @@ td.t{min-width:90px;max-width:380px;overflow-wrap:break-word}
 .pr.crit{background:var(--crit);color:#fff} .pr.warn{background:var(--warn);color:#10171e} .pr.low{background:var(--sunken);color:var(--ink2)}
 .closebox{display:flex;flex-direction:column;gap:6px;margin-top:6px}
 
-/* jadwal */
+/* schedule */
 .sched{display:grid;gap:3px;align-items:center;min-width:560px}
 .sched .h{color:var(--muted);text-align:center;font-family:var(--f-mono);font-size:10px;line-height:1.25}
 .sched .h.today{color:var(--accent);font-weight:600}
@@ -433,7 +433,7 @@ tbody tr:hover td{background:var(--wash)}
 .laycat{background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:14px;margin-bottom:12px;display:flex;flex-direction:column;gap:12px}.laycat[hidden]{display:none}.catl{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;margin-top:6px}.catw{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--sunken);border-radius:10px;padding:10px 12px}.catw>div{display:flex;flex-direction:column;min-width:0}.catw b{font-size:14px}.catw .btn{padding:3px 12px}
 .fg[hidden]{display:none}
 .dmap{width:100%;height:auto;display:block;border-radius:10px;background:var(--sunken)}
-.dmapbox{width:100%;height:420px;border-radius:10px;overflow:hidden;background:var(--sunken);z-index:0}.dmapbox .leaflet-control-attribution{font-size:10px}.dmapbox{position:relative}.dmapbox::after{content:"Tahan Ctrl + scroll untuk zoom peta";position:absolute;inset:auto 0 0 0;z-index:900;text-align:center;padding:6px;font-size:12px;color:#fff;background:rgba(0,0,0,.55);opacity:0;transition:opacity .2s;pointer-events:none}.dmapbox.hint::after{opacity:1}
+.dmapbox{width:100%;height:420px;border-radius:10px;overflow:hidden;background:var(--sunken);z-index:0}.dmapbox .leaflet-control-attribution{font-size:10px}.dmapbox{position:relative}.dmapbox::after{content:"Hold Ctrl + scroll to zoom the map";position:absolute;inset:auto 0 0 0;z-index:900;text-align:center;padding:6px;font-size:12px;color:#fff;background:rgba(0,0,0,.55);opacity:0;transition:opacity .2s;pointer-events:none}.dmapbox.hint::after{opacity:1}
 .dmap text{fill:var(--muted);font-size:11px}.dmap .gl{stroke:var(--line);stroke-width:1;stroke-dasharray:3 4}
 .dmap .land{fill:var(--surface);stroke:var(--axis);stroke-width:1;stroke-linejoin:round}
 .dmap circle.pt{stroke:var(--surface);stroke-width:1.5;cursor:default;transition:opacity .15s}.dmap circle.pt:hover{opacity:.8}
@@ -478,7 +478,7 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
 @keyframes dutysheen{0%,60%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
 @keyframes dutyblink{0%,49%{opacity:1}50%,100%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){.dutychip::after,.dutychip i,.dutychip .clk b{animation:none}}
-.stiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.stiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .stile{display:flex;flex-direction:column;gap:3px;text-align:left;background:var(--sunken);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);cursor:pointer;font:inherit;transition:transform .15s,border-color .15s}
 .stile:hover{transform:translateY(-1px)}
 .stile .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
@@ -495,6 +495,16 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
 .todohead{padding:12px 16px;border-radius:12px;font-weight:600;margin-bottom:12px;background:var(--sunken);border-left:5px solid var(--good)}.todohead.warn{border-left-color:var(--warn)}
 .todolist{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}.todo{background:var(--sunken);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}.todo header{display:flex;align-items:center;gap:8px}.todo header b{font-size:14px}.todo header .tag{margin-left:auto}.todo p{margin:0}
 .icard.ins{border-left:5px solid var(--low);gap:8px}.icard.ins.crit{border-left-color:var(--crit)}.icard.ins.warn{border-left-color:var(--warn)}.icard.ins header{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.icard.ins header b{font-size:14.5px}.icard.ins p{margin:0;font-size:13.5px;line-height:1.55;color:var(--ink2)}.icard.ins .acts{display:flex;gap:8px;flex-wrap:wrap}
+.rtypes{margin-bottom:12px}.rmeta{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px 24px;align-items:flex-end;padding:12px 14px;background:var(--sunken);border-radius:12px;margin-bottom:14px}
+.rdesc{display:flex;flex-direction:column;gap:2px;min-width:220px;flex:1}.rdesc b{font:700 15px var(--f-display)}.rdesc span{font-size:12.5px;color:var(--ink2)}
+.rctl{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end}.rctl .rgroup{display:flex;flex-direction:column;gap:5px}.rctl .rdl{display:flex;gap:8px}.rctl .btn{padding:7px 16px}
+.rkpi2{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px}.rkpi2 .kpi{padding:10px 12px}.rkpi2 .kpi .v{font-size:22px}
+.rsum{margin:12px 0 8px}.rsecs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}.rsec{background:var(--sunken);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:3px}
+.rsec h4{font:700 13.5px var(--f-display);margin:0 0 4px}.rsec ul{margin:0 0 6px;padding-left:16px;font-size:12px;color:var(--ink2);line-height:1.5}.rsec .lbl{font-size:10.5px}
+.insbar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-bottom:12px}.insnav button{padding:6px 14px}.insdis{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.insdis input{flex:1;min-width:160px}.insdis select{width:auto}
+.sumtxt{background:var(--sunken);border-radius:12px;padding:14px 16px;font:500 13px/1.6 var(--f-mono);white-space:pre-wrap;margin:0 0 12px;max-height:420px;overflow:auto}
+.hbar{display:block;height:9px;border-radius:5px;background:var(--sunken);min-width:90px;overflow:hidden}.hbar i{display:block;height:100%;border-radius:5px}
+details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600}details.how p{margin:8px 0}
 </style>
 </head>
 <body>
@@ -506,7 +516,7 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
   <button class="more" id="moreBtn" type="button" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Menu</span></button>
   <div class="side-foot">
     <span id="duty"></span>
-    <div class="who"><span class="av" id="av"></span><div class="who-t"><div id="me"></div><small id="role"></small></div><div class="side-act"><button class="iconbtn" id="theme" type="button" aria-label="Ganti tema terang/gelap" title="Tema terang/gelap">◐</button><button class="iconbtn" id="logout" type="button" aria-label="Keluar" title="Keluar">⏻</button></div></div>
+    <div class="who"><span class="av" id="av"></span><div class="who-t"><div id="me"></div><small id="role"></small></div><div class="side-act"><button class="iconbtn" id="theme" type="button" aria-label="Ganti tema terang/gelap" title="Tema terang/gelap">◐</button><button class="iconbtn" id="logout" type="button" aria-label="Sign out" title="Sign out">⏻</button></div></div>
   </div>
 </aside>
 <div class="main">
@@ -521,15 +531,15 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
     <div class="fwrap" id="fwrap">
       <button class="fhead" id="fToggle" type="button" aria-expanded="false"><b><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>Filter</b><span class="sub" id="fSum"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
       <div id="fbar">
-        <div class="fg" id="gPeriode"><span class="k">Periode</span><div class="seg" id="fPreset"></div><span class="dates"><input type="date" id="fFrom" aria-label="From date"> – <input type="date" id="fTo" aria-label="To date"></span></div>
+        <div class="fg" id="gPeriode"><span class="k">Period</span><div class="seg" id="fPreset"></div><span class="dates"><input type="date" id="fFrom" aria-label="From date"> – <input type="date" id="fTo" aria-label="To date"></span></div>
         <div class="fg" id="gShift"><span class="k">Shift</span><div class="seg" id="fShift"></div></div>
-        <div class="fg" id="gSite"><span class="k">Lokasi</span><select id="fSite" aria-label="Lokasi"></select></div>
-        <div class="fg" id="gKind" hidden><span class="k">Kategori</span><div class="seg" id="fKind"></div></div>
-        <div class="fg" id="gGrp" hidden><span class="k">Grup</span><select id="fGrp" aria-label="Grup"></select></div>
-        <div class="fg" id="gTyp" hidden><span class="k">Tipe</span><select id="fTyp" aria-label="Device type"></select></div>
+        <div class="fg" id="gSite"><span class="k">Location</span><select id="fSite" aria-label="Location"></select></div>
+        <div class="fg" id="gKind" hidden><span class="k">Category</span><div class="seg" id="fKind"></div></div>
+        <div class="fg" id="gGrp" hidden><span class="k">Group</span><select id="fGrp" aria-label="Group"></select></div>
+        <div class="fg" id="gTyp" hidden><span class="k">Type</span><select id="fTyp" aria-label="Device type"></select></div>
         <div class="fg" id="gStat" hidden><span class="k">Status</span><div class="seg" id="fStat"></div></div>
-        <div class="fg" id="gCmp"><label class="chk"><input type="checkbox" id="fCmp"> Bandingkan dengan periode sebelumnya</label></div>
-        <button class="btn ghost" id="fReset" type="button">Atur Ulang</button><button class="btn ghost" id="layBtn" type="button" hidden>Atur Tampilan</button>
+        <div class="fg" id="gCmp"><label class="chk"><input type="checkbox" id="fCmp"> Compare with previous period</label></div>
+        <button class="btn ghost" id="fReset" type="button">Reset</button><button class="btn ghost" id="layBtn" type="button" hidden>Customize</button>
       </div>
       <div id="fApplies"></div>
     </div>
@@ -538,7 +548,7 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;display:flex;flex-wrap:
   </div>
 </div>
 </div>
-<div id="sheet" hidden><div class="sheet-bg" data-close-sheet></div><div class="sheet-box" role="dialog" aria-label="Semua menu"><div class="sheet-h"><b>Semua menu</b><button type="button" class="iconbtn" data-close-sheet>Tutup</button></div><div class="sheet-g" id="sheetGrid"></div><div class="sheet-f"><button class="iconbtn" id="themeS" type="button">◐ Theme</button><button class="iconbtn" id="logoutS" type="button">Keluar</button></div></div></div>
+<div id="sheet" hidden><div class="sheet-bg" data-close-sheet></div><div class="sheet-box" role="dialog" aria-label="All menu"><div class="sheet-h"><b>All menu</b><button type="button" class="iconbtn" data-close-sheet>Close</button></div><div class="sheet-g" id="sheetGrid"></div><div class="sheet-f"><button class="iconbtn" id="themeS" type="button">◐ Theme</button><button class="iconbtn" id="logoutS" type="button">Sign out</button></div></div></div>
 <div id="tip" hidden></div>
 <script src="core.js"></script>
 <script src="views.js"></script>

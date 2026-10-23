@@ -16,9 +16,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 async def lifespan(app: FastAPI):
     weak = settings().jwt_secret in ("ganti-di-produksi", "ganti-dengan-string-acak-panjang") or len(settings().jwt_secret) < 32
     if weak and os.environ.get("ITOC_ENV", "").lower() == "production":
-        raise RuntimeError("ITOC_JWT_SECRET lemah (contoh atau kurang dari 32 karakter). Server produksi menolak start. Isi string acak panjang di .env.")
+        raise RuntimeError("ITOC_JWT_SECRET is weak (an example value or under 32 characters). The production server refuses to start. Set a long random string in .env.")
     if weak:
-        logging.getLogger("itoc").warning("ITOC_JWT_SECRET masih nilai contoh/pendek: token bisa dipalsukan. Isi dengan string acak panjang (min. 32 karakter) di .env.")
+        logging.getLogger("itoc").warning("ITOC_JWT_SECRET is still an example/short value: tokens can be forged. Set a long random string (min. 32 characters) in .env.")
     if settings().run_scheduler:
         jobs.start()
     yield

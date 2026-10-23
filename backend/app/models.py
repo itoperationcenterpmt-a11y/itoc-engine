@@ -571,11 +571,14 @@ class Insight(Base):
     tab: Mapped[str | None] = mapped_column(String(30))          # halaman rujukan
     site: Mapped[str | None] = mapped_column(String(120))
     metric: Mapped[dict | None] = mapped_column(JSONB)
-    status: Mapped[str] = mapped_column(String(10), default="baru")   # baru | dibaca | selesai
+    status: Mapped[str] = mapped_column(String(10), default="new")    # new | read | dismissed | resolved
     first_seen: Mapped[datetime] = mapped_column(DateTime)
     last_seen: Mapped[datetime] = mapped_column(DateTime)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
     ack_by: Mapped[str | None] = mapped_column(String(60))
     ack_at: Mapped[datetime | None] = mapped_column(DateTime)
     notified: Mapped[bool] = mapped_column(Boolean, default=False)
+    reason: Mapped[str | None] = mapped_column(String(200))             # why it was dismissed
+    suppress_until: Mapped[datetime | None] = mapped_column(DateTime)   # a dismissed finding stays hidden until then
+    handover_id: Mapped[int | None] = mapped_column(Integer)            # handover created from this finding
     __table_args__ = (Index("ix_insight_key_open", "key", "status"),)

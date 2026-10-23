@@ -75,7 +75,7 @@ def build(db, cfg: Config, a, b, severity: str = "") -> dict:
     scores = [r.score for r in rows if r.score is not None]
     backlog = db.query(XdrAlert).filter(XdrAlert.status.isnot(None)).all()
     bl = [r for r in backlog if _open(r) and r.severity in ("critical", "high")]
-    ages = [("< 1 hari", 0, 1), ("1 sampai 3 hari", 1, 3), ("3 sampai 7 hari", 3, 7), ("> 7 hari", 7, 1e9)]
+    ages = [("< 1 day", 0, 1), ("1 to 3 days", 1, 3), ("3 to 7 days", 3, 7), ("> 7 days", 7, 1e9)]
     aging = [{"k": lb, "n": sum(1 for r in backlog if _open(r) and lo <= (now - r.created_at).total_seconds() / 86400 < hi)} for lb, lo, hi in ages]
     srt = lambda dct, key: sorted(dct.values(), key=key)
     return {"total": len(rows), "open": sum(1 for r in rows if _open(r)), "backlogCH": len(bl), "backlog": sum(1 for r in backlog if _open(r)), "avgScore": round(sum(scores) / len(scores), 1) if scores else None,

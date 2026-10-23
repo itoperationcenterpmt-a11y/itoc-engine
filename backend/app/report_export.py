@@ -43,7 +43,7 @@ def to_xlsx(m: dict) -> bytes:
         ws["A2"] = f"{m['subtitle']} · {s['title']} · {m['period']}"
         ws["A2"].font = Font(bold=True, size=11)
         ws["A3"] = " · ".join(m["filters"])
-        ws["A4"] = f"Dibuat {m['generated']} oleh {m['by']}"
+        ws["A4"] = f"Generated {m['generated']} by {m['by']}"
         for a in ("A3", "A4"):
             ws[a].font = Font(size=9, color=MUTED)
         r = 6
@@ -65,7 +65,7 @@ def to_xlsx(m: dict) -> bytes:
         for idx, ch in enumerate(s["charts"]):
             put(grow, gcol, ch["title"], bold=True)
             hdr = grow + 1
-            put(hdr, gcol, "Kategori", bold=True, color="FFFFFF", fill=head_fill)
+            put(hdr, gcol, "Category", bold=True, color="FFFFFF", fill=head_fill)
             for j, se in enumerate(ch["series"]):
                 put(hdr, gcol + 1 + j, se["name"], bold=True, color="FFFFFF", fill=head_fill)
             nlab, nser = len(ch["labels"]), len(ch["series"])
@@ -211,7 +211,7 @@ def to_pdf(m: dict) -> bytes:
           "ch": ParagraphStyle("ch", fontName="Helvetica-Bold", fontSize=7.5, leading=9, textColor=colors.white),
           "note": ParagraphStyle("note", fontName="Helvetica-Oblique", fontSize=9, leading=12, textColor=hx(MUTED))}
     P = lambda t, s: Paragraph(escape(str(t)), st[s])
-    head = [P(m["title"], "h1"), Spacer(1, 3), P(f"{m['subtitle']} · {m['period']}", "h2"), P(" · ".join(m["filters"]), "sub"), P(f"Dibuat {m['generated']} oleh {m['by']}", "sub")]
+    head = [P(m["title"], "h1"), Spacer(1, 3), P(f"{m['subtitle']} · {m['period']}", "h2"), P(" · ".join(m["filters"]), "sub"), P(f"Generated {m['generated']} by {m['by']}", "sub")]
     logo = Path(__file__).resolve().parent.parent / "assets" / "logo.png"
     if logo.exists():
         ht = Table([[Image(str(logo), 17 * mm, 17 * mm), head]], colWidths=[22 * mm, W - 22 * mm])
@@ -254,7 +254,7 @@ def to_pdf(m: dict) -> bytes:
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(hx(MUTED))
         canvas.drawString(12 * mm, 8 * mm, f"{m['title']} · {m['period']}")
-        canvas.drawRightString(landscape(A4)[0] - 12 * mm, 8 * mm, f"Halaman {doc.page}")
+        canvas.drawRightString(landscape(A4)[0] - 12 * mm, 8 * mm, f"Page {doc.page}")
         canvas.restoreState()
     out = BytesIO()
     SimpleDocTemplate(out, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=14 * mm, title=m["title"], author=m["by"]).build(flow, onFirstPage=deco, onLaterPages=deco)
@@ -269,7 +269,7 @@ def to_pptx(m: dict) -> bytes:
         return build_from_template(m)
     except Exception:
         import logging
-        logging.getLogger(__name__).exception("PPT dari template gagal, memakai layout polos")
+        logging.getLogger(__name__).exception("PPT from template failed, using the plain layout")
         return _to_pptx_plain(m)
 
 
@@ -312,7 +312,7 @@ def _to_pptx_plain(m: dict) -> bytes:
     text(s0, 0.9, 2.4, 11.5, 1.2, m["title"], 38, True, "FFFFFF")
     text(s0, 0.9, 3.7, 11.5, 0.6, f"{m['subtitle']} · {m['period']}", 22, False, "C5D3E6")
     text(s0, 0.9, 4.5, 11.5, 0.5, " · ".join(m["filters"]), 14, False, "C5D3E6")
-    text(s0, 0.9, 6.5, 11.5, 0.4, f"Dibuat {m['generated']} oleh {m['by']}", 11, False, "9FB3CC")
+    text(s0, 0.9, 6.5, 11.5, 0.4, f"Generated {m['generated']} by {m['by']}", 11, False, "9FB3CC")
 
     for s in m["sections"]:
         sl = prs.slides.add_slide(blank)

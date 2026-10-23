@@ -68,7 +68,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     from .. import vault
     user, ph = vault.cred(db, "prtg.user", c.get("user_env", "PRTG_USER")), vault.cred(db, "prtg.passhash", c.get("passhash_env", "PRTG_PASSHASH"))
     if not c.get("base_url") or not user:
-        raise RuntimeError("base_url / kredensial PRTG belum diatur")
+        raise RuntimeError("PRTG base_url / credentials are not set")
     auth = {"username": user, "passhash": ph}
     ch, factor = c["channels"], float(c.get("mbps_factor", 0.001))  # kbit/s → Mbit/s
     now = cfg.now().replace(minute=0, second=0)
@@ -98,4 +98,4 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
                 rebuild_events(db, sen.id, a, now, float(c.get("event_min_down_s", 60)))
                 n += 1
     src.cursor = {**src.cursor, "last_hour": now.isoformat()}
-    return n, "historicdata.json per sensor, rata-rata 60 menit"
+    return n, "historicdata.json per sensor, 60-minute average"

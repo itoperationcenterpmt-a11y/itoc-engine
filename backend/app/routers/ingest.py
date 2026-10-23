@@ -16,12 +16,12 @@ router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 
 async def _read(f: UploadFile, exts: tuple[str, ...] = (".xlsx",)) -> bytes:
     if not (f.filename or "").lower().endswith(exts):
-        raise HTTPException(415, "Hanya file " + ", ".join(exts))
+        raise HTTPException(415, "Only files of type " + ", ".join(exts))
     cap, buf = settings().upload_max_mb * 1024 * 1024, bytearray()
     while chunk := await f.read(1024 * 1024):                   # baca bertahap: berkas raksasa ditolak sebelum memenuhi memori
         buf += chunk
         if len(buf) > cap:
-            raise HTTPException(413, f"File lebih dari {settings().upload_max_mb} MB")
+            raise HTTPException(413, f"File is larger than {settings().upload_max_mb} MB")
     return bytes(buf)
 
 
@@ -36,18 +36,18 @@ async def _bundle(files: list[UploadFile], inner: str) -> list[tuple[str, bytes]
                 with zipfile.ZipFile(BytesIO(data)) as z:
                     infos = [i for i in z.infolist() if i.filename.lower().endswith(inner) and not i.is_dir()]
                     if len(infos) > 200 or sum(i.file_size for i in infos) > cap:
-                        raise HTTPException(413, f"Isi {name} terlalu besar atau terlalu banyak file")
+                        raise HTTPException(413, f"The contents of {name} are too large or have too many files")
                     for i in infos:
                         out.append((f"{name}/{i.filename.split('/')[-1]}", z.read(i)))
             except zipfile.BadZipFile:
-                raise HTTPException(422, f"{name} bukan file zip yang valid")
+                raise HTTPException(422, f"{name} is not a valid zip file")
         else:
             out.append((name, data))
         total = sum(len(d) for _, d in out)
         if total > cap:
-            raise HTTPException(413, "Total file terlalu besar")
+            raise HTTPException(413, "Total file size is too large")
     if not out:
-        raise HTTPException(422, f"Tidak ada file {inner} yang ditemukan")
+        raise HTTPException(422, f"No {inner} file was found")
     return out
 
 
@@ -82,9 +82,9 @@ async def prtg_upload(files: list[UploadFile] = File(...), user: User = Depends(
     try:
         rows, notes, st = prtg_pdf.read_pdfs(pdfs)
     except ImportError:
-        raise HTTPException(500, "Pustaka pypdf belum terpasang di server (jalankan build ulang)")
+        raise HTTPException(500, "The pypdf library is not installed on the server (rebuild the image)")
     if not rows:
-        raise HTTPException(422, "Tidak ada halaman sensor PRTG yang terbaca. " + "; ".join(notes[:5]))
+        raise HTTPException(422, "No PRTG sensor pages could be read. " + "; ".join(notes[:5]))
     n_sensor = prtg_pdf.save(db, rows)
     days = sorted({r["day"] for r in rows})
     msg = f"{st['files']} PDF · {len(rows)} data sensor-hari · {len(days)} hari ({days[0]} – {days[-1]})" + (f" · {len(notes)} catatan" if notes else "")
@@ -105,7 +105,7 @@ async def tickets_upload(file: UploadFile = File(...), user: User = Depends(requ
     except ValueError as e:
         raise HTTPException(422, str(e))
     except Exception as e:  # file rusak / bukan Excel
-        raise HTTPException(422, f"File tidak bisa dibaca sebagai Excel: {e}")
+        raise HTTPException(422, f"The file could not be read as Excel: {e}")
     n = manageengine.upsert(db, P["tickets"], "excel")
     db.add(SyncLog(source=cfg.sources["manageengine"]["label"] + " (unggah RAW)", at=cfg.now(), ok=True, rows=n, ms=0, message=file.filename))
     audit(db, user.username, f"Mengunggah RAW tiket {file.filename} ({n} baris)")
@@ -121,16 +121,16 @@ def sync_now(key: str, user: User = Depends(current_user), db: Session = Depends
     """Tarik data sekarang (force). Admin boleh semua sumber; role dengan hak unggah boleh menarik sumbernya (Panorama, PRTG, ManageEngine). Panorama berjalan di latar belakang karena bisa makan beberapa menit."""
     up = user.role.uploads or []
     if not (user.role.is_admin or "*" in up or SYNC_PERM.get(key) in up):
-        raise HTTPException(403, "Role ini tidak boleh menarik data sumber ini")
+        raise HTTPException(403, "This role may not pull data from this source")
     if key not in jobs.SYNCERS:
-        raise HTTPException(404, "Sumber tidak dikenal")
+        raise HTTPException(404, "Unknown source")
     cfg = load_config(db)
     audit(db, user.username, f"Tarik data sekarang: {key}", None, cfg.p("tz_offset_hours", 7))
     db.commit()
     if key == "panorama":
         import threading
         threading.Thread(target=lambda: jobs.run_source("panorama"), daemon=True).start()
-        return {"ok": True, "started": True, "msg": "Penarikan Panorama dimulai di latar belakang. Hasilnya tampil di halaman ini dalam beberapa menit; hari baru dan laporan Top diperbarui bertahap."}
+        return {"ok": True, "started": True, "msg": "Panorama pull started in the background. Results appear on this page in a few minutes; new days and the Top report are updated gradually."}
     r = jobs.run_source(key)
     if not r["ok"]:
         raise HTTPException(502, r["msg"])

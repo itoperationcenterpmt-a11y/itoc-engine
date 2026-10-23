@@ -148,7 +148,7 @@ def run(db: Session, seed: int = 20261018):
     for f, t in [(first, mid - timedelta(days=1)), (mid, now.date() - timedelta(days=2))]:
         b = M.SocBatch(file_name=f"SOC_{f:%d%b}-{t:%d%b}.xlsx", uploaded_by=nm(7), uploaded_at=datetime.combine(t + timedelta(days=1), datetime.min.time()) + timedelta(hours=9),
                        date_from=f, date_to=t, rows_read=4000, status="valid", issues=[], kpi={"hosts": R.randint(20, 60)},
-                       tables=[{"id": "negara", "t": "Negara sumber serangan teratas", "h": ["Negara", "Total event", "Critical + High", "Jumlah IP"],
+                       tables=[{"id": "negara", "t": "Top attack source countries", "h": ["Negara", "Total event", "Critical + High", "IP count"],
                                 "r": [[c, R.randint(500, 9000), R.randint(10, 400), R.randint(5, 90)] for c in ["US", "CN", "RU", "NL", "SG"]], "note": "Data demo."}])
         x = f
         while x <= t:

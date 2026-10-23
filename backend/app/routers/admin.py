@@ -30,7 +30,7 @@ def _kind(col) -> str:
 
 def _meta(key):
     if key not in MASTER:
-        raise HTTPException(404, "Tabel tidak dikenal")
+        raise HTTPException(404, "Unknown table")
     model, label = MASTER[key]
     cols = [c for c in inspect(model).columns if c.key not in HIDDEN.get(key, set())]
     return model, label, cols
@@ -50,7 +50,7 @@ def _coerce(col, v):
         if k == "bool": return v if isinstance(v, bool) else str(v).lower() in ("1", "true", "ya", "on")
         if k == "date": return date.fromisoformat(v)
     except (TypeError, ValueError):
-        raise HTTPException(422, f"Nilai {col.key} tidak valid")
+        raise HTTPException(422, f"Value of {col.key} is not valid")
     return v
 
 
@@ -77,7 +77,7 @@ def _save(key, data: dict, db: Session, user: User, obj=None):
         db.flush()
     except IntegrityError as e:
         db.rollback()
-        raise HTTPException(409, "Data bentrok atau referensi tidak valid: " + str(e.orig).split("\n")[0])
+        raise HTTPException(409, "Conflicting data or invalid reference: " + str(e.orig).split("\n")[0])
     audit(db, user.username, f"{'Menambah' if new else 'Mengubah'} {label}", {"table": key, "data": {k: _ser(v) for k, v in data.items()}})
     db.commit()
     bump_config()
@@ -89,7 +89,7 @@ def _get(key, pkval, db):
     pkcol = inspect(model).primary_key[0]
     obj = db.get(model, _coerce(pkcol, pkval))
     if obj is None:
-        raise HTTPException(404, "Baris tidak ditemukan")
+        raise HTTPException(404, "Row not found")
     return obj
 
 
@@ -111,7 +111,7 @@ def master_delete(key: str, pk: str, db: Session = Depends(get_db), user: User =
         db.flush()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(409, "Masih dipakai data lain; nonaktifkan saja")
+        raise HTTPException(409, "Still used by other data; deactivate it instead")
     audit(db, user.username, f"Menghapus {MASTER[key][1]} {pk}", {"table": key})
     db.commit()
     bump_config()
@@ -147,7 +147,7 @@ def clear_demo(db: Session = Depends(get_db), user: User = Depends(require_admin
     """Hapus data demo saja (lihat demo.clear). Hanya Super Admin."""
     from .. import demo
     r = demo.clear(db)
-    audit(db, user.username, "Menghapus data demo: " + ", ".join(f"{k}={v}" for k, v in r.items()))
+    audit(db, user.username, "Deleting demo data: " + ", ".join(f"{k}={v}" for k, v in r.items()))
     db.commit()
     bump_config()
     bump_data()
@@ -158,7 +158,7 @@ def clear_demo(db: Session = Depends(get_db), user: User = Depends(require_admin
 def layout_set(body: LayoutIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     """Simpan tata letak satu halaman untuk satu role (role kosong = semua role). Menggantikan pengaturan lama halaman+role itu."""
     if body.role and not db.get(Role, body.role):
-        raise HTTPException(404, "Role tidak dikenal")
+        raise HTTPException(404, "Unknown role")
     db.query(Layout).filter_by(page=body.page, role=body.role).delete()
     seen, rows = set(), []
     for b in body.blocks:
@@ -168,7 +168,7 @@ def layout_set(body: LayoutIn, db: Session = Depends(get_db), user: User = Depen
         r = {"page": body.page, "role": body.role, "key": b.key[:80], "title": b.title.strip()[:120], "size": b.size, "enabled": b.enabled, "sort": len(seen)}
         rows.append(r)
         db.add(Layout(**r))
-    audit(db, user.username, f"Mengatur tata letak {body.page}" + (f" untuk role {body.role}" if body.role else " (semua role)"))
+    audit(db, user.username, f"Mengatur tata letak {body.page}" + (f" untuk role {body.role}" if body.role else " (all roles)"))
     db.commit()
     bump_config()
     return {"ok": True, "n": len(seen), "rows": rows}
@@ -177,7 +177,7 @@ def layout_set(body: LayoutIn, db: Session = Depends(get_db), user: User = Depen
 @router.delete("/layout/{page}")
 def layout_reset(page: str, role: str = "", db: Session = Depends(get_db), user: User = Depends(require_admin)):
     db.query(Layout).filter_by(page=page, role=role).delete()
-    audit(db, user.username, f"Mengembalikan tata letak {page} ke bawaan" + (f" untuk role {role}" if role else " (semua role)"))
+    audit(db, user.username, f"Mengembalikan tata letak {page} ke bawaan" + (f" untuk role {role}" if role else " (all roles)"))
     db.commit()
     bump_config()
     return {"ok": True}
@@ -187,13 +187,13 @@ def layout_reset(page: str, role: str = "", db: Session = Depends(get_db), user:
 def param_set(key: str, body: ParamIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     p = db.get(Parameter, key)
     if not p:
-        raise HTTPException(404, "Parameter tidak dikenal")
+        raise HTTPException(404, "Unknown parameter")
     v, ui = body.value, p.ui or {}
     if p.editor in ("number", "percent"):
         try:
             v = float(v)
         except (TypeError, ValueError):
-            raise HTTPException(422, "Harus angka")
+            raise HTTPException(422, "Must be a number")
         if ("min" in ui and v < ui["min"]) or ("max" in ui and v > ui["max"]):
             raise HTTPException(422, f"Di luar batas {ui.get('min')}–{ui.get('max')}")
     old = p.value
@@ -232,14 +232,14 @@ def user_create(body: UserIn, db: Session = Depends(get_db), user: User = Depend
     import re
     u = body.username.strip().lower()
     if not re.fullmatch(r"[a-z0-9._-]{3,}", u) or not body.full_name.strip():
-        raise HTTPException(422, "Username min. 3 karakter (huruf kecil, angka, titik) dan nama wajib diisi.")
+        raise HTTPException(422, "Username needs at least 3 characters (lowercase letters, digits, dots) and a name is required.")
     if db.query(User).filter_by(username=u).first():
-        raise HTTPException(409, "Username sudah dipakai.")
+        raise HTTPException(409, "Username is already taken.")
     if not db.get(Role, body.role_key):
-        raise HTTPException(422, "Role tidak dikenal")
+        raise HTTPException(422, "Unknown role")
     pw = random_pw()
     db.add(User(username=u, full_name=body.full_name.strip(), role_key=body.role_key, site=body.site or None, password_hash=hash_pw(pw), must_change_pw=True))
-    audit(db, user.username, "Menambah akun " + u)
+    audit(db, user.username, "Adding account " + u)
     db.commit()
     return {"ok": True, "initial_password": pw}
 
@@ -248,23 +248,23 @@ def user_create(body: UserIn, db: Session = Depends(get_db), user: User = Depend
 def user_patch(username: str, body: UserPatch, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     u = db.query(User).filter_by(username=username).one_or_none()
     if not u:
-        raise HTTPException(404, "Akun tidak ditemukan")
+        raise HTTPException(404, "Account not found")
     if u.username == user.username and body.active is False:
-        raise HTTPException(400, "Tidak bisa menonaktifkan akun sendiri")
+        raise HTTPException(400, "You cannot deactivate your own account")
     out = {"ok": True}
     if body.active is not None:
         u.active = body.active
-        audit(db, user.username, ("Mengaktifkan" if body.active else "Menonaktifkan") + " akun " + u.username)
+        audit(db, user.username, ("Mengaktifkan" if body.active else "Menonaktifkan") + " account " + u.username)
     if body.full_name is not None:
         if not body.full_name.strip():
-            raise HTTPException(422, "Nama wajib diisi.")
+            raise HTTPException(422, "Name is required.")
         u.full_name = body.full_name.strip()
         audit(db, user.username, f"Mengubah nama akun {u.username}")
     if body.role_key and body.role_key != u.role_key:
         if u.username == user.username:
-            raise HTTPException(400, "Tidak bisa mengubah role akun sendiri")
+            raise HTTPException(400, "You cannot change your own role")
         if not db.get(Role, body.role_key):
-            raise HTTPException(422, "Role tidak dikenal")
+            raise HTTPException(422, "Unknown role")
         u.role_key = body.role_key
         audit(db, user.username, f"Mengubah role {u.username} menjadi {body.role_key}")
     if body.site is not None:
@@ -295,7 +295,7 @@ def _audit_where(frm: date | None, to: date | None, who: str, q: str):
     if who:
         w.append(AuditLog.username == who)
     if q.strip():
-        like = "%" + q.strip().replace("\\", "\\\\").replace("%", "\%").replace("_", "\_") + "%"
+        like = "%" + q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         w.append(or_(AuditLog.action.ilike(like, escape="\\"), AuditLog.username.ilike(like, escape="\\")))
     return w
 
@@ -339,7 +339,7 @@ def audit_export(frm: date | None = None, to: date | None = None, who: str = "",
     def gen():
         buf = io.StringIO()
         wr = csv.writer(buf)
-        wr.writerow(["Waktu (WIB)", "Pengguna", "Aktivitas", "IP", "Detail"])
+        wr.writerow(["Time (WIB)", "User", "Aktivitas", "IP", "Detail"])
         yield "﻿" + buf.getvalue()
         for r in db.scalars(select(AuditLog).where(*w).order_by(AuditLog.at.desc(), AuditLog.id.desc()).limit(AUDIT_MAX_EXPORT).execution_options(yield_per=1000)):
             d = _mask(r.detail) if isinstance(r.detail, dict) else r.detail
@@ -365,28 +365,28 @@ def admin_todo(db: Session = Depends(get_db)):
         if rows:
             out.append({"key": key, "title": title, "count": len(rows), "hint": hint, "go": go, "examples": [show(x) for x in rows[:8]]})
 
-    add("zbx_loc", "Kode lokasi Zabbix belum dipetakan ke lokasi", db.scalars(select(ZbxLocMap.code).where(ZbxLocMap.site.is_(None)).order_by(ZbxLocMap.code)).all(),
-        "Perangkat dengan kode ini belum masuk hitungan per lokasi. Pilih lokasinya di Pemetaan.", ["pemetaan", "zbx_loc"])
-    add("dev_code", "Kode perangkat belum punya label", db.scalars(select(DevCode.code).where((DevCode.label.is_(None)) | (DevCode.label == "")).order_by(DevCode.code)).all(),
-        "Label dipakai sebagai nama kategori di halaman Devices.", ["pemetaan", "dev_code"])
-    add("prtg_cap", "Sensor PRTG aktif tanpa kapasitas", db.execute(select(PrtgSensor.device, PrtgSensor.name).where(PrtgSensor.active.is_(True), PrtgSensor.capacity_mbps.is_(None)).order_by(PrtgSensor.device)).all(),
-        "Tanpa kapasitas, persentase utilisasi link tidak bisa dihitung.", ["pemetaan", "prtg_sensor"], lambda r: f"{r[0]} / {r[1]}")
-    add("site_geo", "Lokasi aktif belum berkoordinat", db.scalars(select(Site.name).where(Site.active.is_(True), (Site.lat.is_(None)) | (Site.lon.is_(None))).order_by(Site.name)).all(),
-        "Lokasi tanpa koordinat tidak tampil di peta Devices. Isi lat dan lon.", ["pemetaan", "site"])
+    add("zbx_loc", "Zabbix location codes not mapped to a location", db.scalars(select(ZbxLocMap.code).where(ZbxLocMap.site.is_(None)).order_by(ZbxLocMap.code)).all(),
+        "Devices with these codes are not counted per location. Choose their location in Mapping.", ["pemetaan", "zbx_loc"])
+    add("dev_code", "Device codes without a label", db.scalars(select(DevCode.code).where((DevCode.label.is_(None)) | (DevCode.label == "")).order_by(DevCode.code)).all(),
+        "The label is used as the category name on the Devices page.", ["pemetaan", "dev_code"])
+    add("prtg_cap", "Active PRTG sensors without capacity", db.execute(select(PrtgSensor.device, PrtgSensor.name).where(PrtgSensor.active.is_(True), PrtgSensor.capacity_mbps.is_(None)).order_by(PrtgSensor.device)).all(),
+        "Without capacity, link utilization percentage cannot be calculated.", ["pemetaan", "prtg_sensor"], lambda r: f"{r[0]} / {r[1]}")
+    add("site_geo", "Active locations without coordinates", db.scalars(select(Site.name).where(Site.active.is_(True), (Site.lat.is_(None)) | (Site.lon.is_(None))).order_by(Site.name)).all(),
+        "Locations without coordinates do not appear on the Devices map. Fill in lat and lon.", ["pemetaan", "site"])
     known = set()
     for s in db.scalars(select(Site)):
         known.add(s.name.strip().lower())
         known.update(a.strip().lower() for a in (s.aliases or []))
     since = cfg.now() - timedelta(days=90)
     unk = [(n, c) for n, c in db.execute(select(Ticket.site, func.count()).where(Ticket.created_at >= since, Ticket.site != "").group_by(Ticket.site).order_by(func.count().desc())).all() if n.strip().lower() not in known]
-    add("ticket_site", "Lokasi pada tiket tidak dikenal (90 hari terakhir)", unk, "Tambahkan sebagai lokasi atau alias lokasi supaya tiketnya ikut dihitung per lokasi.", ["pemetaan", "site"], lambda r: f"{r[0]} ({r[1]} tiket)")
+    add("ticket_site", "Unknown locations in tickets (last 90 days)", unk, "Add them as a location or location alias so the tickets are counted per location.", ["pemetaan", "site"], lambda r: f"{r[0]} ({r[1]} tiket)")
     stale = []
     for s in db.scalars(select(DataSource).where(DataSource.enabled.is_(True), DataSource.mode == "api")):
         age = (cfg.now() - s.last_ok_at).total_seconds() / 60 if s.last_ok_at else None
         sched = bool((s.config or {}).get("schedule"))
         if s.last_error or age is None or age > (13 * 60 if sched else s.interval_min * 3 + 5):
             stale.append(s.label)
-    add("source", "Sumber data aktif yang gagal atau belum segar", stale, "Cek pesan galat di Status Sumber.", ["status", ""])
+    add("source", "Active data sources that failed or are stale", stale, "Check the error message in Source Status.", ["status", ""])
     return {"items": out, "total": sum(i["count"] for i in out)}
 
 

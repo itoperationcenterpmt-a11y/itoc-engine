@@ -7,7 +7,7 @@ from .store import Config, cached
 from .timeutil import ms
 from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR, cctv as CCTV, insight as INSIGHT
 from .calc.common import iso
-from .security import can_see
+from .security import can_see, locked_pages
 
 
 class Filt:
@@ -138,7 +138,7 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
     if tab == "xdr" or (tab in ("ringkasan", "cyber") and ok("xdr")):
         V["xdr"] = XDR.build(db, cfg, a, b, f.kind if tab == "xdr" and f.kind in XDR.SEV else "")
     if tab == "insight" or (tab == "ringkasan" and ok("insight")):
-        V["insight"] = INSIGHT.build(db, cfg)
+        V["insight"] = INSIGHT.build(db, cfg, full=tab == "insight")
     if tab == "cctv" or (tab == "ringkasan" and ok("cctv")):
         V["cctv"] = CCTV.build(db, cfg)
     if tab == "wifi":
@@ -179,7 +179,7 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
         from . import report
         V["report"] = report.build(db, cfg, user, f, "full", getattr(f, "preset", "standar"))
     if tab == "admin" and (user.role.is_admin or user.role.admin_view):
-        V["users"] = [{"u": u.username, "name": u.full_name, "role": u.role_key, "last": ms(u.last_login), "active": u.active, "site": u.site}
+        V["users"] = [] if not user.role.is_admin and "pengguna" in locked_pages(db) else [{"u": u.username, "name": u.full_name, "role": u.role_key, "last": ms(u.last_login), "active": u.active, "site": u.site}
                       for u in db.scalars(select(M.User).order_by(M.User.id))]
     return V
 
@@ -212,14 +212,14 @@ def coverage(db: Session, cfg: Config, f: Filt) -> list[dict]:
             me[k] = ["dup", f"{n} tiket\n{len(fails[k])} sinkron gagal ({', '.join(fails[k])}), tersusul otomatis"] if k in fails else ["ok", f"{n} tiket tersinkron"]
             c = NET.coverage(db, cfg, d, f.site)
             if not c["exp"]:
-                pr[k] = ["wait", "Belum ada jam lengkap"]
+                pr[k] = ["wait", "No complete hours yet"]
             else:
                 p = c["seen"] / c["exp"]
                 pr[k] = ["ok" if p >= ok_hi else "dup" if p >= ok_lo else "bad", f"{p * 100:.1f}% jam-sensor terpantau ({c['seen']}/{c['exp']})".replace(".", ",", 1)]
         s = chk.get(k, "miss")
         so[k] = [s, cst.get(s, s)]
         bt = next((x for x in batches if x.date_from <= d <= x.date_to and x.tables and x.status != "failed"), None)
-        tb[k] = ["ok", "Laporan Top dari " + bt.file_name] if bt else ["miss", "Laporan Top tidak tersedia"]
+        tb[k] = ["ok", "Top report from " + bt.file_name] if bt else ["miss", "Top report not available"]
     lab = lambda key, suffix: src.get(key, {}).get("label", key) + " · " + suffix
-    return [{"label": lab("manageengine", "Tiket"), "cells": me}, {"label": lab("prtg", "Availability & trafik"), "cells": pr},
-            {"label": lab("panorama", "Ringkasan harian"), "cells": so}, {"label": lab("panorama", "Laporan Top"), "cells": tb}]
+    return [{"label": lab("manageengine", "Tickets"), "cells": me}, {"label": lab("prtg", "Availability & traffic"), "cells": pr},
+            {"label": lab("panorama", "Daily summary"), "cells": so}, {"label": lab("panorama", "Top report"), "cells": tb}]

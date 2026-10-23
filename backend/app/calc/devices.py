@@ -52,13 +52,13 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
         return round((now - h.down_since).total_seconds() / 3600, 1) if h.down_since else None
 
     def item(h, loc):
-        return {"name": h.name, "kind": h.kind, "kindLabel": labels.get(h.kind, h.kind), "loc": loc, "type": h.dev_code or "", "typeLabel": dlabel.get(h.dev_code, h.dev_code) if h.dev_code else "Tidak terklasifikasi", "zone": h.zone or "", "subzone": h.subzone or "", "status": h.status,
+        return {"name": h.name, "kind": h.kind, "kindLabel": labels.get(h.kind, h.kind), "loc": loc, "type": h.dev_code or "", "typeLabel": dlabel.get(h.dev_code, h.dev_code) if h.dev_code else "Unclassified", "zone": h.zone or "", "subzone": h.subzone or "", "status": h.status,
                 "since": ms(h.down_since) if h.down_since else None, "ageH": age(h), "problem": h.problem or ""}
 
     tg = {}
     for r in base:
         tg.setdefault(r[0].dev_code or "-", []).append(r)
-    by_type = sorted(({"code": c, "k": dlabel.get(c, c) if c != "-" else "Tidak terklasifikasi", **_agg(v)} for c, v in tg.items()), key=lambda x: (-x["total"], x["k"]))
+    by_type = sorted(({"code": c, "k": dlabel.get(c, c) if c != "-" else "Unclassified", **_agg(v)} for c, v in tg.items()), key=lambda x: (-x["total"], x["k"]))
     kinds, locs = {}, {}
     for r in by_site:
         kinds.setdefault(r[0].kind or "-", []).append(r)
@@ -68,11 +68,11 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
     by_loc = sorted(({"k": k, **_agg(v)} for k, v in locs.items()), key=lambda x: (-x["down"], -x["total"], x["k"]))
     down = sorted((item(h, loc) for h, loc in rows if h.status == "down"), key=lambda d: (d["ageH"] is None, -(d["ageH"] or 0), d["name"]))
     cdays = chronic_h // 24
-    buckets = [("kurang dari 1 hari", 0, 24), ("1 sampai 7 hari", 24, 168), (f"7 sampai {cdays} hari", 168, chronic_h), (f"lebih dari {cdays} hari", chronic_h, 1e12)]
+    buckets = [("less than 1 day", 0, 24), ("1 to 7 days", 24, 168), (f"7 to {cdays} days", 168, chronic_h), (f"over {cdays} days", chronic_h, 1e12)]
     age_dist = [{"k": lb, "n": sum(1 for d in down if d["ageH"] is not None and lo <= d["ageH"] < hi)} for lb, lo, hi in buckets]
     nt = sum(1 for d in down if d["ageH"] is None)
     if nt:
-        age_dist.append({"k": "tanpa waktu", "n": nt})
+        age_dist.append({"k": "no time", "n": nt})
     mp, nocoord = [], []
     for k, v in locs.items():
         s = sites.get(k)
@@ -173,7 +173,7 @@ def history(db: Session, cfg: Config, a, b, site: str = "", kind: str = "", dtyp
     out = {"from": a.isoformat(), "to": b.isoformat(), "events": n_ev, "hours": round(tot_h, 1), "hosts": len({h for v in per["host"].values() for h in v[2]}), "devices": n_dev,
            "mttr": round(sum(dur_closed) / len(dur_closed), 1) if dur_closed else None, "avail": max(0.0, 1 - tot_h / (n_dev * period_h)) if n_dev else None,
            "daily": [{"date": k.isoformat(), "events": v[0], "hours": round(v[1], 1)} for k, v in daily.items()],
-           "byLoc": rank("loc"), "byType": rank("type", 10, lambda k: dlabel.get(k, k) if k != "-" else "Tidak terklasifikasi"), "byKind": rank("kind", 10, lambda k: labels.get(k, k)),
+           "byLoc": rank("loc"), "byType": rank("type", 10, lambda k: dlabel.get(k, k) if k != "-" else "Unclassified"), "byKind": rank("kind", 10, lambda k: labels.get(k, k)),
            "byHost": [{"k": r["k"], "events": r["events"], "hours": r["hours"]} for r in rank("host", 15)], "byProb": [{"k": r["k"], "events": r["events"], "hours": r["hours"]} for r in rank("prob", 8)]}
     # availability per lokasi = 1 - downtime / (jumlah perangkat lokasi * lama periode)
     cnt = {}

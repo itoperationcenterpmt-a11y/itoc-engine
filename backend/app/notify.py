@@ -8,8 +8,8 @@ from .db import session_scope
 from .models import Webhook
 
 log = logging.getLogger("itoc.notify")
-EVENTS = {"handover_new": "Handover baru (semua prioritas)", "handover_high": "Handover prioritas tinggi",
-          "sync_failed": "Sinkron sumber data gagal", "insight_new": "Insight baru (peringatan dan kritis)", "test": "Pesan uji"}
+EVENTS = {"handover_new": "New handover (all priorities)", "handover_high": "High-priority handover",
+          "sync_failed": "Data source sync failed", "insight_new": "Insight baru (peringatan dan kritis)", "test": "Test message"}
 KINDS = {"generic": "JSON umum", "teams": "Microsoft Teams", "slack": "Slack", "telegram": "Telegram"}
 
 
@@ -34,10 +34,10 @@ def _run(event: str, text: str, data: dict | None):
                 continue
             try:
                 url = vault.dec(w.url_enc)
-                w.last_status = post(w.kind, url, event, text, data) if url else "URL tidak terbaca (kunci enkripsi berubah?)"
+                w.last_status = post(w.kind, url, event, text, data) if url else "URL unreadable (did the encryption key change?)"
             except Exception as e:
                 log.warning("webhook %s: %s", w.name, e)
-                w.last_status = ("Gagal: " + str(e))[:190]
+                w.last_status = ("Failed: " + str(e))[:190]
             w.last_at = datetime.utcnow()
 
 

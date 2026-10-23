@@ -10,7 +10,7 @@ from ..models import DataSource, CctvCamera, CctvHardware
 from ..store import Config
 
 # daftar yang dicoba saat Test: path REST -> nama tampilan (tidak semua ada di semua versi XProtect)
-PROBES = [("cameras", "Kamera"), ("recordingServers", "Recording server"), ("hardware", "Hardware"), ("sites", "Site"), ("cameraGroups", "Grup kamera"), ("alarms", "Alarm"), ("events", "Event")]
+PROBES = [("cameras", "Kamera"), ("recordingServers", "Recording server"), ("hardware", "Hardware"), ("sites", "Site"), ("cameraGroups", "Camera group"), ("alarms", "Alarm"), ("events", "Event")]
 
 
 def root(base: str) -> str:
@@ -26,19 +26,19 @@ def login(cl: httpx.Client, base: str, user: str, pw: str) -> str:
             d = r.json().get("error_description") or r.json().get("error") or ""
         except ValueError:
             d = ""
-        raise RuntimeError("Milestone menolak login (HTTP %d): username/password salah atau akun bukan Basic user. %s" % (r.status_code, str(d)[:80]))
+        raise RuntimeError("Milestone rejected the login (HTTP %d): wrong username/password or the account is not a Basic user. %s" % (r.status_code, str(d)[:80]))
     if r.status_code >= 400:
         raise RuntimeError("IDP Milestone HTTP %d" % r.status_code)
     tok = r.json().get("access_token")
     if not tok:
-        raise RuntimeError("IDP Milestone tidak mengembalikan access_token")
+        raise RuntimeError("Milestone IDP did not return an access_token")
     return tok
 
 
 def get(cl: httpx.Client, base: str, token: str, path: str, params: dict | None = None):
     r = cl.get(root(base) + "/API/rest/v1/" + path.lstrip("/"), params=params, headers={"Authorization": "Bearer " + token, "Accept": "application/json"})
     if r.status_code in (401, 403):
-        raise RuntimeError("HTTP %d (token ditolak atau akun tidak punya izin)" % r.status_code)
+        raise RuntimeError("HTTP %d (token rejected or the account has no permission)" % r.status_code)
     if r.status_code >= 400:
         raise RuntimeError("HTTP %d" % r.status_code)
     return r.json()
@@ -62,9 +62,9 @@ def probe(cl: httpx.Client, base: str, token: str) -> list[str]:
             j = get(cl, base, token, path)
             rows = items(j)
             keys = sorted(rows[0].keys())[:16] if rows and isinstance(rows[0], dict) else (sorted(j.keys())[:10] if isinstance(j, dict) else [])
-            out.append("%s (/%s): %d data, field: %s." % (label, path, len(rows), ", ".join(keys) or "-"))
+            out.append("%s (/%s): %d records, fields: %s." % (label, path, len(rows), ", ".join(keys) or "-"))
         except (RuntimeError, httpx.HTTPError, ValueError) as e:
-            out.append("%s (/%s): tidak tersedia (%s)." % (label, path, str(e)[:60]))
+            out.append("%s (/%s): not available (%s)." % (label, path, str(e)[:60]))
     return out
 
 
@@ -123,7 +123,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     user, pw = vault.cred(db, "ms.user", c.get("user_env", "MS_USER")), vault.cred(db, "ms.pass", c.get("pass_env", "MS_PASS"))
     srv = servers(c)
     if not srv or not user or not pw:
-        raise RuntimeError("Daftar server / akun Milestone belum diatur (Admin → Sumber Data → Integrasi)")
+        raise RuntimeError("Milestone server list / account is not set (Admin → Data Sources → Integrations)")
     tz, total, parts, fails = cfg.p("tz_offset_hours", 7), 0, [], []
     for name, url in srv:
         try:
@@ -142,5 +142,5 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         total += len(crow)
         parts.append(f"{name}: {len(crow)} kamera, {len(hrow)} hardware")
     if fails and not parts:
-        raise RuntimeError("Semua server gagal. " + "; ".join(fails))
-    return total, "; ".join(parts) + (" | GAGAL " + "; ".join(fails) if fails else "")
+        raise RuntimeError("All servers failed. " + "; ".join(fails))
+    return total, "; ".join(parts) + (" | FAILED " + "; ".join(fails) if fails else "")

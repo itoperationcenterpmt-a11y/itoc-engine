@@ -24,13 +24,13 @@ class KillIn(BaseModel):
 def disconnect(body: KillIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     cfg = load_config(db)
     if not can_see(user, "wifi") or not WIFI.can_kill(user, cfg):
-        raise HTTPException(403, "Akun ini tidak diizinkan memutus client WiFi")
+        raise HTTPException(403, "This account may not disconnect WiFi clients")
     mac = body.mac.strip().upper()
     if body.mode not in ("disconnect", "deauth") or not MAC.match(mac):
-        raise HTTPException(422, "Permintaan tidak valid")
+        raise HTTPException(422, "Invalid request")
     c = db.get(WifiClient, mac)
     if not c or not c.ap_mac:
-        raise HTTPException(404, "Client tidak ada di data terakhir (mungkin sudah terputus)")
+        raise HTTPException(404, "The client is not in the latest data (it may already be disconnected)")
     try:
         ruckus.disconnect(db, body.mode, c.mac, c.ap_mac)
     except Exception as e:

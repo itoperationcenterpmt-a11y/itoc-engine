@@ -18,19 +18,19 @@ def findings(db: Session) -> list[dict]:
         if any(check_pw(p, u.password_hash) for p in WEAK + [u.username, u.username + "123"]):
             weak_users.append(u.username)
     if weak_users:
-        add("critical", "Akun aktif memakai password lemah/bawaan", ", ".join(weak_users) + ". Reset lewat Admin > Pengguna atau nonaktifkan sebelum VAPT dan go-live.")
+        add("critical", "Active accounts use weak/default passwords", ", ".join(weak_users) + ". Reset through Admin > Users or deactivate before VAPT and go-live.")
     if s.jwt_secret in ("ganti-di-produksi", "ganti-dengan-string-acak-panjang") or len(s.jwt_secret) < 32:
-        add("critical", "ITOC_JWT_SECRET lemah", "Token login bisa dipalsukan. Isi string acak minimal 32 karakter di .env.")
+        add("critical", "ITOC_JWT_SECRET lemah", "Login tokens can be forged. Set a random string of at least 32 characters in .env.")
     if ":itoc@" in s.database_url:
-        add("high", "Password database masih bawaan", "Ganti DB_PASSWORD di .env dan buat ulang volume database atau ubah password di PostgreSQL.")
+        add("high", "Database password is still the default", "Change DB_PASSWORD in .env and recreate the database volume, or change the password in PostgreSQL.")
     if os.environ.get("ITOC_ENV", "").lower() != "production":
-        add("medium", "ITOC_ENV belum production", "Perintah seed-users/seed-demo/seed-demo-itcare masih bisa dijalankan. Set ITOC_ENV=production di server.")
+        add("medium", "ITOC_ENV is not production", "The seed-users/seed-demo/seed-demo-itcare commands can still be run. Set ITOC_ENV=production on the server.")
     if s.docs:
         add("medium", "Dokumentasi API (/docs) aktif", "Matikan ITOC_DOCS di server produksi.")
     if s.jwt_minutes > 720:
-        add("low", "Masa berlaku sesi lebih dari 12 jam", f"ITOC_JWT_MINUTES={s.jwt_minutes}.")
+        add("low", "Session lifetime is over 12 hours", f"ITOC_JWT_MINUTES={s.jwt_minutes}.")
     if not os.environ.get("ITOC_SECRET_KEY"):
-        add("low", "ITOC_SECRET_KEY kosong", "Kunci enkripsi rahasia memakai ITOC_JWT_SECRET; memutar salah satu membuat rahasia tersimpan tak terbaca. Isi kunci terpisah.")
+        add("low", "ITOC_SECRET_KEY is empty", "The secret-encryption key uses ITOC_JWT_SECRET; rotating either one makes stored secrets unreadable. Set a separate key.")
     notls, plain = [], []
     for d in db.query(DataSource):
         c = d.config or {}
@@ -40,19 +40,19 @@ def findings(db: Session) -> list[dict]:
             if str(c["base_url"]).lower().startswith("http://"):
                 plain.append(d.label)
     if notls:
-        add("medium", "Verifikasi TLS dimatikan pada konektor", ", ".join(notls) + ". Rentan penyadapan di jaringan internal; pasang sertifikat CA internal lalu aktifkan verifikasi bila memungkinkan.")
+        add("medium", "TLS verification is off on connectors", ", ".join(notls) + ". Rentan penyadapan di jaringan internal; pasang sertifikat CA internal lalu aktifkan verifikasi bila memungkinkan.")
     if plain:
-        add("medium", "Konektor memakai http:// (tanpa enkripsi)", ", ".join(plain))
+        add("medium", "Connectors use http:// (no encryption)", ", ".join(plain))
     keys = db.query(ApiKey).filter(ApiKey.revoked_at.is_(None), ApiKey.expires_at.is_(None)).all()
     if keys:
-        add("low", "API key tanpa tanggal kedaluwarsa", ", ".join(k.name for k in keys))
+        add("low", "API keys without an expiry date", ", ".join(k.name for k in keys))
     hooks = [w.name for w in db.query(Webhook).filter_by(enabled=True) if (vault.dec(w.url_enc) or "").lower().startswith("http://")]
     if hooks:
         add("low", "Webhook memakai http://", ", ".join(hooks))
     smtp = vault.get_json(db, "smtp")
     if smtp.get("host") and smtp.get("security") == "none":
-        add("medium", "SMTP tanpa enkripsi", "Pilih starttls atau ssl di Admin > Email.")
+        add("medium", "SMTP without encryption", "Choose starttls or ssl in Admin > Email.")
     admins = [u.username for u in db.query(User).filter_by(active=True) if u.role.is_admin]
     add("info", f"{len(admins)} akun Super Admin aktif", ", ".join(admins))
-    add("info", f"{db.query(Secret).count()} rahasia terenkripsi tersimpan di database", "Nilai tidak pernah dikirim ke browser.")
+    add("info", f"{db.query(Secret).count()} rahasia terenkripsi tersimpan di database", "The value is never sent to the browser.")
     return out

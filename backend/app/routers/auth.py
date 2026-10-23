@@ -29,7 +29,7 @@ _WEAK = {"password", "password1", "password123", "12345678", "123456789", "12345
 
 def _locked(db: Session, cfg, name: str, ip: str) -> bool:
     since = cfg.now() - timedelta(seconds=_WINDOW)
-    q = db.query(func.count(AuditLog.id)).filter(AuditLog.action == "Login gagal", AuditLog.at >= since)
+    q = db.query(func.count(AuditLog.id)).filter(AuditLog.action == "Login failed", AuditLog.at >= since)
     return q.filter(AuditLog.username == name[:60]).scalar() >= _MAX_USER or q.filter(AuditLog.detail["ip"].astext == ip).scalar() >= _MAX_IP
 
 
@@ -39,13 +39,13 @@ def login(body: Login, request: Request, response: Response, db: Session = Depen
     name = body.username.strip().lower()[:60]
     ip = request.client.host if request.client else "?"
     if _locked(db, cfg, name, ip):
-        raise HTTPException(429, "Terlalu banyak percobaan login. Coba lagi dalam beberapa menit.")
+        raise HTTPException(429, "Too many login attempts. Try again in a few minutes.")
     u = db.query(User).filter_by(username=name).one_or_none()
     ok = check_pw(body.password, u.password_hash if u else _DUMMY)   # waktu proses sama untuk akun yang tidak ada
     if not u or not u.active or not ok:
-        audit(db, name, "Login gagal", {"ip": ip}, cfg.p("tz_offset_hours", 7))
+        audit(db, name, "Login failed", {"ip": ip}, cfg.p("tz_offset_hours", 7))
         db.commit()
-        raise HTTPException(401, "Username atau password salah")
+        raise HTTPException(401, "Wrong username or password")
     u.last_login = cfg.now()
     audit(db, u.username, "Login", {"ip": ip}, cfg.p("tz_offset_hours", 7))
     db.commit()
@@ -68,14 +68,14 @@ def logout(request: Request, response: Response):
 def change_pw(body: PwChange, request: Request, response: Response, user: User = Depends(current_user), db: Session = Depends(get_db)):
     cfg = load_config(db)
     if not check_pw(body.old, user.password_hash):
-        raise HTTPException(400, "Password lama salah")
+        raise HTTPException(400, "The old password is wrong")
     n = cfg.p("auth.min_password", 10)
     if len(body.new) < n:
         raise HTTPException(400, f"Password minimal {n} karakter")
     if len(body.new.encode()) > 72:
         raise HTTPException(400, "Password maksimal 72 byte")
     if body.new == body.old or body.new.lower() in _WEAK or user.username in body.new.lower():
-        raise HTTPException(400, "Password terlalu mudah ditebak atau sama dengan yang lama")
+        raise HTTPException(400, "The password is too easy to guess or the same as the old one")
     user.password_hash, user.must_change_pw = hash_pw(body.new), False
     audit(db, user.username, "Mengganti password", None, cfg.p("tz_offset_hours", 7))
     db.commit()

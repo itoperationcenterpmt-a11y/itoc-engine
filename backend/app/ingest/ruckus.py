@@ -36,20 +36,20 @@ def versions(cl: httpx.Client, rt: str) -> list[str]:
 
 
 def login(cl: httpx.Client, rt: str, user: str, pw: str) -> tuple[str, str]:
-    err = "tidak ada versi API yang cocok"
+    err = "no matching API version"
     for ver in versions(cl, rt):
         try:
             r = cl.post(f"{rt}/{ver}/serviceTicket", json={"username": user, "password": pw})
         except httpx.HTTPError as e:
-            raise RuntimeError("Tidak bisa terhubung ke vSZ: " + str(e)[:150])
+            raise RuntimeError("Cannot connect to vSZ: " + str(e)[:150])
         if r.status_code == 404:
-            err = f"{ver} tidak didukung"
+            err = f"{ver} is not supported"
             continue
         if r.status_code in (401, 403):
-            raise RuntimeError("Login vSZ ditolak (username/password salah atau akun tidak punya hak API)")
+            raise RuntimeError("vSZ login rejected (wrong username/password or the account has no API rights)")
         r.raise_for_status()
         return ver, r.json()["serviceTicket"]
-    raise RuntimeError("API vSZ tidak ditemukan: " + err)
+    raise RuntimeError("vSZ API not found: " + err)
 
 
 def logout(cl, rt, ver, ticket):
@@ -121,7 +121,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     c = src.config or {}
     user, pw = vault.cred(db, "vsz.user", c.get("user_env", "VSZ_USER")), vault.cred(db, "vsz.pass", c.get("pass_env", "VSZ_PASS"))
     if not c.get("base_url") or not user or not pw:
-        raise RuntimeError("Base URL / akun vSZ belum diatur (Admin → Sumber Data → Integrasi)")
+        raise RuntimeError("vSZ Base URL / account is not set (Admin → Data Sources → Integrations)")
     rt, tz = root(c["base_url"]), cfg.p("tz_offset_hours", 7)
     with httpx.Client(timeout=c.get("timeout_s", 60), verify=c.get("verify_tls", True)) as cl:
         ver, ticket = login(cl, rt, user, pw)
@@ -205,7 +205,7 @@ def disconnect(db: Session, mode: str, mac: str, ap_mac: str) -> None:
     user = vault.cred(db, "vsz.kill_user", c.get("kill_user_env", "VSZ_KILL_USER")) or vault.cred(db, "vsz.user", c.get("user_env", "VSZ_USER"))
     pw = vault.cred(db, "vsz.kill_pass", c.get("kill_pass_env", "VSZ_KILL_PASS")) if vault.cred(db, "vsz.kill_user", c.get("kill_user_env", "VSZ_KILL_USER")) else vault.cred(db, "vsz.pass", c.get("pass_env", "VSZ_PASS"))
     if not c.get("base_url") or not user or not pw:
-        raise RuntimeError("Akun vSZ belum diatur")
+        raise RuntimeError("vSZ account is not set")
     rt = root(c["base_url"])
     with httpx.Client(timeout=30, verify=c.get("verify_tls", True)) as cl:
         ver, ticket = login(cl, rt, user, pw)
@@ -214,6 +214,6 @@ def disconnect(db: Session, mode: str, mac: str, ap_mac: str) -> None:
         finally:
             logout(cl, rt, ver, ticket)
     if r.status_code == 403:
-        raise RuntimeError("Akun vSZ tidak punya hak memutus client. Isi akun putus-sesi dengan role yang boleh melakukannya.")
+        raise RuntimeError("The vSZ account may not disconnect clients. Fill in the disconnect account with a role that is allowed to.")
     if r.status_code not in (200, 204):
         raise RuntimeError(f"vSZ menjawab HTTP {r.status_code}: {r.text[:160]}")

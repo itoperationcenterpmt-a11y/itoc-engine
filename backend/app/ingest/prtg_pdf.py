@@ -79,14 +79,14 @@ def read_pdfs(files: list[tuple[str, bytes]]) -> tuple[list[dict], list[str], di
     for name, data in files:
         digest = hashlib.sha256(data).hexdigest()
         if digest in seen:
-            notes.append(f"{name}: isinya sama persis dengan {seen[digest]}, tidak dihitung dua kali")
+            notes.append(f"{name}: identical to {seen[digest]}, not counted twice")
             continue
         seen[digest] = name
         try:
             rd = PdfReader(BytesIO(data))
             pages = [p.extract_text() or "" for p in rd.pages]
         except Exception as e:
-            notes.append(f"{name}: PDF tidak bisa dibaca ({e.__class__.__name__})")
+            notes.append(f"{name}: PDF could not be read ({e.__class__.__name__})")
             continue
         stats["files"] += 1
         stats["pages"] += len(pages)
@@ -97,7 +97,7 @@ def read_pdfs(files: list[tuple[str, bytes]]) -> tuple[list[dict], list[str], di
             stats["sensor_pages"] += 1
             r["file"] = name
             if not r["ok"]:
-                notes.append(f"{name} hal. {i}: angka sensor tidak terbaca (ID/tanggal/Up/Down), halaman dilewati")
+                notes.append(f"{name} p. {i}: sensor figures unreadable (ID/date/Up/Down), page skipped")
                 continue
             if r["end"] is None or (r["end"] - r["day"]).days != 1:
                 notes.append(f"{name} hal. {i}: periode laporan bukan 1 hari ({r['day']} – {r['end']}), dilewati. Gunakan laporan harian")
@@ -109,10 +109,10 @@ def read_pdfs(files: list[tuple[str, bytes]]) -> tuple[list[dict], list[str], di
         o = best.get(k)
         if o is None or (r["created_pdf"] or datetime.min) >= (o["created_pdf"] or datetime.min):
             if o is not None:
-                notes.append(f"Sensor {r['sensor_id']} tanggal {r['day']} ada di lebih dari satu PDF; dipakai yang terbaru ({r['file']})")
+                notes.append(f"Sensor {r['sensor_id']} date {r['day']} is in more than one PDF; the latest is used ({r['file']})")
             best[k] = r
         else:
-            notes.append(f"Sensor {r['sensor_id']} tanggal {r['day']} ada di lebih dari satu PDF; dipakai yang terbaru ({o['file']})")
+            notes.append(f"Sensor {r['sensor_id']} date {r['day']} is in more than one PDF; the latest is used ({o['file']})")
     return list(best.values()), notes, stats
 
 

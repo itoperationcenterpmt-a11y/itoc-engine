@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import User, Handover, MASTER
-from ..security import current_user, can_see, require_write, effective_site
+from ..security import current_user, can_see, require_write, effective_site, ADMIN_MASTER_PAGE, locked_pages
 from ..store import load_config, audit, bump_data
 from .. import views
 from ..calc import wifi as wifi_calc
@@ -43,7 +43,8 @@ def config(user: User = Depends(current_user), db: Session = Depends(get_db)):
         "formulas": c.formulas, "sla": c.sla, "isps": c.isps,
         "par": {"slaH": c.sla, "target": P["net.target"], "minCov": P["net.min_cov"], "utilPeak": P["net.util_peak"], "utilAvg": P["net.util_avg"]},
         "params": {k: v for k, v in P.items() if user.role.is_admin or user.role.admin_view or not _hidden_param(user, k)},  # tanpa rahasia; parameter modul yang tidak boleh dilihat role ini ikut disembunyikan
-        "master": [{"key": k, "label": v[1]} for k, v in MASTER.items()] if (user.role.is_admin or user.role.admin_view) else [],
+        "master": [{"key": k, "label": v[1]} for k, v in MASTER.items() if user.role.is_admin or (user.role.admin_view and ADMIN_MASTER_PAGE.get(k) not in locked_pages(db))] if (user.role.is_admin or user.role.admin_view) else [],
+        "admin_locked": locked_pages(db) if (user.role.is_admin or user.role.admin_view) else [],
     }
 
 
@@ -51,7 +52,7 @@ def config(user: User = Depends(current_user), db: Session = Depends(get_db)):
 def view(tab: str, d_from: date = Query(alias="from"), d_to: date = Query(alias="to"), shift: int = 0, site: str = "", cmp: bool = False,
          sensor: str = "", preset: str = "standar", kind: str = "", dstat: str = "", grp: str = "", dtype: str = "", user: User = Depends(current_user), db: Session = Depends(get_db)):
     if not can_see(user, tab):
-        raise HTTPException(403, "Tidak punya akses ke halaman ini")
+        raise HTTPException(403, "You have no access to this page")
     c = load_config(db)
     if d_from > d_to:
         d_from, d_to = d_to, d_from
@@ -89,7 +90,7 @@ def ho_create(body: HoIn, user: User = Depends(require_write), db: Session = Dep
     if len(body.title.strip()) < H["min_title"]: errs.append(f"judul (min. {H['min_title']} karakter)")
     if len(body.body.strip()) < H["min_body"]: errs.append(f"kondisi (min. {H['min_body']} karakter)")
     if errs:
-        raise HTTPException(422, "Lengkapi: " + ", ".join(errs) + ".")
+        raise HTTPException(422, "Complete: " + ", ".join(errs) + ".")
     now = c.now()
     h = Handover(created_at=now, shift_date=c.clock.duty_date(now), shift_no=c.clock.shift_of(now.hour), category=body.category, priority=body.priority,
                  site=body.site, ticket_id=body.ticket_id or None, title=body.title.strip(), body=body.body.strip(), next_action=(body.next_action or "").strip(),
@@ -112,7 +113,7 @@ def ho_close(hid: int, body: HoClose, user: User = Depends(require_write), db: S
     c = load_config(db)
     h = db.get(Handover, hid)
     if not h or not h.is_open:
-        raise HTTPException(404, "Serah terima tidak ditemukan atau sudah ditutup")
+        raise HTTPException(404, "Handover not found or already closed")
     if len(body.note.strip()) < c.p("ho.rules")["min_close"]:
         raise HTTPException(422, f"Isi catatan penutupan minimal {c.p('ho.rules')['min_close']} karakter.")
     h.is_open, h.closed_by, h.closed_at, h.close_note = False, user.full_name, c.now(), body.note.strip()

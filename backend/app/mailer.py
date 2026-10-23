@@ -13,7 +13,7 @@ def config(db: Session) -> dict:
 def send(db: Session, to: list[str], subject: str, body: str, attachments: list[tuple[str, bytes, str]] | None = None) -> None:
     c = config(db)
     if not c.get("host") or not c.get("from"):
-        raise RuntimeError("SMTP belum diatur (host dan pengirim wajib)")
+        raise RuntimeError("SMTP is not set (host and sender are required)")
     msg = EmailMessage()
     msg["From"] = f'{c.get("from_name") or ""} <{c["from"]}>'.strip() if c.get("from_name") else c["from"]
     msg["To"] = ", ".join(to)

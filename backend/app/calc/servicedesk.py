@@ -43,7 +43,7 @@ def derive(t, cfg: Config):
 def group(D, key, n_total):
     m = {}
     for d in D:
-        k = key(d) or "(kosong)"
+        k = key(d) or "(blank)"
         o = m.setdefault(k, {"k": k, "n": 0, "done": 0, "open": 0, "du": [], "zero": 0, "in": 0, "out": 0})
         o["n"] += 1
         o["open" if d["open"] else "done"] += 1
@@ -125,10 +125,10 @@ def calc(rows: list[list], cfg: Config, d_from: date, d_to: date, shift: int = 0
     ppl = people if people is not None else cfg.people
     na = cfg.p("sd.unassigned")
     shared = {p["sys"] for p in ppl if p["is_shared"]}
-    skip = {na, "(kosong)"} | {p["sys"] for p in ppl if p["exclude_rank"]}
+    skip = {na, "(blank)"} | {p["sys"] for p in ppl if p["exclude_rank"]}
     by_tech = {}
     for d in D:
-        by_tech.setdefault(d["t"][7] or "(kosong)", []).append(d)
+        by_tech.setdefault(d["t"][7] or "(blank)", []).append(d)
     # akun bersama tim jaga (mis. IT Operation Center) diperlakukan sebagai akun personal: ikut ranking bila punya tiket
     roster = [p for p in ppl if not p["is_shared"] and not p["exclude_rank"] and (p["unit"] in cfg.p("sd.rank_units") or p["team_code"] or p["sys"] in by_tech)]
     names = {p["sys"]: p for p in roster}

@@ -31,12 +31,12 @@ def run_source(key: str) -> dict:
     t0 = time.time()
     with session_scope() as db:
         if not db.execute(text("select pg_try_advisory_xact_lock(hashtext(:k))"), {"k": "sync:" + key}).scalar():
-            return {"ok": False, "msg": "Sinkron sedang berjalan"}
+            return {"ok": False, "msg": "A sync is already running"}
         cfg = load_config(db)
         src = db.get(DataSource, key)
         fn = SYNCERS.get(key)
         if not src or not fn:
-            return {"ok": False, "msg": "Sumber tidak dikenal"}
+            return {"ok": False, "msg": "Unknown source"}
         try:
             n, msg = fn(db, cfg, src)
             src.last_ok_at, src.last_error = cfg.now(), None
@@ -50,7 +50,7 @@ def run_source(key: str) -> dict:
             db.add(SyncLog(source=src.label, at=cfg.now(), ok=False, rows=0, ms=int((time.time() - t0) * 1000), message=str(e)[:300]))
             ok, msg, n = False, str(e), 0
             from . import notify
-            notify.fire("sync_failed", f"Sinkron {src.label} gagal: {str(e)[:200]}")
+            notify.fire("sync_failed", f"Sync of {src.label} failed: {str(e)[:200]}")
             _retry_later(key, (src.config or {}).get("schedule"))
     if ok:
         _tries.pop(key, None)
@@ -60,25 +60,25 @@ def run_source(key: str) -> dict:
 
 
 def run_insights() -> dict:
-    """Analisis insight dari data yang sudah tersimpan; insight baru bertingkat warn atau crit dikirim lewat webhook (sekali per insight)."""
+    """Run the insight analysis on stored data; new warning or critical insights are sent through webhooks (once per insight)."""
     from sqlalchemy import select
     from . import insight, notify
     from .models import Insight
     t0 = time.time()
     with session_scope() as db:
         if not db.execute(text("select pg_try_advisory_xact_lock(hashtext('insights'))")).scalar():
-            return {"ok": False, "msg": "Analisis sedang berjalan"}
+            return {"ok": False, "msg": "Analysis is already running"}
         cfg = load_config(db)
         try:
             r = insight.run(db, cfg)
-            fresh = list(db.scalars(select(Insight).where(Insight.notified.is_(False), Insight.status != "selesai", Insight.severity.in_(["warn", "crit"]))))
+            fresh = list(db.scalars(select(Insight).where(Insight.notified.is_(False), Insight.status.in_(["new", "read"]), Insight.severity.in_(["warn", "crit"]))))
             for x in fresh:
                 x.notified = True
-            msg = f"{r['found']} temuan, {len(r['new'])} baru, {r['closed']} selesai" + (f"; galat: {'; '.join(r['errors'])}" if r["errors"] else "")
+            msg = f"{r['found']} findings, {len(r['new'])} new, {r['closed']} resolved" + (f"; errors: {'; '.join(r['errors'])}" if r["errors"] else "")
             db.add(SyncLog(source="Insight", at=cfg.now(), ok=not r["errors"], rows=r["found"], ms=int((time.time() - t0) * 1000), message=msg[:300]))
-            texts = [f"[{'KRITIS' if x.severity == 'crit' else 'PERINGATAN'}] {x.title}: {x.detail}" for x in fresh[:5]]
+            texts = [f"[{'CRITICAL' if x.severity == 'crit' else 'WARNING'}] {x.title}: {x.detail}" for x in fresh[:5]]
             if len(fresh) > 5:
-                texts.append(f"dan {len(fresh) - 5} insight lain")
+                texts.append(f"and {len(fresh) - 5} more insights")
             out = {"ok": True, "found": r["found"], "new": len(r["new"]), "closed": r["closed"], "errors": r["errors"], "msg": msg}
         except Exception as e:
             log.exception("insight")

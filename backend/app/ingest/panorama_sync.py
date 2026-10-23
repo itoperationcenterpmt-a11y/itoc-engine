@@ -14,7 +14,7 @@ BLOCK_URL = "( action eq block-url ) or ( action eq block-continue ) or ( action
 DENIED = "( action eq deny ) or ( action eq drop ) or ( action eq reset-both ) or ( action eq reset-client ) or ( action eq reset-server )"
 PERIODS = [(7, "last-7-days"), (30, "last-30-days"), (60, "last-60-days"), (90, "last-90-days")]
 g = lambda r, k: r.get(k, "")
-PARTIAL = "Panorama API · hari ini (sementara)"
+PARTIAL = "Panorama API · today (provisional)"
 
 # (kunci laporan, jenis, kelompok, nilai, filter, bentuk baris sesuai urutan kolom CSV)
 DAILY = [
@@ -88,7 +88,7 @@ def _top_jobs(c: dict, cfg: Config, cur: dict, now: datetime, yesterday: date, l
     every = float(c.get("top_refresh_h", 12)) * 3600
     age = lambda label: (now - datetime.fromisoformat(cur["top_at_k"][label])).total_seconds() if label in cur.get("top_at_k", {}) else 1e12
     jobs = []
-    for label, n in (("Top 30 hari", 30), ("Top 7 hari", 7)):
+    for label, n in (("Top 30 days", 30), ("Top 7 days", 7)):
         if age(label) > every:
             jobs.append((label, yesterday - timedelta(days=n - 1), yesterday, "roll"))
     first = yesterday.replace(day=1)
@@ -107,7 +107,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     c = src.config or {}
     user, pw = vault.cred(db, "pano.user", c.get("user_env", "PANO_USER")), vault.cred(db, "pano.pass", c.get("pass_env", "PANO_PASS"))
     if not c.get("base_url") or not user or not pw:
-        raise RuntimeError("Base URL / akun API Panorama belum diatur (Admin → Sumber Data → Integrasi)")
+        raise RuntimeError("Panorama Base URL / API account is not set (Admin → Data Sources → Integrations)")
     cur = dict(src.cursor or {})
     now = cfg.now()
     today, yesterday = now.date(), now.date() - timedelta(days=1)
@@ -124,7 +124,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     top_jobs = _top_jobs(c, cfg, cur, now, yesterday, lower)
     partial = bool(c.get("today_partial", True))
     if not pending and not top_jobs and not partial:
-        return 0, "Tidak ada hari baru dan laporan Top masih baru"
+        return 0, "No new days and the Top report is still fresh"
     notes, n_days, n_rows, n_top, n_part = [], 0, 0, 0, 0
     with httpx.Client(timeout=60, verify=c.get("verify_tls", False)) as cl:
         key = PA.keygen(cl, c["base_url"], user, pw)
@@ -141,7 +141,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
                     n_rows += b.rows_read
                 tried.add(d.isoformat())
             except (RuntimeError, httpx.HTTPError) as e:
-                notes.append(f"hari {d.isoformat()} gagal: {str(e)[:120]}")
+                notes.append(f"day {d.isoformat()} failed: {str(e)[:120]}")
                 break
         if partial:
             try:                                                      # hari ini sampai saat ini (sementara): diganti tiap sinkron, lalu digantikan data harian lengkap esok hari
@@ -156,7 +156,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
                     b = _model(db, cfg, today, reports, PARTIAL, True)
                     n_part = 1 if b is not None else 0
             except (RuntimeError, httpx.HTTPError) as e:
-                notes.append(f"data hari ini gagal: {str(e)[:100]}")
+                notes.append(f"today's data failed: {str(e)[:100]}")
         for label, d0, d1, kind in top_jobs[:int(c.get("max_top_per_run", 3))]:
             try:
                 rng = (d0.strftime("%Y/%m/%d 00:00:00"), d1.strftime("%Y/%m/%d 23:59:59"))
@@ -177,10 +177,10 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
                 n_top += 1
                 n_rows += sum(len(v) for v in reports.values())
             except (RuntimeError, httpx.HTTPError) as e:
-                notes.append(f"{label} gagal: {str(e)[:100]}")
+                notes.append(f"{label} failed: {str(e)[:100]}")
                 continue                                              # batch Top lain tetap dicoba; yang gagal diulang pada sinkron berikutnya
     cur["tried"] = sorted(tried)[-800:]
     src.cursor = cur
     if notes and not n_days and not n_top and not n_part:
         raise RuntimeError("; ".join(notes))
-    return n_rows, f"{n_days} hari ringkasan baru, {n_top} laporan Top diperbarui" + (", data hari ini diperbarui" if n_part else "") + ("; " + "; ".join(notes) if notes else "")
+    return n_rows, f"{n_days} hari ringkasan baru, {n_top} laporan Top diperbarui" + (", today's data updated" if n_part else "") + ("; " + "; ".join(notes) if notes else "")

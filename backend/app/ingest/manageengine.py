@@ -57,12 +57,12 @@ def parse_excel(data: bytes, cfg: Config) -> dict:
             rows = r
             break
     if rows is None:
-        raise ValueError(f"Kolom '{key_col}' tidak ditemukan. Unggah ekspor ManageEngine.")
+        raise ValueError(f"Column '{key_col}' not found. Upload a ManageEngine export.")
     head = [s(c) for c in rows[hi]]
     ix = {f: head.index(col) if col in head else -1 for col, f in head_map.items()}
     miss = [col for col, f in head_map.items() if ix[f] < 0 and f not in xc.get("optional", [])]
     if miss:
-        raise ValueError("Kolom tidak ditemukan: " + ", ".join(miss))
+        raise ValueError("Columns not found: " + ", ".join(miss))
     pats = cfg.p("sd.description_template")
     out = []
     for r in rows[hi + 1:]:
@@ -98,7 +98,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     from .. import vault
     token = vault.cred(db, "me.token", c.get("token_env", "ME_AUTHTOKEN"))
     if not c.get("base_url") or not token:
-        raise RuntimeError("base_url / token ManageEngine belum diatur (data_source.config + env)")
+        raise RuntimeError("ManageEngine base_url / token is not set (data_source.config + env)")
     tz = cfg.p("tz_offset_hours", 7)
     fm: dict = c["api_fields"]
     na = cfg.p("sd.unassigned")
@@ -130,4 +130,4 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
             start += size
     n = upsert(db, [x for x in rows if x["created_at"]], "api")
     src.cursor = {**src.cursor, "last_updated_ms": newest}
-    return n, "Tiket baru/berubah sejak sinkron sebelumnya"
+    return n, "Tickets new or changed since the previous sync"

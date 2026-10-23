@@ -1,11 +1,12 @@
-/* ITOC Dashboard — inti frontend. Tidak ada data atau parameter yang tertanam:
-   semuanya dari GET /api/config (master & parameter) dan GET /api/view/<halaman> (angka hasil hitung server). */
+/* ITOC Dashboard — frontend core. No data or parameters are embedded:
+   everything comes from GET /api/config (masters & parameters) and GET /api/view/<page> (figures calculated by the server). */
 "use strict";
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const nf = new Intl.NumberFormat("id-ID"), fmt = n => nf.format(Math.round(n || 0));
 const fx = (n, d = 1) => n == null || isNaN(n) ? "–" : n.toLocaleString("id-ID", {minimumFractionDigits: d, maximumFractionDigits: d});
 const pc = (n, d = 1) => n == null || isNaN(n) ? "–" : fx(n * 100, d) + "%";
+const pl = (n, w) => n + " " + w + (n === 1 ? "" : "s");
 const pad = n => String(n).padStart(2, "0");
 const dayMs = s => Date.parse(s + "T00:00:00Z"), iso = ms => new Date(ms).toISOString().slice(0, 10);
 const addDays = (s, n) => iso(dayMs(s) + n * 864e5);
@@ -18,7 +19,7 @@ const dtime = ms => { if (ms == null) return "–"; const d = new Date(ms); retu
 const hm = ms => { const d = new Date(ms); return pad(d.getUTCHours()) + "." + pad(d.getUTCMinutes()); };
 
 /* ---------- API ---------- */
-/* Sesi = cookie HttpOnly dari server (tidak bisa dibaca JavaScript). Header X-Requested-With wajib untuk perubahan data (perlindungan CSRF). */
+/* Session = HttpOnly cookie from the server (not readable by JavaScript). The X-Requested-With header is required for data changes (CSRF protection). */
 async function api(path, o = {}) {
   const h = Object.assign({"X-Requested-With": "itoc"}, o.body && !(o.body instanceof FormData) ? {"Content-Type": "application/json"} : {});
   const r = await fetch(path, Object.assign({credentials: "same-origin"}, o, {headers: h}));
@@ -29,7 +30,7 @@ async function api(path, o = {}) {
 }
 const send = (path, body, method = "POST") => api(path, {method, body: body instanceof FormData ? body : JSON.stringify(body)});
 
-/* ---------- konfigurasi dari server ---------- */
+/* ---------- configuration from the server ---------- */
 function applyConfig(c) {
   CFG = c; const P = c.params;
   PAR = c.par; MB = P["ui.months"]; HR = P["ui.weekdays_short"];
@@ -37,7 +38,7 @@ function applyConfig(c) {
   TABS = c.modules.map(m => [m.key, m.label, m.badge]);
   APPLY = Object.fromEntries(c.modules.map(m => [m.key, Object.assign({p: 0, s: 0, l: 0, c: 0}, m.filters, {note: m.note, why: m.why})]));
   PRESETS = P["ui.presets"];
-  SN = ["Semua", ...c.shifts.map(s => s.name)]; SC = ["", ...c.shifts.map(s => s.code)]; NS = c.shifts.length;
+  SN = ["All", ...c.shifts.map(s => s.name)]; SC = ["", ...c.shifts.map(s => s.code)]; NS = c.shifts.length;
   OFFC = (c.rotation || {}).off_code || "O"; CODES = [...c.shifts.map(s => s.code), OFFC]; OFF = NS;
   TEAMS = c.teams.map(t => t.code);
   ROLES = Object.fromEntries(Object.values(c.roles).map(r => [r.key, r.label]));
@@ -50,7 +51,7 @@ const shiftOf = h => { const L = SHIFTS(); let cur = L[L.length - 1]; for (const
 const shiftHours = i => { const L = SHIFTS(), k = L.findIndex(s => s.no === i); return k < 0 ? "" : pad(L[k].start) + ".00–" + pad(L[(k + 1) % L.length].start) + ".00"; };
 const nowMs = () => Date.now() + (CFG ? CFG.params.tz_offset_hours : 7) * 36e5;
 function nowShift() { const j = nowMs(), h = new Date(j).getUTCHours(); return {date: iso(j - SHIFTS()[0].start * 36e5), today: iso(j), shift: shiftOf(h), clock: hm(j)}; }
-/* indeks kode shift (0..NS-1) atau OFF, menurut pola rotasi di Admin → Operasional → Target dan Parameter → rotation */
+/* shift code index (0..NS-1) or OFF, following the rotation pattern in Admin → Parameters → rotation */
 function codeOf(g, date) {
   const R = CFG.rotation || {}, t = CFG.teams.find(x => x.code === String(g)); if (!R.pattern || !t) return OFF;
   const diff = Math.round((dayMs(date) - dayMs(R.anchor)) / 864e5) + (t.offset || 0) * (R.team_step || 0), L = R.pattern.length;
@@ -59,7 +60,7 @@ function codeOf(g, date) {
 const teamOn = (date, shift) => TEAMS.find(g => codeOf(g, date) === shift - 1) || "–";
 const crew = g => CFG.people.filter(p => p.team_code === String(g)).sort((a, b) => b.is_coordinator - a.is_coordinator);
 const prTone = v => ((CFG.params["ho.priorities"] || []).find(x => x.value === v) || {}).tone || "low";
-const roleAccess = k => { const r = CFG.roles[k]; if (!r) return "–"; return r.modules.includes("*") ? "Semua" : r.modules.map(m => (MODS[m] || {label: m}).label).join(", "); };
+const roleAccess = k => { const r = CFG.roles[k]; if (!r) return "–"; return r.modules.includes("*") ? "All" : r.modules.map(m => (MODS[m] || {label: m}).label).join(", "); };
 
 /* ---------- state + filter seragam ---------- */
 const S = {tab: "", pers: "", rkind: "", rpreset: "standar", layEdit: false, layRole: "", preset: "", from: "", to: "", sf: 0, site: "", kind: "", dstat: "", grp: "", dtype: "", cmp: false, dim: "kategori", sdim: "type", stop: "", sensor: "", hoSt: "open", adm: "pengguna", hoForm: false, closing: null, msg: "", addUser: false, params: null, mkey: "", mdata: null, medit: null};

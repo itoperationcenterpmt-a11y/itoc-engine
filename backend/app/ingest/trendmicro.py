@@ -27,7 +27,7 @@ def get(cl: httpx.Client, url: str, token: str, params: dict | None = None, trie
             time.sleep(min(int(r.headers.get("Retry-After", "5") or 5), 30))
             continue
         if r.status_code in (401, 403):
-            raise RuntimeError(f"Vision One menolak (HTTP {r.status_code}): API key salah/kedaluwarsa atau role-nya tidak punya izin Workbench")
+            raise RuntimeError(f"Vision One rejected the request (HTTP {r.status_code}): the API key is wrong/expired or its role has no Workbench permission")
         if r.status_code >= 400:
             msg = ""
             try:
@@ -94,7 +94,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     c = src.config or {}
     token = vault.cred(db, "tm.token", c.get("token_env", "TMV1_TOKEN"))
     if not c.get("base_url") or not token:
-        raise RuntimeError("Base URL / API key Trend Micro belum diatur (Admin → Sumber Data → Integrasi)")
+        raise RuntimeError("Trend Micro Base URL / API key is not set (Admin → Data Sources → Integrations)")
     tz, cur = cfg.p("tz_offset_hours", 7), dict(src.cursor or {})
     now = datetime.now(timezone.utc)
     since = datetime.fromisoformat(cur["last_update"]) if cur.get("last_update") else now - timedelta(days=min(int(c.get("backfill_days", 30)), 365))

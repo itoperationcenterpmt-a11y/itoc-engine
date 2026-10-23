@@ -1,9 +1,9 @@
-/* IT PMT Dashboard — komponen & tampilan halaman (dari mockup, kini membaca bundel API). */
+/* IT PMT Dashboard: components and page views, reading the API bundle. */
 "use strict";
 /* ---------- komponen ---------- */
 function nice(v) { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))), f = v / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
 function xl(labels, x, y) { const n = labels.length, sparse = labels.some(t => t === ""), k = sparse ? 1 : Math.ceil(n / 12); return labels.map((t, i) => (i % k === 0) ? `<text x="${x(i)}" y="${y}" text-anchor="middle">${esc(t)}</text>` : "").join(""); }
-const empty = (t) => `<div class="empty"><b>Belum ada data</b><span>${t || "Tidak ada data untuk filter ini. Coba ubah periode, shift, atau lokasi."}</span></div>`;
+const empty = (t) => `<div class="empty"><b>No data yet</b><span>${t || "No data for this filter. Try changing the period, shift, or location."}</span></div>`;
 function axisFmt(v, unit) { return unit === "mbps" ? fx(v, v < 10 && v ? 1 : 0) : fmt(v); }
 function bars(B, series, o = {}) {
   const W = o.w || 720, Hh = o.h || 220, L = 52, R = 8, T = 10, Bm = 26, pw = W - L - R, ph = Hh - T - Bm, n = B.length, k = series.length, dec = o.dec || 0, ff = v => dec ? fx(v, dec) : fmt(v);
@@ -25,7 +25,7 @@ function lines(B, series, o = {}) {
   let m = ""; series.forEach(s => { let d = "", pen = false; s.v.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; }); m += `<path d="${d}" fill="none" stroke="var(${s.c})" stroke-width="${o.thin ? 1.4 : 2}" stroke-linejoin="round" stroke-linecap="round"/>`; });
   if (o.marks) o.marks.forEach(i => { m += `<line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${T + ph}" stroke="var(--crit)" stroke-opacity=".35" stroke-width="${Math.max(1, pw / n)}"/>`; });
   const gw = pw / Math.max(1, n - 1); let ov = "";
-  B.forEach((b, i) => { ov += `<rect x="${x(i) - gw / 2}" y="${T}" width="${gw}" height="${ph}" fill="transparent" data-tip="${esc(b.full + "\n" + series.map(s => s.name + ": " + (s.v[i] == null ? "tidak ada data" : fx(s.v[i], o.dec ?? 1) + (o.unit || ""))).join("\n"))}"/>`; });
+  B.forEach((b, i) => { ov += `<rect x="${x(i) - gw / 2}" y="${T}" width="${gw}" height="${ph}" fill="transparent" data-tip="${esc(b.full + "\n" + series.map(s => s.name + ": " + (s.v[i] == null ? "no data" : fx(s.v[i], o.dec ?? 1) + (o.unit || ""))).join("\n"))}"/>`; });
   return `<svg class="chart" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="${esc(o.label || "")}">${g}${m}${ov}${xl(B.map(b => b.label), x, Hh - 8)}</svg>`;
 }
 function hbars(rows, o = {}) {
@@ -36,7 +36,7 @@ function hbars(rows, o = {}) {
 const legend = s => `<div class="legend">` + s.map(x => `<span><b style="background:var(${x.c})"></b>${esc(x.name)}</span>`).join("") + `</div>`;
 const pill = (k, t) => `<span class="pill ${k}"><i>${{good: "✓", warn: "!", crit: "✕", idle: "–"}[k]}</i>${esc(t)}</span>`;
 const panel = (cls, title, sub, body, extra) => `<section class="panel ${cls}"><header><h2>${title}</h2>${sub ? `<span class="sub">${sub}</span>` : ""}${extra || ""}</header>${body}</section>`;
-const info = t => `<button type="button" class="ib" data-tip="${esc(t)}" aria-label="Rumus: ${esc(t)}">i</button>`;
+const info = t => `<button type="button" class="ib" data-tip="${esc(t)}" aria-label="Formula: ${esc(t)}">i</button>`;
 function delta(cur, prev, o = {}) {
   if (!S.cmp || cur == null || prev == null || isNaN(cur) || isNaN(prev)) return "";
   const d = cur - prev; if (Math.abs(d) < 1e-9) return `<span class="dl flat">= sama</span>`;
@@ -45,14 +45,14 @@ function delta(cur, prev, o = {}) {
 }
 const kpi = (l, v, d, o = {}) => `<div class="kpi ${o.cls || ""}"><span class="lbl">${l}${o.tip ? info(o.tip) : ""}</span><span class="v">${v}</span><span class="d">${o.dl || ""}${d || ""}</span></div>`;
 function tbl(heads, rows, o = {}) {
-  if (!rows.length) return `<div class="empty sm">${o.empty || "Tidak ada data untuk filter ini."}</div>`;
+  if (!rows.length) return `<div class="empty sm">${o.empty || "No data for this filter."}</div>`;
   const isN = heads.map((h, i) => rows.some(r => typeof r[i] === "number") || (o.r || []).includes(i));
   const cell = c => c == null ? "–" : typeof c === "number" ? (Number.isInteger(c) ? fmt(c) : fx(c, 2)) : c.h != null ? c.h : esc(c);
   return `<div class="scroll ${o.tall ? "tall" : ""}"><table><thead><tr>${heads.map((h, i) => `<th class="${isN[i] ? "r" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>` + rows.map(r => `<tr>${r.map((c, i) => `<td class="${isN[i] ? "r num" : "t"}">${cell(c)}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>`;
 }
 const dayB = arr => arr.map(x => ({label: dmon(x.date), full: dlong(x.date)}));
 const stPill = s => ({h: s === NST.ok ? pill("good", s) : s === NST.bad ? pill("crit", s) : pill("idle", s)});
-const go = (tab, t) => `<button type="button" class="lnk" data-go="${tab}">${t || "Buka rincian"} →</button>`;
+const go = (tab, t) => `<button type="button" class="lnk" data-go="${tab}">${t || "View details"} →</button>`;
 
 /* ---------- header, nav, filter ---------- */
 const ICO = {
@@ -72,19 +72,19 @@ const ICO = {
   calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>'
 };
 const icon = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICO[(MODS[k] || {}).icon] || '<circle cx="12" cy="12" r="4"/>'}</svg>`;const topOf = k => { const p = (MODS[k] || {}).parent; return p && MODS[p] ? p : k; };
-/* Sub-menu: halaman induk dan anak-anaknya (mis. Report + Handover) sebagai tab di dalam halaman */
+/* Sub-menu: a parent page and its children (e.g. Report + Handover) as tabs inside the page */
 const SUBSUM = {network: "Summary", cyber: "Summary"};
 function subnav(parent) {
   const items = TABS.filter(t => t[0] === parent || (MODS[t[0]] || {}).parent === parent);
   return items.length < 2 ? "" : `<div class="subtabs">${items.map(([k, l]) => `<button type="button" data-tab="${k}" aria-selected="${k === S.tab}">${esc(k === parent && SUBSUM[parent] ? SUBSUM[parent] : l)}</button>`).join("")}</div>`;
 }
-/* Jam shift berjalan: dipanggil saat render dan tiap 30 detik, supaya tidak membeku. */
+/* Running shift clock: called on render and every second so it never freezes. */
 function renderDuty() {
   const n = nowShift(), tm = teamOn(n.date, n.shift), d = new Date(nowMs()), hh = pad(d.getUTCHours()), mm = pad(d.getUTCMinutes()), ss = pad(d.getUTCSeconds());
   ["duty", "dutyH"].forEach(id => {
     const e = $(id); if (!e) return;
-    if (!e.querySelector(".clk")) e.innerHTML = `<i></i><span><span class="dtxt"></span><small class="clk"><span class="th"></span><b>:</b><span class="tm"></span><b>:</b><span class="ts"></span> WIB</small></span>`;   // struktur dibuat sekali agar animasi tidak mengulang tiap detik
-    e.querySelector(".dtxt").textContent = `Bertugas: Team ${tm} · ${SN[n.shift]}`;
+    if (!e.querySelector(".clk")) e.innerHTML = `<i></i><span><span class="dtxt"></span><small class="clk"><span class="th"></span><b>:</b><span class="tm"></span><b>:</b><span class="ts"></span> WIB</small></span>`;   // structure is built once so the animation does not restart every second
+    e.querySelector(".dtxt").textContent = `On duty: Team ${tm} · ${SN[n.shift]}`;
     e.querySelector(".th").textContent = hh; e.querySelector(".tm").textContent = mm; e.querySelector(".ts").textContent = ss;
   });
   $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]} · ${hh}.${mm}`;
@@ -99,23 +99,23 @@ function renderDuty() {
   $("psub").textContent = APPLY[S.tab] && APPLY[S.tab].p ? rangeTxt() : "";
   $("fPreset").innerHTML = PRESETS.map(([k, l]) => `<button type="button" data-p="${k}" aria-pressed="${S.preset === k}">${l}</button>`).join("");
   $("fShift").innerHTML = SN.map((l, i) => `<button type="button" data-s="${i}" aria-pressed="${S.sf === i}" ${i ? `title="${shiftHours(i)}"` : ""}>${l}</button>`).join("");
-  $("fSite").innerHTML = `<option value="">${CFG.me.site ? "Lokasi akun Anda" : "Semua lokasi"}</option>` + [...CFG.sites, ...(S.tab === "devices" && V.dev ? V.dev.unmapped.map(u => u.code) : []), ...(S.tab === "wifi" && V.wifi ? V.wifi.opts.locs.filter(x => !CFG.sites.includes(x)) : [])].map(s => `<option ${s === S.site ? "selected" : ""}>${esc(s)}</option>`).join("");
+  $("fSite").innerHTML = `<option value="">${CFG.me.site ? "Your account's location" : "All locations"}</option>` + [...CFG.sites, ...(S.tab === "devices" && V.dev ? V.dev.unmapped.map(u => u.code) : []), ...(S.tab === "wifi" && V.wifi ? V.wifi.opts.locs.filter(x => !CFG.sites.includes(x)) : [])].map(s => `<option ${s === S.site ? "selected" : ""}>${esc(s)}</option>`).join("");
   $("fFrom").value = S.from; $("fTo").value = S.to; $("fFrom").max = $("fTo").max = nowShift().today; $("fFrom").min = $("fTo").min = CFG.params.data_start; $("fCmp").checked = S.cmp;
-  const ap = APPLY[S.tab], anyF = !!(ap.p || ap.l || ap.k || ap.t || ap.g || ap.y), KL = CFG.params["dev.kind_labels"] || {}, SL = [["", "Semua"], ["down", "Down"], ["degraded", "Interface"], ["up", "Online"], ["maintenance", "Maintenance"], ["disabled", "Disabled"]];
+  const ap = APPLY[S.tab], anyF = !!(ap.p || ap.l || ap.k || ap.t || ap.g || ap.y), KL = CFG.params["dev.kind_labels"] || {}, SL = [["", "All"], ["down", "Down"], ["degraded", "Interface"], ["up", "Online"], ["maintenance", "Maintenance"], ["disabled", "Disabled"]];
   const kinds = new Map(Object.entries(KL)); ((V.dev && V.dev.byKind) || []).forEach(k => kinds.set(k.key, KL[k.key] || k.k));
   const gl = ((V.dev && V.dev.groups) || []).filter(g => !S.kind || g.kind === S.kind);
   const WF = S.tab === "wifi" && V.wifi ? V.wifi.opts : null;
-  [["gKind", "Band", "Kategori"], ["gGrp", "SSID", "Grup"], ["gTyp", "Zone", "Tipe"]].forEach(([id, w, d]) => { $(id).querySelector(".k").textContent = S.tab === "wifi" ? w : S.tab === "xdr" && id === "gKind" ? "Severity" : d; });
+  [["gKind", "Band", "Category"], ["gGrp", "SSID", "Group"], ["gTyp", "Zone", "Type"]].forEach(([id, w, d]) => { $(id).querySelector(".k").textContent = S.tab === "wifi" ? w : S.tab === "xdr" && id === "gKind" ? "Severity" : d; });
   if (WF) {
-    $("fTyp").innerHTML = `<option value="">Semua zone</option>` + WF.zones.map(z => `<option ${z === S.dtype ? "selected" : ""}>${esc(z)}</option>`).join("");
-    $("fGrp").innerHTML = `<option value="">Semua SSID</option>` + WF.ssids.map(z => `<option ${z === S.grp ? "selected" : ""}>${esc(z)}</option>`).join("");
-    $("fKind").innerHTML = [["", "Semua"], ["2.4 GHz", "2.4 GHz"], ["5 GHz", "5 GHz"], ["6 GHz", "6 GHz"]].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
+    $("fTyp").innerHTML = `<option value="">All zones</option>` + WF.zones.map(z => `<option ${z === S.dtype ? "selected" : ""}>${esc(z)}</option>`).join("");
+    $("fGrp").innerHTML = `<option value="">All SSIDs</option>` + WF.ssids.map(z => `<option ${z === S.grp ? "selected" : ""}>${esc(z)}</option>`).join("");
+    $("fKind").innerHTML = [["", "All"], ["2.4 GHz", "2.4 GHz"], ["5 GHz", "5 GHz"], ["6 GHz", "6 GHz"]].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
   } else {
-  $("fTyp").innerHTML = `<option value="">Semua tipe</option>` + ((V.dev && V.dev.byType) || []).map(t => `<option value="${esc(t.code)}" ${t.code === S.dtype ? "selected" : ""}>${esc(t.k)} (${t.total})</option>`).join("");
-  $("fGrp").innerHTML = `<option value="">Semua grup</option>` + gl.map(g => `<option value="${esc(g.name)}" ${g.name === S.grp ? "selected" : ""}>${esc(g.name)} (${g.n})</option>`).join("");
-  $("fKind").innerHTML = [["", "Semua"], ...kinds].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
+  $("fTyp").innerHTML = `<option value="">All types</option>` + ((V.dev && V.dev.byType) || []).map(t => `<option value="${esc(t.code)}" ${t.code === S.dtype ? "selected" : ""}>${esc(t.k)} (${t.total})</option>`).join("");
+  $("fGrp").innerHTML = `<option value="">All groups</option>` + gl.map(g => `<option value="${esc(g.name)}" ${g.name === S.grp ? "selected" : ""}>${esc(g.name)} (${g.n})</option>`).join("");
+  $("fKind").innerHTML = [["", "All"], ...kinds].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
   }
-  if (S.tab === "xdr") $("fKind").innerHTML = [["", "Semua"], ["critical", "Critical"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
+  if (S.tab === "xdr") $("fKind").innerHTML = [["", "All"], ["critical", "Critical"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
   $("fStat").innerHTML = SL.map(([k, l]) => `<button type="button" data-st="${k}" aria-pressed="${S.dstat === k}">${l}</button>`).join("");
   $("gKind").hidden = !ap.k; $("gStat").hidden = !ap.t; $("gGrp").hidden = !ap.g; $("gTyp").hidden = !ap.y;
   $("fwrap").hidden = !anyF;
@@ -123,112 +123,110 @@ function renderDuty() {
   [["gPeriode", ap.p], ["gShift", ap.s], ["gSite", ap.l], ["gCmp", ap.p && ap.c]].forEach(([id, on]) => { const el = $(id); el.classList.toggle("na", !on); el.querySelectorAll("button,select,input").forEach(x => x.disabled = !on); });
   if (CFG.me.site) { $("fSite").disabled = true; $("gSite").classList.add("na"); }
   const chips = [], active = [];
-  if (ap.p) active.push(rangeTxt()); if (ap.s && S.sf) active.push("shift " + SN[S.sf] + " (" + shiftHours(S.sf) + ")"); if (ap.l && S.site) active.push(S.site); if (ap.k && S.kind) active.push(S.tab === "wifi" || S.tab === "xdr" ? S.kind : (KL[S.kind] || S.kind)); if (ap.g && S.grp) active.push(S.grp); if (ap.y && S.dtype) active.push(((V.dev && V.dev.byType.find(t => t.code === S.dtype)) || {k: S.dtype}).k); if (ap.t && S.dstat) active.push(SL.find(x => x[0] === S.dstat)[1]); if (S.cmp && $("gCmp").querySelector("input:not(:disabled)")) active.push("dibanding " + dmon(prevRange().from) + " – " + dmon(prevRange().to));
-  if (anyF) { chips.push(`<span class="on">Filter aktif: <b>${esc(active.join(" · ") || "Semua")}</b></span>`);
-    if (!ap.s && S.sf || !ap.l && S.site) chips.push(`<span class="na-txt">${(!ap.s && S.sf ? "Shift" : "") + (!ap.s && S.sf && !ap.l && S.site ? " dan " : "") + (!ap.l && S.site ? "lokasi" : "")} tidak berlaku di halaman ini</span>`); }
+  if (ap.p) active.push(rangeTxt()); if (ap.s && S.sf) active.push("shift " + SN[S.sf] + " (" + shiftHours(S.sf) + ")"); if (ap.l && S.site) active.push(S.site); if (ap.k && S.kind) active.push(S.tab === "wifi" || S.tab === "xdr" ? S.kind : (KL[S.kind] || S.kind)); if (ap.g && S.grp) active.push(S.grp); if (ap.y && S.dtype) active.push(((V.dev && V.dev.byType.find(t => t.code === S.dtype)) || {k: S.dtype}).k); if (ap.t && S.dstat) active.push(SL.find(x => x[0] === S.dstat)[1]); if (S.cmp && $("gCmp").querySelector("input:not(:disabled)")) active.push("vs " + dmon(prevRange().from) + " – " + dmon(prevRange().to));
+  if (anyF) { chips.push(`<span class="on">Active filter: <b>${esc(active.join(" · ") || "All")}</b></span>`);
+    if (!ap.s && S.sf || !ap.l && S.site) chips.push(`<span class="na-txt">${(!ap.s && S.sf ? "Shift" : "") + (!ap.s && S.sf && !ap.l && S.site ? " and " : "") + (!ap.l && S.site ? "location" : "")} does not apply on this page</span>`); }
   $("fApplies").innerHTML = chips.join("");
   renderDuty();
-  $("fSum").textContent = anyF ? (active.join(" · ") || "Semua") : "Tidak berlaku di halaman ini";
+  $("fSum").textContent = anyF ? (active.join(" · ") || "All") : "Not applicable on this page";
 
 }
 
 /* ---------- Ringkasan ---------- */
 function vRingkasan() {
-  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total); const Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)); const Xd = V.xdr, hasX = !!(Xd && Xd.configured && (Xd.total || Xd.backlogCH)); const Cc = V.cctv, hasC = !!(Cc && Cc.configured && Cc.total); const In = V.insight, hasI = !!(In && In.open.length);
+  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total), Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)), Xd = V.xdr, hasX = !!(Xd && Xd.configured && (Xd.total || Xd.backlogCH)), Cc = V.cctv, hasC = !!(Cc && Cc.configured && Cc.total), In = V.insight, hasI = !!(In && In.open.length);
   const T = hasT ? tkR() : null, N = hasN ? netR() : null, R = hasS ? socR() : null, chk = hasS ? socCheck() : [], okDays = chk.filter(x => x.s === "ok" || x.s === "dup").length, now = nowShift();
   const P = S.cmp ? prevRange() : null, Tp = P && tkR(P), Np = P && netR(P), Rp = P && socR(P);
-  const openOld = V.open_old || [], oldD = CFG.params["sd.open_alert_days"];
-  const badLinks = N ? N.rank.filter(s => s.status === NST.bad) : [];
+  const openOld = V.open_old || [], oldD = CFG.params["sd.open_alert_days"], badLinks = N ? N.rank.filter(s => s.status === NST.bad) : [], hoOpen = V.ho_open || [], hiCrit = hoOpen.filter(h => prTone(h.prio) === "crit").length;
   const att = [];
-  if (openOld.length) att.push(["crit", `<b>${openOld.length} tiket terbuka lebih dari ${oldD} hari</b>, terlama ${esc(openOld[0].subject)} (#${esc(openOld[0].id)}, ${fx(openOld[0].age, 0)} hari).`, "servicedesk"]);
-  if (badLinks.length) att.push(["crit", `<b>${badLinks.length} link di bawah target ${pc(PAR.target, 1)}</b>: ${badLinks.slice(0, 3).map(s => esc(s.link) + " (" + pc(s.av, 2) + ")").join(", ")}${badLinks.length > 3 ? ", …" : ""}.`, "noc"]);
-  if (N && N.nodata) att.push(["warn", `<b>${N.nodata} link data kurang</b> (cakupan pantau &lt; ${pc(PAR.minCov, 0)}), tidak dinilai SLA.`, "noc"]);
-  if (R && R.chAlert) att.push(["warn", `<b>${fmt(R.chAlert)} event critical/high hanya alert</b>, tidak diblokir firewall.`, "soc"]);
-  if (R && R.unknown && Object.keys(R.unknown).length) att.push(["warn", `<b>Cyber Security: nilai baru di luar daftar parameter</b> (${Object.entries(R.unknown).map(([k, r]) => ({type: "tipe", action: "tindakan", severity: "severity"}[k]) + ": " + r.map(x => esc(x[0])).join(", ")).join("; ")})`, "soc"]);
-  if (N && (N.unmappedIsp || []).length) att.push(["warn", `<b>${N.unmappedIsp.length} link belum cocok dengan ISP mana pun</b>: ${N.unmappedIsp.slice(0, 3).map(esc).join(", ")}`, "noc"]);
-  if (hasD && D.all.down) att.push(["warn", `<b>${fmt(D.all.down)} perangkat down</b> (CCTV dan Gate System), ${fmt(D.chronic)} di antaranya lebih dari 30 hari.`, "devices"]);
-  if (hasX && Xd.backlogCH) att.push(["warn", `<b>${Xd.backlogCH} alert XDR critical/high masih terbuka</b>.`, "xdr"]);
-  if (hasW && Wf.apTotal - Wf.apOnline > 0) att.push(["warn", `<b>${Wf.apTotal - Wf.apOnline} Access Point WiFi tidak online</b> dari ${Wf.apTotal}.`, "wifi"]);
-  if (hasD && (D.error || D.stale)) att.push(["warn", `<b>Data Zabbix ${D.error ? "gagal disinkron" : "belum diperbarui"}</b>, cek konektor di Admin.`, "devices"]);
-  const bad = chk.filter(x => x.s === "bad" || x.s === "miss"); if (bad.length) att.push(["warn", `<b>Data SOC belum lengkap</b>: ${bad.length} dari ${chk.length} hari tidak terbaca atau belum diunggah.`, "kelengkapan"]);
-  const hoOpen = V.ho_open || []; if (hoOpen.some(h => prTone(h.prio) === "crit")) att.push(["crit", `<b>${hoOpen.filter(h => prTone(h.prio) === "crit").length} handover prioritas tinggi</b> belum ditutup.`, "serahterima"]);
-  const s1 = hasT ? [{name: "Tiket Masuk", c: "--s1", v: T.daily.map(x => x.in)}, {name: "Tiket Selesai", c: "--s2", v: T.daily.map(x => x.done)}] : [];
+  if (openOld.length) att.push(["crit", `<b>${pl(openOld.length, "ticket")} open for more than ${oldD} days</b>, oldest: ${esc(openOld[0].subject)} (#${esc(openOld[0].id)}, ${fx(openOld[0].age, 0)} days).`, "servicedesk"]);
+  if (badLinks.length) att.push(["crit", `<b>${badLinks.length} links below the ${pc(PAR.target, 1)} target</b>: ${badLinks.slice(0, 3).map(s => esc(s.link) + " (" + pc(s.av, 2) + ")").join(", ")}${badLinks.length > 3 ? ", …" : ""}.`, "noc"]);
+  if (hiCrit) att.push(["crit", `<b>${hiCrit} high-priority handovers</b> are still open.`, "serahterima"]);
+  if (N && N.nodata) att.push(["warn", `<b>${pl(N.nodata, "link")} with insufficient data</b> (monitoring coverage below ${pc(PAR.minCov, 0)}), not assessed against SLA.`, "noc"]);
+  if (R && R.chAlert) att.push(["warn", `<b>${fmt(R.chAlert)} critical/high events were alert-only</b>, not blocked by the firewall.`, "soc"]);
+  if (R && R.unknown && Object.keys(R.unknown).length) att.push(["warn", `<b>Cyber Security: new values outside the parameter list</b> (${Object.entries(R.unknown).map(([k, r]) => ({type: "type", action: "action", severity: "severity"}[k]) + ": " + r.map(x => esc(x[0])).join(", ")).join("; ")})`, "soc"]);
+  if (N && (N.unmappedIsp || []).length) att.push(["warn", `<b>${N.unmappedIsp.length} links do not match any ISP</b>: ${N.unmappedIsp.slice(0, 3).map(esc).join(", ")}`, "noc"]);
+  if (hasD && D.all.down) att.push(["warn", `<b>${fmt(D.all.down)} devices down</b> (CCTV and Gate System), ${fmt(D.chronic)} of them for more than 30 days.`, "devices"]);
+  if (hasX && Xd.backlogCH) att.push(["warn", `<b>${Xd.backlogCH} critical/high XDR alerts</b> are still open.`, "xdr"]);
+  if (hasW && Wf.apTotal - Wf.apOnline > 0) att.push(["warn", `<b>${Wf.apTotal - Wf.apOnline} of ${Wf.apTotal} WiFi Access Points</b> are offline.`, "wifi"]);
+  if (hasD && (D.error || D.stale)) att.push(["warn", `<b>Zabbix data ${D.error ? "failed to sync" : "is not up to date"}</b>. Check the connector in Admin.`, "devices"]);
+  const bad = chk.filter(x => x.s === "bad" || x.s === "miss"); if (bad.length) att.push(["warn", `<b>SOC data is incomplete</b>: ${bad.length} of ${chk.length} days unreadable or not uploaded.`, "kelengkapan"]);
+  const s1 = hasT ? [{name: "Tickets In", c: "--s1", v: T.daily.map(x => x.in)}, {name: "Tickets Closed", c: "--s2", v: T.daily.map(x => x.done)}] : [];
   const cg = GROUPS.find(g => g.kind === "office"), care = cg ? CFG.people.filter(p => p.unit === cg.unit) : [], ct = CFG.params["report.contact"] || {};
-  const careP = cg ? panel("c4", esc(cg.label), esc(cg.start + "–" + cg.end), `<div class="carenum">${ct.phone ? `<span class="lbl">Layanan ${esc(cg.label)}</span><b class="num">${esc(ct.phone)}</b>` : ""}${ct.email ? `<span class="sub">${esc(ct.email)}</span>` : ""}</div>${care.length ? `<ul class="plist">${care.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc(p.job || "")}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`).join("")}</ul>` : ""}`) : "";
-  const lead = CFG.people.filter(p => p.unit === "ITOC" && !p.team_code), leadP = lead.length ? panel("c4", "Escalation", "Supervisor & Lead", `<ul class="plist">${lead.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc((p.job || "").replace(/^ITOC /, ""))}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`).join("")}</ul>`) : "";
-  const dom = (title, tab, src, body) => `<section class="panel c4 dom"><header><h2>${title}</h2>${src}</header><div class="mini">${body}</div>${go(tab)}</section>`;
+  const careP = cg ? panel("c3", esc(cg.label), esc(cg.start + "–" + cg.end), `<div class="carenum">${ct.phone ? `<span class="lbl">${esc(cg.label)} hotline</span><b class="num">${esc(ct.phone)}</b>` : ""}${ct.email ? `<span class="sub">${esc(ct.email)}</span>` : ""}</div>${care.length ? `<ul class="plist">${care.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc(p.job || "")}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`).join("")}</ul>` : ""}`) : "";
+  const lead = CFG.people.filter(p => p.unit === "ITOC" && !p.team_code), leadP = lead.length ? panel("c3", "Escalation", "Supervisor & Lead", `<ul class="plist">${lead.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc((p.job || "").replace(/^ITOC /, ""))}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`).join("")}</ul>`) : "";
+  const dom = (title, tab, body) => `<section class="panel c3 dom"><header><h2>${title}</h2></header><div class="mini">${body}</div>${go(tab)}</section>`;
   const wg = k => { const w = widgetFind(k); return w && widgetOk(w) ? w.html() : ""; };
-  const xCrit = hasX ? (Xd.bySev.find(x => x.k === "critical") || {n: 0}).n : 0, apOff = hasW ? Wf.apTotal - Wf.apOnline : 0, hiCrit = hoOpen.filter(h => prTone(h.prio) === "crit").length;
+  const xCrit = hasX ? (Xd.bySev.find(x => x.k === "critical") || {n: 0}).n : 0, apOff = hasW ? Wf.apTotal - Wf.apOnline : 0;
   const tile = (tab, name, tone, head, sub) => `<button type="button" class="stile ${tone}" data-go="${tab}"><span class="k">${esc(name)}</span><b>${head}</b><span class="sub">${sub}</span></button>`;
   const tiles = [
-    hasT ? tile("servicedesk", "Ticketing", openOld.length ? "crit" : "good", openOld.length ? openOld.length + " tiket terbuka lama" : "Terkendali", fmt(T.n) + " tiket · " + fmt(T.open) + " open · SLA " + pc(T.slaPct)) : "",
-    hasN || hasW ? tile("network", "Network", badLinks.length ? "crit" : (N && N.nodata) || apOff ? "warn" : "good", badLinks.length ? badLinks.length + " link di bawah target" : apOff ? apOff + " AP offline" : "Stabil", (N ? "Availability " + pc(N.avail, 2) : "") + (N && hasW ? " · " : "") + (hasW ? fmt(Wf.total) + " client WiFi" : "")) : "",
-    hasS || hasX ? tile("cyber", "Cyber Security", xCrit ? "crit" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "warn" : "good", xCrit ? xCrit + " alert XDR critical" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "Perlu tindak lanjut" : "Aman", (R ? fmt(R.total) + " event NDR" : "") + (R && hasX ? " · " : "") + (hasX ? fmt(Xd.total) + " alert XDR" : "")) : "",
-    hasD ? tile("devices", "Devices", D.all.down ? "warn" : "good", D.all.down ? fmt(D.all.down) + " perangkat down" : "Semua online", "Availability " + (D.all.avail != null ? pc(D.all.avail, 1) : "-") + " · " + fmt(D.all.total) + " perangkat") : "",
-    hasC ? tile("cctv", "CCTV", "good", fmt(Cc.recording) + " merekam di pusat", fmt(Cc.total) + " kamera · " + fmt(Cc.nHw) + " hardware") : "",
-    hasH ? tile("serahterima", "Handover", hiCrit ? "crit" : hoOpen.length ? "warn" : "good", hoOpen.length ? hoOpen.length + " handover terbuka" : "Tidak ada", hiCrit ? hiCrit + " prioritas tinggi" : "semua terkendali") : ""
+    hasT ? tile("servicedesk", "Ticketing", openOld.length ? "crit" : "good", openOld.length ? pl(openOld.length, "old open ticket") : "Under control", fmt(T.n) + " tickets · " + fmt(T.open) + " open · SLA " + pc(T.slaPct)) : "",
+    hasN || hasW ? tile("network", "Network", badLinks.length ? "crit" : (N && N.nodata) || apOff ? "warn" : "good", badLinks.length ? pl(badLinks.length, "link") + " below target" : apOff ? apOff + " APs offline" : "Stable", (N ? "Availability " + pc(N.avail, 2) : "") + (N && hasW ? " · " : "") + (hasW ? fmt(Wf.total) + " WiFi clients" : "")) : "",
+    hasS || hasX ? tile("cyber", "Cyber Security", xCrit ? "crit" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "warn" : "good", xCrit ? xCrit + " critical XDR alerts" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "Needs follow-up" : "No issues", (R ? fmt(R.total) + " NDR events" : "") + (R && hasX ? " · " : "") + (hasX ? fmt(Xd.total) + " XDR alerts" : "")) : "",
+    hasD ? tile("devices", "Devices", D.all.down ? "warn" : "good", D.all.down ? fmt(D.all.down) + " devices down" : "All online", "Availability " + (D.all.avail != null ? pc(D.all.avail, 1) : "-") + " · " + fmt(D.all.total) + " devices") : "",
+    hasC ? tile("cctv", "CCTV", "good", fmt(Cc.recording) + " recording centrally", fmt(Cc.total) + " cameras · " + fmt(Cc.nHw) + " hardware") : "",
+    hasH ? tile("serahterima", "Handover", hiCrit ? "crit" : hoOpen.length ? "warn" : "good", hoOpen.length ? hoOpen.length + " open handovers" : "None open", hiCrit ? hiCrit + " high priority" : "all under control") : "",
+    hasI ? tile("insight", "Insights", In.counts.crit ? "crit" : In.counts.warn ? "warn" : "good", In.open.length + " active findings", In.counts.crit + " critical · " + In.counts.warn + " warning") : ""
   ].filter(Boolean);
-  if (hasI) tiles.splice(1, 0, tile("insight", "Insight", In.counts.crit ? "crit" : In.counts.warn ? "warn" : "good", In.open.length + " temuan aktif", In.counts.crit + " kritis · " + In.counts.warn + " peringatan"));
-  const tilesP = tiles.length ? panel("c12", "Status Hari Ini", ctxTxt(), `<div class="stiles">${tiles.join("")}</div>`) : "";
+  const tilesP = tiles.length ? panel("c12", "Today's Status", ctxTxt(), `<div class="stiles">${tiles.join("")}</div>`) : "";
   return `<div class="grid">
   ${tilesP}
-  ${hasI ? insightPanel(In, 5) : ""}
-  ${!hasT ? "" : dom("Ticketing", "servicedesk", ``, kpi("Tiket Masuk", fmt(T.n), fx(T.perDay, 1) + "/hari", {tip: RUMUS.tkIn, dl: Tp ? delta(T.n, Tp.n) : ""}) + kpi("Selesai", pc(T.doneRate), fmt(T.open) + " terbuka", {tip: RUMUS.tkDone, dl: Tp ? delta(T.doneRate, Tp.doneRate, {up: true, pct: 1}) : ""}) + kpi("Sesuai Target SLA", pc(T.slaPct), fmt(T.slaOut) + " melewati", {tip: RUMUS.tkSla, dl: Tp ? delta(T.slaPct, Tp.slaPct, {up: true, pct: 1}) : "", cls: T.slaPct != null && T.slaPct < CFG.params["sd.sla_warn"] ? "warnv" : ""}) + kpi("Durasi Median", fx(T.medMin, 0) + " mnt", "P90 " + fx(T.p90, 1) + " jam", {tip: RUMUS.tkMed, dl: Tp ? delta(T.medMin, Tp.medMin, {up: false}) : ""}))}
-  ${!hasN ? "" : dom("Networking", "noc", ``, N ? kpi("Availability", pc(N.avail, 2), "target " + pc(PAR.target, 1), {tip: RUMUS.av, dl: Np ? delta(N.avail, Np.avail, {up: true, pct: 1}) : "", cls: N.avail < PAR.target ? "warnv" : ""}) + kpi("Link Memenuhi SLA", N.ok + "/" + (N.ok + N.bad), N.bad + " tidak, " + N.nodata + " data kurang", {tip: RUMUS.link}) + kpi("Total Downtime", fx(N.downH, 1) + " jam", N.events + " kejadian", {tip: RUMUS.down, dl: Np ? delta(N.downH, Np.downH, {up: false}) : ""}) + kpi("Utilisasi Tinggi", fmt(N.utilHigh), "link puncak ≥ " + pc(PAR.utilPeak, 0), {tip: RUMUS.util}) : empty())}
-  ${!hasD ? "" : dom("Devices", "devices", ``, kpi("Devices", fmt(D.all.total), "CCTV dan Gate System") + kpi("Availability Now", D.all.avail != null ? pc(D.all.avail, 1) : "-", "online ÷ (online + down)", {cls: D.all.avail != null && D.all.avail < 0.95 ? "warnv" : ""}) + kpi("Down", fmt(D.all.down), fmt(D.chronic) + " lebih dari 30 hari", {cls: D.all.down ? "warnv" : ""}) + kpi("Masalah Interface", fmt(D.all.deg || 0), "ping normal, SNMP tidak tersedia"))}
-  ${!hasC ? "" : dom("CCTV", "cctv", ``, kpi("Kamera", fmt(Cc.total), fmt(Cc.nHw) + " hardware") + kpi("Diaktifkan", fmt(Cc.camEnabled), fmt(Cc.total - Cc.camEnabled) + " dinonaktifkan", {cls: Cc.total > Cc.camEnabled ? "warnv" : ""}) + kpi("Merekam di Pusat", fmt(Cc.recording), "recording aktif di server ini") + kpi("Rekam di Site", fmt(Cc.camEnabled - Cc.recording), "tidak merekam di server pusat"))}
-  ${!hasW ? "" : dom("Pengguna WiFi", "wifi", ``, kpi("Client Aktif", fmt(Wf.total), "terhubung saat ini") + kpi("Access Point", Wf.apTotal ? fmt(Wf.apOnline) + " / " + fmt(Wf.apTotal) : "-", "online", {cls: Wf.apTotal && Wf.apOnline < Wf.apTotal ? "warnv" : ""}) + kpi("Sinyal Lemah", fmt(Wf.weak), "di bawah " + Wf.weakAt + " dBm", {cls: Wf.weak ? "warnv" : ""}) + kpi("Usage", wBytes(Wf.tx + Wf.rx), "sesi berjalan"))}
-  ${!hasX ? "" : dom("XDR", "xdr", ``, kpi("Alert", fmt(Xd.total), "pada periode") + kpi("Masih Terbuka", fmt(Xd.open), "belum ditutup", {cls: Xd.open ? "warnv" : ""}) + kpi("Critical", fmt((Xd.bySev.find(x => x.k === "critical") || {n: 0}).n), "") + kpi("Backlog C/H", fmt(Xd.backlogCH), "terbuka saat ini", {cls: Xd.backlogCH ? "warnv" : ""}))}
-  ${!hasS ? "" : dom("Cyber Security", "soc", ``, kpi("Critical + High Diblokir", R.ch ? pc(R.chBlkPct) : "–", fmt(R.chAlert) + " hanya alert", {tip: RUMUS.socCH, dl: Rp && Rp.ch ? delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : ""}) + kpi("Total Event", R.total ? fmt(R.total) : "–", fmt(R.ch) + " critical/high", {tip: RUMUS.socTot}) + kpi("Hari Tervalidasi", okDays + "/" + chk.length, okDays < chk.length ? "sisanya tidak dihitung" : "lengkap", {cls: okDays < chk.length ? "warnv" : ""}) + kpi("Sumber Internal", pc(R.internalPct), "dari total event", {tip: RUMUS.socInt}))}
-  ${panel("c8", "Perlu Perhatian", ctxTxt(), att.length ? `<ul class="att">${att.map(a => `<li class="${a[0]}"><span>${a[1]}</span>${go(a[2], "Lihat")}</li>`).join("")}</ul>` : `<div class="empty sm">Tidak ada yang perlu ditindaklanjuti.</div>`)}
-  ${panel("c4", "Sedang Bertugas", dlong(now.date) + " · " + shiftHours(now.shift), onDuty(now))}
-  ${!hasT ? "" : panel("c8", "Tiket Masuk dan Selesai per Hari", ctxTxt(), legend(s1) + bars(dayB(T.daily), s1, {label: "Tiket per hari"}))}
-  ${careP}
+  ${panel("c8", "Needs Attention", ctxTxt(), att.length ? `<ul class="att">${att.map(a => `<li class="${a[0]}"><span>${a[1]}</span>${go(a[2], "View")}</li>`).join("")}</ul>` : `<div class="empty sm">Nothing needs follow-up.</div>`)}
+  ${panel("c4", "On Duty", dlong(now.date) + " · " + shiftHours(now.shift), onDuty(now))}
+  ${hasI ? insightPanel(In, 4, "c6") : ""}
   ${leadP}
-  ${!hasH ? "" : panel("c4", "Handover Terbuka", hoOpen.length + " item", hoList(hoOpen.slice(0, 3), true) + go("serahterima", "Semua Handover"))}
-  ${N ? panel("c8", "Downtime Link per Hari", "Jumlah menit downtime semua link dalam filter", bars(dayB(N.daily), [{name: "Downtime (menit)", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " mnt", label: "Downtime Harian"})) : ""}
-  ${N ? panel("c4", "5 Link dengan Downtime Terbanyak", "Availability = Σ Up ÷ Σ (Up + Down)", tbl(["Link", "Availability", "Jam"], N.rank.slice(0, 5).map(s => [s.link, pc(s.av, 2), fx(s.down / 3600, 1)]), {r: [1, 2], empty: "Belum ada data."})) : ""}
-  ${hasW ? wifiPanels(Wf).trend() + wifiPanels(Wf).apdown() : ""}
-  ${R && R.hasData ? panel("c8", "NDR · Critical dan High per Hari", "Event Palo Alto", legend([{name: "Critical", c: "--crit"}, {name: "High", c: "--serious"}]) + bars(dayB(R.daily), [{name: "Critical", c: "--crit", v: R.daily.map(x => x.critical)}, {name: "High", c: "--serious", v: R.daily.map(x => x.high)}], {stack: true, label: "Critical dan high"})) : ""}
-  ${R && R.hasData ? panel("c4", "NDR · Severity", "", tbl(["Severity", "Event", "Diblokir"], R.sev.map(x => [x.k, x.n, pc(x.blkPct, 0)]), {r: [1, 2]})) : ""}
-  ${hasX ? xdrPanels(Xd).daily() + xdrPanels(Xd).sev() + xdrPanels(Xd).hosts() + xdrPanels(Xd).techniques() : ""}
-  ${wg("dev-category")}${wg("dev-location")}${wg("dev-down")}
-  ${wg("tk-open")}${wg("tk-tech")}
-  </div>`;
+  ${careP}
+  ${!hasT ? "" : dom("Ticketing", "servicedesk", kpi("Tickets In", fmt(T.n), fx(T.perDay, 1) + "/day", {tip: RUMUS.tkIn, dl: Tp ? delta(T.n, Tp.n) : ""}) + kpi("Closed", pc(T.doneRate), fmt(T.open) + " open", {tip: RUMUS.tkDone, dl: Tp ? delta(T.doneRate, Tp.doneRate, {up: true, pct: 1}) : ""}) + kpi("Within SLA Target", pc(T.slaPct), fmt(T.slaOut) + " over", {tip: RUMUS.tkSla, dl: Tp ? delta(T.slaPct, Tp.slaPct, {up: true, pct: 1}) : "", cls: T.slaPct != null && T.slaPct < CFG.params["sd.sla_warn"] ? "warnv" : ""}) + kpi("Median Duration", fx(T.medMin, 0) + " min", "P90 " + fx(T.p90, 1) + " h", {tip: RUMUS.tkMed, dl: Tp ? delta(T.medMin, Tp.medMin, {up: false}) : ""}))}
+  ${!hasN ? "" : dom("Networking", "noc", N ? kpi("Availability", pc(N.avail, 2), "target " + pc(PAR.target, 1), {tip: RUMUS.av, dl: Np ? delta(N.avail, Np.avail, {up: true, pct: 1}) : "", cls: N.avail < PAR.target ? "warnv" : ""}) + kpi("Links Meeting SLA", N.ok + "/" + (N.ok + N.bad), N.bad + " not met, " + N.nodata + " no data", {tip: RUMUS.link}) + kpi("Total Downtime", fx(N.downH, 1) + " h", N.events + " incidents", {tip: RUMUS.down, dl: Np ? delta(N.downH, Np.downH, {up: false}) : ""}) + kpi("High Utilization", fmt(N.utilHigh), "links peaking ≥ " + pc(PAR.utilPeak, 0), {tip: RUMUS.util}) : empty())}
+  ${!hasS ? "" : dom("Cyber Security", "soc", kpi("Critical + High Blocked", R.ch ? pc(R.chBlkPct) : "–", fmt(R.chAlert) + " alert-only", {tip: RUMUS.socCH, dl: Rp && Rp.ch ? delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : ""}) + kpi("Total Events", R.total ? fmt(R.total) : "–", fmt(R.ch) + " critical/high", {tip: RUMUS.socTot}) + kpi("Validated Days", okDays + "/" + chk.length, okDays < chk.length ? "the rest are not counted" : "complete", {cls: okDays < chk.length ? "warnv" : ""}) + kpi("Internal Source", pc(R.internalPct), "of all events", {tip: RUMUS.socInt}))}
+  ${!hasX ? "" : dom("XDR", "xdr", kpi("Alerts", fmt(Xd.total), "in period") + kpi("Still Open", fmt(Xd.open), "not closed", {cls: Xd.open ? "warnv" : ""}) + kpi("Critical", fmt(xCrit), "in period") + kpi("Critical/High Backlog", fmt(Xd.backlogCH), "open right now", {cls: Xd.backlogCH ? "warnv" : ""}))}
+  ${!hasD ? "" : dom("Devices", "devices", kpi("Devices", fmt(D.all.total), "CCTV and Gate System") + kpi("Availability Now", D.all.avail != null ? pc(D.all.avail, 1) : "-", "online ÷ (online + down)", {cls: D.all.avail != null && D.all.avail < 0.95 ? "warnv" : ""}) + kpi("Down", fmt(D.all.down), fmt(D.chronic) + " for over 30 days", {cls: D.all.down ? "warnv" : ""}) + kpi("Interface Issues", fmt(D.all.deg || 0), "ping OK, SNMP unavailable"))}
+  ${!hasW ? "" : dom("WiFi", "wifi", kpi("Active Clients", fmt(Wf.total), "connected now") + kpi("Access Points", Wf.apTotal ? fmt(Wf.apOnline) + " / " + fmt(Wf.apTotal) : "-", "online", {cls: Wf.apTotal && Wf.apOnline < Wf.apTotal ? "warnv" : ""}) + kpi("Weak Signal", fmt(Wf.weak), "below " + Wf.weakAt + " dBm", {cls: Wf.weak ? "warnv" : ""}) + kpi("Usage", wBytes(Wf.tx + Wf.rx), "current sessions"))}
+  ${!hasC ? "" : dom("CCTV", "cctv", kpi("Cameras", fmt(Cc.total), fmt(Cc.nHw) + " hardware") + kpi("Enabled", fmt(Cc.camEnabled), fmt(Cc.total - Cc.camEnabled) + " disabled", {cls: Cc.total > Cc.camEnabled ? "warnv" : ""}) + kpi("Recording Centrally", fmt(Cc.recording), "recording on this server") + kpi("Recording at Site", fmt(Cc.camEnabled - Cc.recording), "not recorded centrally"))}
+  ${!hasH ? "" : panel("c3", "Open Handovers", hoOpen.length + " items", hoList(hoOpen.slice(0, 3), true) + go("serahterima", "All handovers"))}
+  ${!hasT ? "" : panel("c8", "Tickets In and Closed per Day", ctxTxt(), legend(s1) + bars(dayB(T.daily), s1, {label: "Tickets per day"}))}
+  ${N ? panel("c4", "Top 5 Links by Downtime", "Availability = Σ Up ÷ Σ (Up + Down)", tbl(["Link", "Availability", "Hours"], N.rank.slice(0, 5).map(s => [s.link, pc(s.av, 2), fx(s.down / 3600, 1)]), {r: [1, 2], empty: "No data yet."})) : ""}
+  ${N ? panel("c8", "Link Downtime per Day", "Total downtime minutes of all links in the filter", bars(dayB(N.daily), [{name: "Downtime (min)", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " min", label: "Daily downtime"})) : ""}
+  ${hasW ? wifiPanels(Wf).apdown() + wifiPanels(Wf).trend() : ""}
+  ${R && R.hasData ? panel("c8", "NDR · Critical and High per Day", "Palo Alto events", legend([{name: "Critical", c: "--crit"}, {name: "High", c: "--serious"}]) + bars(dayB(R.daily), [{name: "Critical", c: "--crit", v: R.daily.map(x => x.critical)}, {name: "High", c: "--serious", v: R.daily.map(x => x.high)}], {stack: true, label: "Critical and high"})) : ""}
+  ${R && R.hasData ? panel("c4", "NDR · Severity", "", tbl(["Severity", "Events", "Blocked"], R.sev.map(x => [x.k, x.n, pc(x.blkPct, 0)]), {r: [1, 2]})) : ""}
+  ${hasX ? xdrPanels(Xd).daily() + xdrPanels(Xd).sev() : ""}
+  ${wg("dev-map:NETWORK-SDWAN")}
+</div>`;
 }
 function onDuty(n) {
   const g = teamOn(n.date, n.shift), c = crew(g);
-  return `<div class="duty-card"><div class="big"><span class="code ${SC[n.shift]}">${SC[n.shift]}</span><div><b>Shift ${SN[n.shift]} · Team ${g}</b><span class="sub">Berikutnya: ${SN[n.shift % NS + 1]} · Team ${teamOn(n.shift === NS ? addDays(n.date, 1) : n.date, n.shift % NS + 1)}</span></div></div>
+  return `<div class="duty-card"><div class="big"><span class="code ${SC[n.shift]}">${SC[n.shift]}</span><div><b>Shift ${SN[n.shift]} · Team ${g}</b><span class="sub">Next: ${SN[n.shift % NS + 1]} · Team ${teamOn(n.shift === NS ? addDays(n.date, 1) : n.date, n.shift % NS + 1)}</span></div></div>
   <ul class="plist">${c.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc(p.job.replace("ITOC ", ""))}</span></span><span class="num sub">${esc(p.phone)}</span></li>`).join("")}</ul></div>`;
 }
 function hoList(L, compact) {
-  if (!L.length) return `<div class="empty sm">Tidak ada handover untuk filter ini.</div>`;
+  if (!L.length) return `<div class="empty sm">No handovers for this filter.</div>`;
   return `<ul class="ho">${L.map(h => `<li class="${h.open ? "" : "done"}"><div class="tx"><div><span class="pr ${prTone(h.prio)}">${h.prio}</span> <span class="tag">${h.cat}</span> ${esc(h.title)}</div>
-    <div class="meta">${dtime(h.at)} · Shift ${SN[h.shift]} → ${SN[h.shift % NS + 1]} · ${esc(h.site)}${h.ticket ? " · tiket #" + esc(h.ticket) : ""} · ${esc(h.by)}</div>
-    ${compact ? "" : `<div class="body">${esc(h.body)}</div>${h.next ? `<div class="next"><b>Tindak lanjut:</b> ${esc(h.next)}</div>` : ""}${h.open ? "" : `<div class="next"><b>Ditutup</b> ${esc(h.closedBy)} · ${dtime(h.closedAt)}: ${esc(h.closeNote)}</div>`}
-    ${S.closing === h.id ? `<div class="closebox"><label for="cn">Closing Note (required)</label><textarea id="cn" placeholder="Apa hasil akhirnya?"></textarea><div class="acts"><button class="btn" data-close-ok="${h.id}">Tutup Handover</button><button class="btn ghost" data-close-cancel>Batal</button><span class="msg err" id="cnmsg"></span></div></div>` : ""}`}
-    </div>${!compact && h.open && S.closing !== h.id ? `<button class="btn ghost" data-close="${h.id}">Tutup…</button>` : ""}</li>`).join("")}</ul>`;
+    <div class="meta">${dtime(h.at)} · Shift ${SN[h.shift]} → ${SN[h.shift % NS + 1]} · ${esc(h.site)}${h.ticket ? " · ticket #" + esc(h.ticket) : ""} · ${esc(h.by)}</div>
+    ${compact ? "" : `<div class="body">${esc(h.body)}</div>${h.next ? `<div class="next"><b>Follow-up:</b> ${esc(h.next)}</div>` : ""}${h.open ? "" : `<div class="next"><b>Closed</b> ${esc(h.closedBy)} · ${dtime(h.closedAt)}: ${esc(h.closeNote)}</div>`}
+    ${S.closing === h.id ? `<div class="closebox"><label for="cn">Closing Note (required)</label><textarea id="cn" placeholder="What was the outcome?"></textarea><div class="acts"><button class="btn" data-close-ok="${h.id}">Close Handover</button><button class="btn ghost" data-close-cancel>Cancel</button><span class="msg err" id="cnmsg"></span></div></div>` : ""}`}
+    </div>${!compact && h.open && S.closing !== h.id ? `<button class="btn ghost" data-close="${h.id}">Close…</button>` : ""}</li>`).join("")}</ul>`;
 }
 
 /* ---------- Service Desk ---------- */
 function vSD() {
-  const T = tkR(), Tp = S.cmp ? tkR(prevRange()) : null, s1 = [{name: "Tiket Masuk", c: "--s1", v: T.daily.map(x => x.in)}, {name: "Tiket Selesai", c: "--s2", v: T.daily.map(x => x.done)}];
+  const T = tkR(), Tp = S.cmp ? tkR(prevRange()) : null, s1 = [{name: "Tickets In", c: "--s1", v: T.daily.map(x => x.in)}, {name: "Tickets Closed", c: "--s2", v: T.daily.map(x => x.done)}];
   if (!T.n) return `<div class="grid"><section class="panel c12">${empty()}</section></div>`;
   const dimRows = T.dims[S.dim].map(x => [x.k, x.n, pc(x.pct), x.done, x.open, x.avg, x.med, x.zero, x.in, x.out, pc(x.inPct)]);
   const rk = T.ranking.filter(x => x.n > 0 || !S.site).map(x => [x.rank, x.name, {h: x.unit ? `<span class="tag">${esc(x.unit)}</span>` : ""}, x.n, pc(x.share), x.done, x.open, x.avg, x.med, pc(x.zeroPct, 0), pc(x.inPct), x.high, pc(x.okPct, 0), x.loc]);
   const hrs = [...Array(24).keys()].map(h => ({label: pad(h), full: "Pukul " + pad(h) + ".00–" + pad(h) + ".59 · shift " + SN[shiftOf(h)]}));
-  return `<div class="kpis k6">${kpi("Tiket Masuk", fmt(T.n), fx(T.perDay, 1) + " per hari", {tip: RUMUS.tkIn, dl: Tp ? delta(T.n, Tp.n) : ""})}${kpi("Completion Rate", pc(T.doneRate), fmt(T.open) + " masih terbuka", {tip: RUMUS.tkDone, dl: Tp ? delta(T.doneRate, Tp.doneRate, {up: true, pct: 1}) : ""})}${kpi("Sesuai Target SLA", pc(T.slaPct), fmt(T.slaIn) + " dalam, " + fmt(T.slaOut) + " melewati", {tip: RUMUS.tkSla, dl: Tp ? delta(T.slaPct, Tp.slaPct, {up: true, pct: 1}) : ""})}${kpi("Durasi Median", fx(T.medMin, 0) + " mnt", "rata-rata " + fx(T.avgH, 1) + " jam, P90 " + fx(T.p90, 1) + " jam", {tip: RUMUS.tkMed, dl: Tp ? delta(T.medMin, Tp.medMin, {up: false}) : ""})}${kpi("0-Minute Duration", fmt(T.zero), pc(T.n ? T.zero / T.n : 0) + " dari total")}${kpi("Incomplete Input", fmt(T.incomplete), pc(T.n ? T.incomplete / T.n : 0) + " dari total")}</div>
-  <div class="grid">${panel("c8", "Tren Harian", ctxTxt() + (T.doneAfter ? " · " + T.doneAfter + " tiket selesai setelah periode" : ""), legend(s1) + bars(dayB(T.daily), s1, {label: "Tren harian tiket"}))}
-  ${panel("c4", "Sebaran Durasi Penyelesaian", "", hbars(T.durasi.map(x => [x.k, x.n, 0, fmt(x.n) + " · " + pc(x.pct, 0)])))}
-  ${panel("c7", "Tiket per Jam", T.peakHour != null ? "Jam tersibuk " + pad(T.peakHour) + ".00" : "", bars(hrs, [{name: "Tiket Masuk", c: "--s1", v: T.hours}], {label: "Tiket per jam"}))}
-  ${panel("c5", "Per Hari dalam Seminggu", "Hari kerja " + fx(T.perWorkday, 1) + "/hari, akhir pekan " + fx(T.perWeekend, 1), tbl(["Hari", "Tiket", "Jumlah hari", "Rata-rata/hari"], T.weekday.map(x => [x.k, x.n, x.days, fx(x.avg, 1)]), {r: [3]}))}
-  ${panel("c12", `Rincian per <select class="pick" id="dim" aria-label="Dimensi">${Object.entries(DIMS).map(([k, v]) => `<option value="${k}" ${k === S.dim ? "selected" : ""}>${v[0]}</option>`).join("")}</select>`, "", tbl([DIMS[S.dim][0], "Jumlah", "% total", "Tutup", "Open", "Rata-rata", "Median", "0 menit", "Dalam target", "Melewati", "% dalam target"], dimRows, {tall: true, r: [2, 10]}))}
-  ${panel("c12", "Peringkat Grup", "", tbl(["#", "Grup", "Anggota", "Tiket", "% daftar", "Selesai", "Terbuka", "Rata-rata (jam)", "Median (jam)", "% dalam target", "High"], (T.groupRanking || []).map(x => [x.rank, x.name, x.members, x.n, pc(x.share), x.done, x.open, x.avg, x.med, pc(x.inPct), x.high]), {r: [3, 4, 5, 6, 7, 8, 9, 10]}))}
-  ${panel("c12", "Peringkat Teknisi", "", tbl(["#", "Nama", "Unit", "Tiket", "% daftar", "Selesai", "Terbuka", "Rata-rata (jam)", "Median (jam)", "% 0 menit", "% dalam target", "High", "% input lengkap", "Lokasi utama"], rk, {tall: true, r: [4, 9, 10, 12]}))}
-  ${panel("c12", "Tiket Terbuka", "", tbl(["Subjek", "ID", "Lokasi", "Kategori", "Teknisi", "Prioritas", "Status", "Dibuat", "Umur (hari)"], T.openList.map(x => [x.subj, x.id, x.loc, x.cat, x.tech, x.prio, x.status, dtime(x.created), {h: `<span class="${x.age > 3 ? "crit-t" : ""}">${fx(x.age, 1)}</span>`}]), {r: [8], empty: "Tidak ada tiket terbuka."}))}
-  ${panel("c7", "Catatan Kualitas Data", "", tbl(["Pemeriksaan", "Tiket", "% total"], T.quality.map(x => [x.k, x.n, pc(x.pct)]), {r: [2]}))}
-  ${panel("c5", "Pemohon Teratas", "", tbl(["Requester", "Tiket", "% total"], T.requesters.map(x => [x.k, x.n, pc(x.pct)]), {r: [2]}))}
-  ${panel("c12", "25 Longest-Duration Tickets", "", tbl(["Subjek", "ID", "Lokasi", "Kategori", "Teknisi", "Prioritas", "Dibuat", "Durasi (hari)", "Pola"], T.longest.map(x => [x.subj, x.id, x.loc, x.cat, x.tech, x.prio, dtime(x.created), fx(x.days, 1), x.pola]), {tall: true, r: [7]}))}</div>`;
+  return `<div class="kpis k6">${kpi("Tickets In", fmt(T.n), fx(T.perDay, 1) + " per day", {tip: RUMUS.tkIn, dl: Tp ? delta(T.n, Tp.n) : ""})}${kpi("Completion Rate", pc(T.doneRate), fmt(T.open) + " still open", {tip: RUMUS.tkDone, dl: Tp ? delta(T.doneRate, Tp.doneRate, {up: true, pct: 1}) : ""})}${kpi("Within SLA Target", pc(T.slaPct), fmt(T.slaIn) + " within, " + fmt(T.slaOut) + " over", {tip: RUMUS.tkSla, dl: Tp ? delta(T.slaPct, Tp.slaPct, {up: true, pct: 1}) : ""})}${kpi("Median Duration", fx(T.medMin, 0) + " min", "average " + fx(T.avgH, 1) + " h, P90 " + fx(T.p90, 1) + " h", {tip: RUMUS.tkMed, dl: Tp ? delta(T.medMin, Tp.medMin, {up: false}) : ""})}${kpi("0-Minute Duration", fmt(T.zero), pc(T.n ? T.zero / T.n : 0) + " of total")}${kpi("Incomplete Input", fmt(T.incomplete), pc(T.n ? T.incomplete / T.n : 0) + " of total")}</div>
+  <div class="grid">${panel("c8", "Daily Trend", ctxTxt() + (T.doneAfter ? " · " + T.doneAfter + " tickets closed after the period" : ""), legend(s1) + bars(dayB(T.daily), s1, {label: "Daily ticket trend"}))}
+  ${panel("c4", "Resolution Duration Distribution", "", hbars(T.durasi.map(x => [x.k, x.n, 0, fmt(x.n) + " · " + pc(x.pct, 0)])))}
+  ${panel("c7", "Tickets per Hour", T.peakHour != null ? "Busiest hour " + pad(T.peakHour) + ".00" : "", bars(hrs, [{name: "Tickets In", c: "--s1", v: T.hours}], {label: "Tickets per hour"}))}
+  ${panel("c5", "Per Weekday", "Weekdays " + fx(T.perWorkday, 1) + "/day, weekends " + fx(T.perWeekend, 1), tbl(["Day", "Tickets", "Days counted", "Average/day"], T.weekday.map(x => [x.k, x.n, x.days, fx(x.avg, 1)]), {r: [3]}))}
+  ${panel("c12", `Breakdown by <select class="pick" id="dim" aria-label="Dimension">${Object.entries(DIMS).map(([k, v]) => `<option value="${k}" ${k === S.dim ? "selected" : ""}>${v[0]}</option>`).join("")}</select>`, "", tbl([DIMS[S.dim][0], "Count", "% of total", "Closed", "Open", "Average", "Median", "0 min", "Within target", "Over target", "% within target"], dimRows, {tall: true, r: [2, 10]}))}
+  ${panel("c12", "Group Ranking", "", tbl(["#", "Group", "Members", "Tickets", "% of list", "Closed", "Open", "Average (h)", "Median (h)", "% within target", "High"], (T.groupRanking || []).map(x => [x.rank, x.name, x.members, x.n, pc(x.share), x.done, x.open, x.avg, x.med, pc(x.inPct), x.high]), {r: [3, 4, 5, 6, 7, 8, 9, 10]}))}
+  ${panel("c12", "Technician Ranking", "", tbl(["#", "Name", "Unit", "Tickets", "% of list", "Closed", "Open", "Average (h)", "Median (h)", "% 0 min", "% within target", "High", "% complete input", "Main location"], rk, {tall: true, r: [4, 9, 10, 12]}))}
+  ${panel("c12", "Open Tickets", "", tbl(["Subject", "ID", "Location", "Category", "Technician", "Priority", "Status", "Created", "Age (days)"], T.openList.map(x => [x.subj, x.id, x.loc, x.cat, x.tech, x.prio, x.status, dtime(x.created), {h: `<span class="${x.age > 3 ? "crit-t" : ""}">${fx(x.age, 1)}</span>`}]), {r: [8], empty: "No open tickets."}))}
+  ${panel("c7", "Data Quality Notes", "", tbl(["Check", "Tickets", "% of total"], T.quality.map(x => [x.k, x.n, pc(x.pct)]), {r: [2]}))}
+  ${panel("c5", "Top Requesters", "", tbl(["Requester", "Tickets", "% of total"], T.requesters.map(x => [x.k, x.n, pc(x.pct)]), {r: [2]}))}
+  ${panel("c12", "25 Longest-Duration Tickets", "", tbl(["Subject", "ID", "Location", "Category", "Technician", "Priority", "Created", "Duration (days)", "Pattern"], T.longest.map(x => [x.subj, x.id, x.loc, x.cat, x.tech, x.prio, dtime(x.created), fx(x.days, 1), x.pola]), {tall: true, r: [7]}))}</div>`;
 }
 
 /* ---------- NOC ---------- */
@@ -236,7 +234,7 @@ function vNoc() {
   const B = netB(), N = netR(); if (!N) return `<div class="grid"><section class="panel c12">${empty()}</section></div>`;
   const Np = S.cmp ? netR(prevRange()) : null, P = N.P, hr0 = B.hourly, tot = !!hr0.ttot && !hr0.tin.some(v => v > 0), hr = tot ? {k: hr0.k, tin: hr0.ttot, tout: hr0.tout} : hr0, long = hr.k.length > 24 * 8;
   let lb, vin, vout;
-  if (long) { const by = {}; hr.k.forEach((t, j) => { const d = iso(t), o = by[d] || (by[d] = {i: 0, o: 0, n: 0}); o.i += hr.tin[j]; o.o += hr.tout[j]; o.n++; }); const ks = Object.keys(by).sort(); lb = ks.map(d => ({label: dmon(d), full: dlong(d) + " (rata-rata harian)"})); vin = ks.map(d => by[d].i / by[d].n); vout = ks.map(d => by[d].o / by[d].n); }
+  if (long) { const by = {}; hr.k.forEach((t, j) => { const d = iso(t), o = by[d] || (by[d] = {i: 0, o: 0, n: 0}); o.i += hr.tin[j]; o.o += hr.tout[j]; o.n++; }); const ks = Object.keys(by).sort(); lb = ks.map(d => ({label: dmon(d), full: dlong(d) + " (daily average)"})); vin = ks.map(d => by[d].i / by[d].n); vout = ks.map(d => by[d].o / by[d].n); }
   else { lb = hr.k.map(t => ({label: new Date(t).getUTCHours() === 0 || hr.k.length <= 24 ? (hr.k.length <= 24 ? pad(new Date(t).getUTCHours()) + ".00" : dmon(iso(t))) : "", full: dtime(t) + " WIB"})); vin = [...hr.tin]; vout = [...hr.tout]; }
   const pk = Math.max(...hr.tin), pkO = Math.max(...hr.tout), avI = hr.tin.reduce((a, b) => a + b, 0) / (hr.k.length || 1), avO = hr.tout.reduce((a, b) => a + b, 0) / (hr.k.length || 1);
   const top = [...B.N.sensors].sort((a, b) => tot ? b.avg - a.avg : b.avgIn - a.avgIn).slice(0, 10);
@@ -244,65 +242,65 @@ function vNoc() {
   const sb = ss ? ss.t.map(t => ({label: "", full: dtime(t) + " WIB"})) : [];
   if (ss) { const step = Math.ceil(ss.t.length / 10); ss.t.forEach((t, i) => { if (i % step === 0) sb[i].label = ss.t.length <= 24 ? pad(new Date(t).getUTCHours()) + ".00" : dmon(iso(t)); }); }
   const marks = ss ? ss.d.map((d, i) => d > 0 ? i : -1).filter(i => i >= 0) : [];
-  const tr = tot ? [{name: "Total Traffic", c: "--s1", v: vin}] : [{name: "Trafik In", c: "--s1", v: vin}, {name: "Trafik Out", c: "--s2", v: vout}];
-  const um = (N.unmappedIsp || []).length ? `<div class="grid">${panel("c12", "Link yang Tidak Cocok dengan ISP Mana Pun", "", `<ul class="att"><li class="warn"><span>${N.unmappedIsp.map(esc).join(", ")} · tambahkan kata kunci di Admin → Sumber Data → Pemetaan → ISP</span></li></ul>`)}</div>` : "";
-  return um + `<div class="kpis k6">${kpi("Availability", pc(N.avail, 2), "target " + pc(P.target, 1), {tip: RUMUS.av, dl: Np ? delta(N.avail, Np.avail, {up: true, pct: 1}) : "", cls: N.avail < P.target ? "warnv" : ""})}${kpi("Link Memenuhi SLA", N.ok + " dari " + (N.ok + N.bad), N.bad + " tidak, " + N.nodata + " data kurang", {tip: RUMUS.link})}${kpi("Total Downtime", fx(N.downH, 1) + " jam", N.events + " kejadian · " + N.noDown + " link tanpa down", {tip: RUMUS.down, dl: Np ? delta(N.downH, Np.downH, {up: false}) : ""})}${kpi("Data Coverage", pc(N.cov), "jam terpantau ÷ jam periode")}${(tot ? kpi("Peak Traffic", fx(pk, 1) + " Mbit/s", "rata-rata " + fx(avI, 1) + " · total In + Out, dari laporan harian") : kpi("Peak Traffic In", fx(pk, 1) + " Mbit/s", "rata-rata " + fx(avI, 1) + " · Out puncak " + fx(pkO, 1)))}${kpi("High Peak Utilization", fmt(N.utilHigh), "link ≥ " + pc(P.utilPeak, 0) + " kapasitas", {tip: RUMUS.util})}</div>
-  <div class="grid">${panel("c8", "Total Traffic Masuk dan Keluar (Mbit/s)", ctxTxt() + (long ? " · rata-rata per hari" : " · rata-rata per jam"), legend(tr) + lines(lb, tr, {unit: " Mbit/s", label: "Total trafik"}))}
-  ${panel("c4", "10 Link dengan Traffic Tertinggi", tot ? "Rata-rata Mbit/s (total)" : "Rata-rata Mbit/s, In dan Out", (tot ? "" : legend([{name: "In", c: "--s1"}, {name: "Out", c: "--s2"}])) + (tot ? hbars(top.map(s => [s.dev.replace("Branch ", "") + " – " + (s.name.split(" - ")[1] || s.name).replace(" Traffic", ""), s.avg, 0, fx(s.avg, 1) + " Mbit/s"])) : hbars(top.map(s => [s.dev.replace("Branch ", "") + " – " + (s.name.split(" - ")[1] || s.name).replace(" Traffic", ""), s.avgIn, s.avgOut, fx(s.avgIn, 1) + " / " + fx(s.avgOut, 1)]), {two: true})))}
-  ${panel("c12", `Trafik per sensor: <select class="pick" id="sensor" aria-label="Sensor">${B.N.sensors.map(s => `<option value="${s.id}" ${s.id === sid ? "selected" : ""}>${esc(s.dev + " – " + s.name)}</option>`).join("")}</select>`, sMeta.cap ? "Kapasitas " + sMeta.cap + " Mbit/s · area merah = jam dengan downtime" : "", ss ? legend((tot ? [{name: "Total", c: "--s1"}] : [{name: "In", c: "--s1"}, {name: "Out", c: "--s2"}]).concat([{name: "Ada downtime", c: "--crit"}])) + lines(sb, tot ? [{name: "Total", c: "--s1", v: ss.a}] : [{name: "In", c: "--s1", v: ss.i}, {name: "Out", c: "--s2", v: ss.o}], {unit: " Mbit/s", thin: true, marks, label: "Trafik sensor", w: 1200, h: 260}) : empty())}
-  ${panel("c8", "Downtime Harian", "Menit downtime semua link", bars(dayB(N.daily), [{name: "Downtime", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " mnt", label: "Downtime Harian"}))}
-  ${panel("c4", "Sebaran Availability Link", "", tbl(["Kelompok", "Link", "% link"], N.buckets.map(x => [x.k, x.n, pc(x.pct, 0)]), {r: [2]}))}
-  ${panel("c12", "Ringkasan per ISP", "Availability = Σ Up ÷ Σ (Up + Down) semua link ISP itu", tbl(["ISP", "Link", "Availability", "Downtime (jam)", "Target", "Capai", "Tidak", "Data kurang", "% capai", "Trafik (Mbit/s)", "Volume (GB)"], N.isp.map(x => [x.k, x.n, pc(x.av, 3), x.downH, pc(x.target, 1), x.ok, x.bad, x.nodata, pc(x.okPct, 0), x.mbps, x.volGB]), {r: [2, 4, 8]}))}
-  ${panel("c12", "Peringkat Link menurut Downtime", "Data kurang bila cakupan < " + pc(P.minCov, 0), tbl(["#", "Link", "Availability", "Downtime (jam)", "Target", "Status SLA", "Sisa (+) / lebih (−) menit", "Cakupan", "Rata-rata (Mbit/s)", "Puncak (Mbit/s)", "Sensor"], N.rank.map(s => [s.rank, s.link, pc(s.av, 3), s.down / 3600, pc(s.target, 1), stPill(s.status), s.sisa, pc(s.cov, 0), s.avg, s.max, s.id]), {tall: true, r: [2, 4, 7]}))}
-  ${panel("c12", "Ringkasan per Lokasi", N.sameYes + " dari " + N.sameCmp + " lokasi ber-link ganda turun bersamaan (selisih ≤ " + CFG.params["net.same_tolerance_min"] + " menit): tanda gangguan di sisi lokasi", tbl(["Lokasi", "Link", "Downtime (menit)", "Link terlama", "Link tersingkat", "Availability terendah", "Capai", "Tidak", "Data kurang", "Turun bersamaan?"], N.lokasi.map(x => [x.k, x.n, x.downMin, x.maxMin, x.minMin, pc(x.minAv, 3), x.ok, x.bad, x.nodata, x.same]), {tall: true, r: [5]}))}
-  ${panel("c5", "20 Longest Downtime Events", N.events + " kejadian dalam filter", tbl(["Link", "Mulai", "Selesai", "Menit"], N.kej.map(k => [k.link, dtime(k.start), dtime(k.end), k.min]), {tall: true}))}
-  ${panel("c7", "Capacity Utilization", "Puncak ≥ " + pc(P.utilPeak, 0) + " atau rata-rata ≥ " + pc(P.utilAvg, 0) + " ditandai", tbl(["Link", "Kapasitas", "Rata-rata", "Puncak", "Util. rata-rata", "Util. puncak", "Status"], N.util.map(s => [s.link, s.cap, s.avg, s.max, pc(s.uA, 0), pc(s.uP, 0), {h: s.ust === UST.ok ? pill("good", UST.ok) : pill("warn", s.ust)}]), {tall: true, r: [4, 5]}))}</div>`;
+  const tr = tot ? [{name: "Total Traffic", c: "--s1", v: vin}] : [{name: "Traffic In", c: "--s1", v: vin}, {name: "Traffic Out", c: "--s2", v: vout}];
+  const um = (N.unmappedIsp || []).length ? `<div class="grid">${panel("c12", "Links Not Matching Any ISP", "", `<ul class="att"><li class="warn"><span>${N.unmappedIsp.map(esc).join(", ")} · add a keyword in Admin → Data Sources → Mapping → ISP</span></li></ul>`)}</div>` : "";
+  return um + `<div class="kpis k6">${kpi("Availability", pc(N.avail, 2), "target " + pc(P.target, 1), {tip: RUMUS.av, dl: Np ? delta(N.avail, Np.avail, {up: true, pct: 1}) : "", cls: N.avail < P.target ? "warnv" : ""})}${kpi("Links Meeting SLA", N.ok + " of " + (N.ok + N.bad), N.bad + " not met, " + N.nodata + " no data", {tip: RUMUS.link})}${kpi("Total Downtime", fx(N.downH, 1) + " h", N.events + " incidents · " + N.noDown + " links with no downtime", {tip: RUMUS.down, dl: Np ? delta(N.downH, Np.downH, {up: false}) : ""})}${kpi("Data Coverage", pc(N.cov), "monitored hours ÷ period hours")}${(tot ? kpi("Peak Traffic", fx(pk, 1) + " Mbit/s", "average " + fx(avI, 1) + " · total In + Out, from daily reports") : kpi("Peak Traffic In", fx(pk, 1) + " Mbit/s", "average " + fx(avI, 1) + " · Out peak " + fx(pkO, 1)))}${kpi("High Peak Utilization", fmt(N.utilHigh), "links ≥ " + pc(P.utilPeak, 0) + " of capacity", {tip: RUMUS.util})}</div>
+  <div class="grid">${panel("c8", "Total Traffic In and Out (Mbit/s)", ctxTxt() + (long ? " · daily average" : " · hourly average"), legend(tr) + lines(lb, tr, {unit: " Mbit/s", label: "Total traffic"}))}
+  ${panel("c4", "Top 10 Links by Traffic", tot ? "Average Mbit/s (total)" : "Average Mbit/s, In and Out", (tot ? "" : legend([{name: "In", c: "--s1"}, {name: "Out", c: "--s2"}])) + (tot ? hbars(top.map(s => [s.dev.replace("Branch ", "") + " – " + (s.name.split(" - ")[1] || s.name).replace(" Traffic", ""), s.avg, 0, fx(s.avg, 1) + " Mbit/s"])) : hbars(top.map(s => [s.dev.replace("Branch ", "") + " – " + (s.name.split(" - ")[1] || s.name).replace(" Traffic", ""), s.avgIn, s.avgOut, fx(s.avgIn, 1) + " / " + fx(s.avgOut, 1)]), {two: true})))}
+  ${panel("c12", `Traffic per sensor: <select class="pick" id="sensor" aria-label="Sensor">${B.N.sensors.map(s => `<option value="${s.id}" ${s.id === sid ? "selected" : ""}>${esc(s.dev + " – " + s.name)}</option>`).join("")}</select>`, sMeta.cap ? "Capacity " + sMeta.cap + " Mbit/s · red area = hours with downtime" : "", ss ? legend((tot ? [{name: "Total", c: "--s1"}] : [{name: "In", c: "--s1"}, {name: "Out", c: "--s2"}]).concat([{name: "Has downtime", c: "--crit"}])) + lines(sb, tot ? [{name: "Total", c: "--s1", v: ss.a}] : [{name: "In", c: "--s1", v: ss.i}, {name: "Out", c: "--s2", v: ss.o}], {unit: " Mbit/s", thin: true, marks, label: "Sensor traffic", w: 1200, h: 260}) : empty())}
+  ${panel("c8", "Daily Downtime", "Downtime minutes of all links", bars(dayB(N.daily), [{name: "Downtime", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " min", label: "Daily Downtime"}))}
+  ${panel("c4", "Link Availability Distribution", "", tbl(["Kelompok", "Link", "% link"], N.buckets.map(x => [x.k, x.n, pc(x.pct, 0)]), {r: [2]}))}
+  ${panel("c12", "Summary per ISP", "Availability = Σ Up ÷ Σ (Up + Down) of all links of that ISP", tbl(["ISP", "Links", "Availability", "Downtime (h)", "Target", "Met", "Not met", "No data", "% met", "Traffic (Mbit/s)", "Volume (GB)"], N.isp.map(x => [x.k, x.n, pc(x.av, 3), x.downH, pc(x.target, 1), x.ok, x.bad, x.nodata, pc(x.okPct, 0), x.mbps, x.volGB]), {r: [2, 4, 8]}))}
+  ${panel("c12", "Link Ranking by Downtime", "No data when coverage < " + pc(P.minCov, 0), tbl(["#", "Link", "Availability", "Downtime (h)", "Target", "SLA Status", "Margin (+) / over (−) min", "Coverage", "Average (Mbit/s)", "Peak (Mbit/s)", "Sensor"], N.rank.map(s => [s.rank, s.link, pc(s.av, 3), s.down / 3600, pc(s.target, 1), stPill(s.status), s.sisa, pc(s.cov, 0), s.avg, s.max, s.id]), {tall: true, r: [2, 4, 7]}))}
+  ${panel("c12", "Summary per Location", N.sameYes + " of " + N.sameCmp + " locations with dual links went down together (within " + CFG.params["net.same_tolerance_min"] + " min): a sign of a site-side fault", tbl(["Location", "Links", "Downtime (min)", "Longest link", "Shortest link", "Lowest availability", "Met", "Not met", "No data", "Down together?"], N.lokasi.map(x => [x.k, x.n, x.downMin, x.maxMin, x.minMin, pc(x.minAv, 3), x.ok, x.bad, x.nodata, x.same]), {tall: true, r: [5]}))}
+  ${panel("c5", "20 Longest Downtime Events", N.events + " incidents in the filter", tbl(["Link", "Start", "End", "Minutes"], N.kej.map(k => [k.link, dtime(k.start), dtime(k.end), k.min]), {tall: true}))}
+  ${panel("c7", "Capacity Utilization", "Peak ≥ " + pc(P.utilPeak, 0) + " or average ≥ " + pc(P.utilAvg, 0) + " is flagged", tbl(["Link", "Capacity", "Average", "Peak", "Avg. util.", "Peak util.", "Status"], N.util.map(s => [s.link, s.cap, s.avg, s.max, pc(s.uA, 0), pc(s.uP, 0), {h: s.ust === UST.ok ? pill("good", UST.ok) : pill("warn", s.ust)}]), {tall: true, r: [4, 5]}))}</div>`;
 }
 
-/* ---------- SOC (perlu validasi) ---------- */
-const CST = {ok: ["ok", "Tervalidasi"], dup: ["dup", "Ada di 2 batch (dipakai terbaru)"], bad: ["bad", "Gagal dibaca"], miss: ["miss", "Belum diunggah"], wait: ["wait", "Hari ini, belum waktunya"]};
+/* ---------- SOC (needs validation) ---------- */
+const CST = {ok: ["ok", "Validated"], dup: ["dup", "In 2 batches (latest used)"], bad: ["bad", "Unreadable"], miss: ["miss", "Not uploaded"], wait: ["wait", "Today, not due yet"]};
 function covStrip(chk) { return `<div class="cov">${chk.map(x => `<span class="c ${CST[x.s][0]}" data-tip="${esc(dlong(x.d) + "\n" + CST[x.s][1] + (x.b ? "\nBatch " + x.b : ""))}">${new Date(dayMs(x.d)).getUTCDate()}</span>`).join("")}</div>
-  <div class="legend">${[["ok", "Tervalidasi"], ["dup", "Duplikat, dipakai terbaru"], ["bad", "Gagal dibaca"], ["miss", "Belum diunggah"]].map(([k, l]) => `<span><b class="c ${k}"></b>${l}</span>`).join("")}</div>`; }
+  <div class="legend">${[["ok", "Validated"], ["dup", "Duplicate, latest used"], ["bad", "Unreadable"], ["miss", "Not uploaded"]].map(([k, l]) => `<span><b class="c ${k}"></b>${l}</span>`).join("")}</div>`; }
 function vSoc() {
   const R = socR(), chk = socCheck(), okD = chk.filter(x => x.s === "ok" || x.s === "dup"), bt = batchFor(), Rp = S.cmp ? socR(prevRange()) : null;
   const crit = (V.batches || []).filter(b => b.issues.some(i => i.k === "crit") && b.to >= S.from && b.from <= S.to);
   const checks = [
-    [okD.length === chk.length ? "good" : okD.length ? "warn" : "crit", `Hari dengan data harian: ${okD.length} dari ${chk.length}`, ""],
-    ...crit.map(b => ["crit", `Batch ${esc(b.file)} gagal validasi`, b.issues.filter(i => i.k === "crit").map(i => esc(i.t)).join(" ")]),
-    [Object.keys((V.soc_dup || {})).some(d => d >= S.from && d <= S.to) ? "warn" : "good", "Duplikasi tanggal antar-batch", Object.keys((V.soc_dup || {})).filter(d => d >= S.from && d <= S.to).map(dmon).join(", ") || "Tidak ada"],
-    [R.ch <= R.total && R.sevTotal.blk <= R.total && R.urlBlk <= R.url ? "good" : "crit", "Konsistensi angka", ""],
-    [bt ? (bt.from === S.from && bt.to === S.to ? "good" : "warn") : "idle", "Tabel periode (laporan Top)", bt ? `${esc(bt.file)} · ${dmon(bt.from)} – ${dmon(bt.to)}` : "Belum ada"]
+    [okD.length === chk.length ? "good" : okD.length ? "warn" : "crit", `Days with daily data: ${okD.length} of ${chk.length}`, ""],
+    ...crit.map(b => ["crit", `Batch ${esc(b.file)} failed validation`, b.issues.filter(i => i.k === "crit").map(i => esc(i.t)).join(" ")]),
+    [Object.keys((V.soc_dup || {})).some(d => d >= S.from && d <= S.to) ? "warn" : "good", "Dates duplicated across batches", Object.keys((V.soc_dup || {})).filter(d => d >= S.from && d <= S.to).map(dmon).join(", ") || "None"],
+    [R.ch <= R.total && R.sevTotal.blk <= R.total && R.urlBlk <= R.url ? "good" : "crit", "Number consistency", ""],
+    [bt ? (bt.from === S.from && bt.to === S.to ? "good" : "warn") : "idle", "Period table (Top report)", bt ? `${esc(bt.file)} · ${dmon(bt.from)} – ${dmon(bt.to)}` : "None yet"]
   ];
   const head = "";
-  const UK = {type: ["Tipe ancaman", "soc.threat_types"], action: ["Tindakan", "soc.actions"], severity: ["Severity", "soc.severities"]};
-  const unkL = Object.entries(R.unknown || {}).map(([k, rows]) => `<li class="warn"><span><b>${UK[k][0]} baru:</b> ${rows.map(([n, c]) => `${esc(n)} (${fmt(c)})`).join(", ")} · tambahkan ke <span class="num">${UK[k][1]}</span> di Admin → Operasional → Target dan Parameter</span></li>`).join("");
-  const unkP = unkL ? panel("c12", "Nilai Baru di Luar Daftar Parameter", "", `<ul class="att">${unkL}</ul>`) : "";
-  const val = panel("c12", "SOC Data Validation", ctxTxt(APPLY.soc), `<div class="valgrid"><div>${covStrip(chk)}</div><ul class="checks">${checks.map(c => `<li>${pill(c[0], "")}<div><b>${c[1]}</b>${c[2] ? `<span>${c[2]}</span>` : ""}</div></li>`).join("")}</ul></div>`, canUp("soc") ? `<span class="acts"><span class="sub">Otomatis 00.00 dan 12.00 WIB</span><button class="btn ghost" data-sync="panorama">Tarik dari Panorama sekarang</button></span>` : `<span class="sub">Otomatis 00.00 dan 12.00 WIB</span>`);
-  if (!okD.length) return head + `<div class="grid">${val}<section class="panel c12">${empty("Belum ada hari SOC yang lolos validasi.")}</section></div>`;
+  const UK = {type: ["Threat type", "soc.threat_types"], action: ["Action", "soc.actions"], severity: ["Severity", "soc.severities"]};
+  const unkL = Object.entries(R.unknown || {}).map(([k, rows]) => `<li class="warn"><span><b>New ${UK[k][0].toLowerCase()}:</b> ${rows.map(([n, c]) => `${esc(n)} (${fmt(c)})`).join(", ")} · add to <span class="num">${UK[k][1]}</span> in Admin → Operations → Targets & Parameters</span></li>`).join("");
+  const unkP = unkL ? panel("c12", "New Values Outside Parameter List", "", `<ul class="att">${unkL}</ul>`) : "";
+  const val = panel("c12", "SOC Data Validation", ctxTxt(APPLY.soc), `<div class="valgrid"><div>${covStrip(chk)}</div><ul class="checks">${checks.map(c => `<li>${pill(c[0], "")}<div><b>${c[1]}</b>${c[2] ? `<span>${c[2]}</span>` : ""}</div></li>`).join("")}</ul></div>`, canUp("soc") ? `<span class="acts"><span class="sub">Automatic at 00:00 and 12:00 WIB</span><button class="btn ghost" data-sync="panorama">Pull from Panorama now</button></span>` : `<span class="sub">Automatic at 00:00 and 12:00 WIB</span>`);
+  if (!okD.length) return head + `<div class="grid">${val}<section class="panel c12">${empty("No SOC day has passed validation yet.")}</section></div>`;
   const B = dayB(R.daily), ch = [{name: "Critical", c: "--crit", v: R.daily.map(x => x.critical)}, {name: "High", c: "--serious", v: R.daily.map(x => x.high)}], ml = [{name: "Medium", c: "--warn", v: R.daily.map(x => x.medium)}, {name: "Low", c: "--low", v: R.daily.map(x => x.low)}, {name: "Informational", c: "--ss", v: R.daily.map(x => x.informational)}];
-  const sd = {type: ["Tipe ancaman", R.type], action: ["Tindakan firewall", R.action], cat: ["Kategori ancaman", R.cat], dir: ["Arah ancaman", R.dir]}, cur = sd[S.sdim];
-  const tabs = bt ? bt.tables : [], tb = tabs.find(t => t.id === S.stop) || tabs[0], part = okD.length < chk.length ? ` · dari ${okD.length}/${chk.length} hari` : "";
+  const sd = {type: ["Threat type", R.type], action: ["Firewall action", R.action], cat: ["Threat category", R.cat], dir: ["Threat direction", R.dir]}, cur = sd[S.sdim];
+  const tabs = bt ? bt.tables : [], tb = tabs.find(t => t.id === S.stop) || tabs[0], part = okD.length < chk.length ? ` · from ${okD.length}/${chk.length} days` : "";
   return head + `<div class="grid">${val}${unkP}</div>
-  <div class="kpis k6">${kpi("Total Event", fmt(R.total), "rata-rata " + fmt(R.total / okD.length) + " per hari tervalidasi" + part, {tip: RUMUS.socTot})}${kpi("Critical + High", fmt(R.ch), fmt(R.crit) + " critical")}${kpi("Critical + High Diblokir", pc(R.chBlkPct), "tindakan selain alert", {tip: RUMUS.socCH, dl: Rp && Rp.ch ? delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : ""})}${kpi("Alert Only", fmt(R.chAlert), "critical/high tidak dihentikan", {cls: R.chAlert ? "warnv" : ""})}${kpi("Sumber Internal", pc(R.internalPct), bt && bt.K ? fmt(bt.K.hosts) + " host internal (tabel " + dmon(bt.from) + "–" + dmon(bt.to) + ")" : "tabel host tidak tersedia", {tip: RUMUS.socInt})}${kpi("URL Diblokir", fmt(R.urlBlk), "dari " + fmt(R.url) + " event URL")}</div>
-  <div class="grid">${panel("c6", "Critical dan High per Hari", "", legend(ch) + bars(B, ch, {stack: true, label: "Critical dan high"}))}
-  ${panel("c6", "Medium, Low, Informational per Hari", "", legend(ml) + bars(B, ml, {stack: true, label: "Medium low informational"}))}
-  ${panel("c6", "Severity and Action", "", tbl(["Severity", "Event", "% total", "Diblokir", "Hanya alert", "% diblokir"], R.sev.concat(R.sevTotal).map(x => [x.k, x.n, pc(x.pct), x.blk, x.alert, pc(x.blkPct)]), {r: [2, 5]}))}
-  ${panel("c6", `Per <select class="pick" id="sdim" aria-label="Rincian">${Object.entries(sd).map(([k, v]) => `<option value="${k}" ${k === S.sdim ? "selected" : ""}>${v[0].toLowerCase()}</option>`).join("")}</select>`, "", tbl([cur[0], "Event", "% total", "Critical + High", "Diblokir", "Hanya alert"], cur[1].map(x => [x.k, x.n, pc(x.pct), x.ch, x.blk, x.alert]), {tall: true, r: [2]}))}
-  ${panel("c6", "Traffic per Hari (TB)", fx(R.tb, 2) + " TB, " + fmt(R.sess) + " sesi", bars(B, [{name: "Trafik", c: "--s1", v: R.daily.map(x => x.tb)}], {dec: 2, unit: " TB", label: "Trafik"}))}
-  ${panel("c6", "URL Filtering per Kategori", "", tbl(["Kategori", "Total", "% total", "Diblokir", "Lainnya"], R.urlCat.map(x => [x.k, x.n, pc(x.pct), x.blk, x.alert]), {tall: true, r: [2]}))}
-  ${tb ? panel("c12", `<select class="pick" id="stop" aria-label="Tabel periode">${tabs.map(t => `<option value="${esc(t.id)}" ${t.id === tb.id ? "selected" : ""}>${esc(t.t)}</option>`).join("")}</select>`, `<span class="warn-t">Periode tabel ${dmon(bt.from)} – ${dmon(bt.to)}</span> · ${bt.by === "Panorama API" ? "dari Panorama API" : "dari impor manual"}, batch yang paling cocok dengan filter periode`, tbl(tb.h, tb.r, {tall: true}) + (tb.note ? `<div class="sub">${esc(tb.note)}</div>` : "")) : panel("c12", "Tabel Laporan Teratas", "", empty("Tidak ada batch valid berisi laporan Top untuk periode ini."))}</div>`;
+  <div class="kpis k6">${kpi("Total Events", fmt(R.total), "average " + fmt(R.total / okD.length) + " per validated day" + part, {tip: RUMUS.socTot})}${kpi("Critical + High", fmt(R.ch), fmt(R.crit) + " critical")}${kpi("Critical + High Blocked", pc(R.chBlkPct), "actions other than alert", {tip: RUMUS.socCH, dl: Rp && Rp.ch ? delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : ""})}${kpi("Alert Only", fmt(R.chAlert), "critical/high not stopped", {cls: R.chAlert ? "warnv" : ""})}${kpi("Internal Source", pc(R.internalPct), bt && bt.K ? fmt(bt.K.hosts) + " internal hosts (table " + dmon(bt.from) + "–" + dmon(bt.to) + ")" : "host table not available", {tip: RUMUS.socInt})}${kpi("URL Blocked", fmt(R.urlBlk), "of " + fmt(R.url) + " URL events")}</div>
+  <div class="grid">${panel("c6", "Critical and High per Day", "", legend(ch) + bars(B, ch, {stack: true, label: "Critical and high"}))}
+  ${panel("c6", "Medium, Low, Informational per Day", "", legend(ml) + bars(B, ml, {stack: true, label: "Medium low informational"}))}
+  ${panel("c6", "Severity and Action", "", tbl(["Severity", "Events", "% of total", "Blocked", "Alert only", "% blocked"], R.sev.concat(R.sevTotal).map(x => [x.k, x.n, pc(x.pct), x.blk, x.alert, pc(x.blkPct)]), {r: [2, 5]}))}
+  ${panel("c6", `Per <select class="pick" id="sdim" aria-label="Breakdown">${Object.entries(sd).map(([k, v]) => `<option value="${k}" ${k === S.sdim ? "selected" : ""}>${v[0].toLowerCase()}</option>`).join("")}</select>`, "", tbl([cur[0], "Events", "% of total", "Critical + High", "Blocked", "Alert only"], cur[1].map(x => [x.k, x.n, pc(x.pct), x.ch, x.blk, x.alert]), {tall: true, r: [2]}))}
+  ${panel("c6", "Traffic per Day (TB)", fx(R.tb, 2) + " TB, " + fmt(R.sess) + " sessions", bars(B, [{name: "Traffic", c: "--s1", v: R.daily.map(x => x.tb)}], {dec: 2, unit: " TB", label: "Traffic"}))}
+  ${panel("c6", "URL Filtering per Category", "", tbl(["Category", "Total", "% of total", "Blocked", "Other"], R.urlCat.map(x => [x.k, x.n, pc(x.pct), x.blk, x.alert]), {tall: true, r: [2]}))}
+  ${tb ? panel("c12", `<select class="pick" id="stop" aria-label="Period table">${tabs.map(t => `<option value="${esc(t.id)}" ${t.id === tb.id ? "selected" : ""}>${esc(t.t)}</option>`).join("")}</select>`, `<span class="warn-t">Table period ${dmon(bt.from)} – ${dmon(bt.to)}</span> · ${bt.by === "Panorama API" ? "from Panorama API" : "from manual import"}, the batch that best matches the period filter`, tbl(tb.h, tb.r, {tall: true}) + (tb.note ? `<div class="sub">${esc(tb.note)}</div>` : "")) : panel("c12", "Top Report Tables", "", empty("No valid batch with a Top report for this period."))}</div>`;
 }
 
-/* ---------- Jadwal & Tim ---------- */
+/* ---------- Schedule & Teams ---------- */
 const avHue = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
 const initials = n => String(n).replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase() || "?";
 const telHref = p => "tel:" + String(p).replace(/[^+\d]/g, "");
 const pav = (n, sm) => `<span class="pav ${sm ? "sm" : ""}" style="--h:${avHue(n)}">${esc(initials(n))}</span>`;
 const pcard = p => `<article class="pcard" data-q="${esc(((p.name || "") + " " + (p.job || "") + " " + (p.branch || "")).toLowerCase())}">${pav(p.name)}<div class="pb"><b>${esc(p.name)}</b><span class="sub">${esc((p.job || "").replace(/^ITOC /, ""))}${p.branch ? " · " + esc(p.branch) : ""}</span></div>${p.phone ? `<a class="pph" href="${esc(telHref(p.phone))}">${esc(p.phone)}</a>` : ""}</article>`;
 function vJadwal() {
-  /* Menu Personnel (tanpa filter). Sub-menu = parameter "personel" (Admin → Operasional → Target dan Parameter): tiap grup punya jenis shift | office | branch. */
+  /* Personnel menu (no filters). Sub-menu = parameter "personel" (Admin → Operations → Targets & Parameters): each group has kind shift | office | branch. */
   const now = nowShift(), gs = GROUPS, G = gs.find(g => g.key === S.pers) || gs[0];
-  if (!G) return `<div class="grid"><section class="panel c12">${empty("Belum ada kelompok personel. Atur parameter personel di Admin.")}</section></div>`;
+  if (!G) return `<div class="grid"><section class="panel c12">${empty("No personnel groups yet. Set the personnel parameter in Admin.")}</section></div>`;
   const bar = `<div class="subtabs">${gs.map(g => `<button type="button" data-pers="${esc(g.key)}" aria-selected="${g.key === G.key}">${esc(g.label)}</button>`).join("")}</div>`;
   const group = CFG.people.filter(p => p.unit === G.unit), person = p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc((p.job || "").replace(/^ITOC /, ""))}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`;
   let body = "";
@@ -311,8 +309,8 @@ function vJadwal() {
     for (let d = first; d <= mEnd; d = addDays(d, 1)) days.push(d);
     const head = `<div class="h"></div>` + days.map(d => `<div class="h ${d === now.date ? "today" : ""}">${new Date(dayMs(d)).getUTCDate()}<br>${HR[new Date(dayMs(d)).getUTCDay()]}</div>`).join("");
     const rows = TEAMS.map(g => `<div class="tn">Team ${g}</div>` + days.map(d => { const c = codeOf(g, d), k = CODES[c]; return `<div class="c ${k} ${d === now.date && c === now.shift - 1 ? "today" : ""}" data-tip="${esc("Team " + g + " · " + dlong(d) + "\n" + (k === OFFC ? "Off" : "Shift " + SN[c + 1] + " " + shiftHours(c + 1)))}">${k}</div>`; }).join("")).join("");
-    body = `<div class="grid">${panel("c12", "Lead & Supervisor", "", `<div class="pcards">${group.filter(p => !p.team_code).map(pcard).join("") || `<div class="sub">Belum ada data.</div>`}</div>`)}
-    ${panel("c4", "Sedang Bertugas", dlong(now.date) + " · " + now.clock + " WIB", onDuty(now))}
+    body = `<div class="grid">${panel("c12", "Lead & Supervisor", "", `<div class="pcards">${group.filter(p => !p.team_code).map(pcard).join("") || `<div class="sub">No data yet.</div>`}</div>`)}
+    ${panel("c4", "On Duty", dlong(now.date) + " · " + now.clock + " WIB", onDuty(now))}
     ${panel("c8", "Shift Schedule " + esc(G.label), rangeMonth(now.today) + " · pola " + esc((CFG.rotation || {}).pattern || ""), `<div class="scroll"><div class="sched" style="grid-template-columns:72px repeat(${days.length},minmax(30px,1fr))">${head}${rows}</div></div>
       <div class="legend">${[...CFG.shifts.map(x => [x.code, x.name + " " + shiftHours(x.no)]), [OFFC, "Off"]].map(([k, l]) => `<span><b class="sw ${k}"></b>${l}</span>`).join("")}</div>`)}
     ${TEAMS.map(g => { const c = codeOf(g, now.date); return panel("c3 shcard " + (c === OFF ? "sh-off" : "sh" + c), "Team " + g, c === OFF ? `<span class="shb"><i></i>Off</span>` : `<span class="shb"><i></i>${esc(SN[c + 1])}</span>`, `<ul class="plist">${crew(g).map(person).join("")}</ul>`); }).join("")}
@@ -321,17 +319,17 @@ function vJadwal() {
     const dow = new Date(dayMs(now.today)).getUTCDay(), open = (G.days || []).includes(dow) && now.clock >= G.start && now.clock < G.end;
     body = `<div class="grid">${panel("c12", esc(G.label), "",
       `<div class="hchips">${(CFG.params["report.contact"] || {}).phone ? `<a class="hchip link" href="${esc(telHref(CFG.params["report.contact"].phone))}"><i></i>${esc(CFG.params["report.contact"].phone)}</a>` : ""}${(CFG.params["report.contact"] || {}).email ? `<a class="hchip link" href="mailto:${esc(CFG.params["report.contact"].email)}"><i></i>${esc(CFG.params["report.contact"].email)}</a>` : ""}</div>` +
-      (group.length ? `<div class="pcards">${group.map(pcard).join("")}</div>` : `<div class="empty sm">Belum ada anggota.</div>`))}</div>`;
+      (group.length ? `<div class="pcards">${group.map(pcard).join("")}</div>` : `<div class="empty sm">No members yet.</div>`))}</div>`;
   } else {
     const by = new Map(); group.forEach(p => { const k = p.branch || "Shared"; if (!by.has(k)) by.set(k, []); by.get(k).push(p); });
     const ord = k => { const i = CFG.sites.indexOf(k); return i < 0 ? 999 : i; }, ob = V.open_by_site || {}, totOpen = [...by.keys()].reduce((a, k) => a + (ob[k] || 0), 0);
     const cards = [...by.entries()].sort((a, b) => ord(a[0]) - ord(b[0])).map(([k, ps]) => { const o = ob[k] || 0, tone = o === 0 ? "good" : o < 5 ? "warn" : "crit";
-      return `<article class="bcard pcard" data-q="${esc((k + " " + ps.map(p => p.name).join(" ")).toLowerCase())}"><header><b>${esc(k.replace(/^Branch /, ""))}</b><span class="obadge ${tone}" title="Tiket open di branch">${o} open</span></header>${ps.map(p => `<div class="brow">${pav(p.name, 1)}<span class="pb"><b>${esc(p.name)}</b></span>${p.phone ? `<a class="pph" href="${esc(telHref(p.phone))}">${esc(p.phone)}</a>` : ""}</div>`).join("")}</article>`; }).join("");
-    body = `<div class="grid">${panel("c12", esc(G.label), `<span class="hchips"><span class="hchip"><i></i>${by.size} lokasi</span><span class="hchip"><i></i>${group.length} orang</span><span class="hchip ${totOpen ? "warn" : ""}"><i></i>${totOpen} tiket terbuka</span></span>`, `<input type="search" id="mq" class="msearch" placeholder="Cari nama atau lokasi" aria-label="Cari"><div class="bcards">${cards || `<div class="empty sm">Belum ada anggota.</div>`}</div>`)}</div>`;
+      return `<article class="bcard pcard" data-q="${esc((k + " " + ps.map(p => p.name).join(" ")).toLowerCase())}"><header><b>${esc(k.replace(/^Branch /, ""))}</b><span class="obadge ${tone}" title="Open tickets at this branch">${o} open</span></header>${ps.map(p => `<div class="brow">${pav(p.name, 1)}<span class="pb"><b>${esc(p.name)}</b></span>${p.phone ? `<a class="pph" href="${esc(telHref(p.phone))}">${esc(p.phone)}</a>` : ""}</div>`).join("")}</article>`; }).join("");
+    body = `<div class="grid">${panel("c12", esc(G.label), `<span class="hchips"><span class="hchip"><i></i>${by.size} locations</span><span class="hchip"><i></i>${group.length} people</span><span class="hchip ${totOpen ? "warn" : ""}"><i></i>${totOpen} open tickets</span></span>`, `<input type="search" id="mq" class="msearch" placeholder="Search name or location" aria-label="Search"><div class="bcards">${cards || `<div class="empty sm">No members yet.</div>`}</div>`)}</div>`;
   }
   return bar + body;
 }const rangeMonth = d => MB[+d.slice(5, 7) - 1] + " " + d.slice(0, 4);
-/* ---------- Serah terima ---------- */
+/* ---------- Handover ---------- */
 function vHo() { return subnav("report") + vHoBody(); }
 function vHoBody() {
   const inF = h => h.date >= S.from && h.date <= S.to && (!S.sf || h.shift === S.sf) && (!S.site || h.site === S.site);
@@ -340,26 +338,26 @@ function vHoBody() {
   const form = `<form id="hoF" class="form" novalidate>
     <div class="fld"><label>From</label><div class="ro">Shift ${SN[now.shift]} · Team ${teamOn(now.date, now.shift)}</div></div>
     <div class="fld"><label>To</label><div class="ro">Shift ${SN[nx]} · Team ${teamOn(now.shift === NS ? addDays(now.date, 1) : now.date, nx)}</div></div>
-    <div class="fld"><label for="hCat">Kategori *</label><select id="hCat" required><option value="">Pilih…</option>${CFG.params["ho.categories"].map(x => `<option>${esc(x)}</option>`).join("")}</select></div>
-    <div class="fld"><label for="hPr">Priority *</label><select id="hPr" required><option value="">Pilih…</option>${CFG.params["ho.priorities"].map(x => `<option>${esc(x.value)}</option>`).join("")}</select></div>
-    <div class="fld"><label for="hSite">Lokasi *</label><select id="hSite" required><option value="">Pilih…</option>${CFG.sites.map(s => `<option ${s === S.site ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></div>
-    <div class="fld"><label for="hTk">Related Ticket</label><select id="hTk"><option value="">Tidak ada</option>${openT.map(t => `<option value="${esc(t.id)}">#${esc(t.id)} · ${esc(String(t.subject).slice(0, 48))}</option>`).join("")}</select></div>
+    <div class="fld"><label for="hCat">Category *</label><select id="hCat" required><option value="">Select…</option>${CFG.params["ho.categories"].map(x => `<option>${esc(x)}</option>`).join("")}</select></div>
+    <div class="fld"><label for="hPr">Priority *</label><select id="hPr" required><option value="">Select…</option>${CFG.params["ho.priorities"].map(x => `<option>${esc(x.value)}</option>`).join("")}</select></div>
+    <div class="fld"><label for="hSite">Location *</label><select id="hSite" required><option value="">Select…</option>${CFG.sites.map(s => `<option ${s === S.site ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></div>
+    <div class="fld"><label for="hTk">Related Ticket</label><select id="hTk"><option value="">None</option>${openT.map(t => `<option value="${esc(t.id)}">#${esc(t.id)} · ${esc(String(t.subject).slice(0, 48))}</option>`).join("")}</select></div>
     <div class="fld wide"><label for="hTitle">Judul * <span class="sub">min. ${CFG.params["ho.rules"].min_title} karakter</span></label><input type="text" id="hTitle" maxlength="120" placeholder="Contoh: Link Astinet Meulaboh down, menunggu ISP"></div>
-    <div class="fld wide"><label for="hBody">Kondisi dan yang sudah dilakukan * <span class="sub">min. ${CFG.params["ho.rules"].min_body} karakter</span></label><textarea id="hBody" placeholder="Apa yang terjadi, sejak kapan, sudah eskalasi ke siapa"></textarea></div>
-    <div class="fld wide"><label for="hNext">Tindak lanjut untuk shift berikutnya</label><input type="text" id="hNext" placeholder="Apa yang harus dicek atau dikerjakan"></div>
-    <div class="acts wide"><button class="btn" type="submit">Simpan Handover</button><button class="btn ghost" type="button" data-hoform="0">Batal</button><span class="msg err" id="hMsg"></span></div></form>`;
-  return `<div class="grid">${panel("c12", "Handover Shift", ctxTxt(), `<div class="toolbar"><div class="seg" id="hoSt">${[["open", "Terbuka"], ["closed", "Ditutup"], ["all", "Semua"]].map(([k, l]) => `<button type="button" data-ho="${k}" aria-pressed="${S.hoSt === k}">${l}</button>`).join("")}</div>${S.hoForm ? "" : `<button class="btn" data-hoform="1">+ Handover Baru</button>`}</div>${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}${S.hoForm ? `<div class="formbox">${form}</div>` : ""}${hoList(L)}`)}</div>`;
+    <div class="fld wide"><label for="hBody">Situation and actions taken * <span class="sub">min. ${CFG.params["ho.rules"].min_body} characters</span></label><textarea id="hBody" placeholder="What happened, since when, who it was escalated to"></textarea></div>
+    <div class="fld wide"><label for="hNext">Follow-up for Next Shift</label><input type="text" id="hNext" placeholder="What should be checked or done"></div>
+    <div class="acts wide"><button class="btn" type="submit">Save Handover</button><button class="btn ghost" type="button" data-hoform="0">Cancel</button><span class="msg err" id="hMsg"></span></div></form>`;
+  return `<div class="grid">${panel("c12", "Hand Over Shift", ctxTxt(), `<div class="toolbar"><div class="seg" id="hoSt">${[["open", "Open"], ["closed", "Closed"], ["all", "All"]].map(([k, l]) => `<button type="button" data-ho="${k}" aria-pressed="${S.hoSt === k}">${l}</button>`).join("")}</div>${S.hoForm ? "" : `<button class="btn" data-hoform="1">+ New Handover</button>`}</div>${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}${S.hoForm ? `<div class="formbox">${form}</div>` : ""}${hoList(L)}`)}</div>`;
 }
 
-/* ---------- Data (kelengkapan + unggah RAW) ---------- */
+/* ---------- Data (completeness + RAW upload) ---------- */
 const canUp = k => { const u = CFG.me.uploads || []; return u.includes("*") || u.includes(k); };
 function upCards() {
   const C = [
-    ["soc", "Cyber Security · Panorama", "CSV Panorama, banyak file atau .zip", "upf", ".csv,.zip", true, "Pilih CSV / ZIP", "upmsg"],
-    ["tickets", "Ticketing · ManageEngine", "Ekspor ManageEngine .xls / .xlsx", "upt", ".xls,.xlsx", false, "Pilih XLS / XLSX", "upmsg2"],
-    ["prtg", "Networking · PRTG", "PDF laporan harian PRTG, banyak file atau .zip", "upn", ".pdf,.zip", true, "Pilih PDF / ZIP", "upmsg3"]
+    ["soc", "Cyber Security · Panorama", "Panorama CSV, multiple files or .zip", "upf", ".csv,.zip", true, "Choose CSV / ZIP", "upmsg"],
+    ["tickets", "Ticketing · ManageEngine", "Ekspor ManageEngine .xls / .xlsx", "upt", ".xls,.xlsx", false, "Choose XLS / XLSX", "upmsg2"],
+    ["prtg", "Networking · PRTG", "PRTG daily report PDF, multiple files or .zip", "upn", ".pdf,.zip", true, "Choose PDF / ZIP", "upmsg3"]
   ].filter(c => canUp(c[0]));
-  if (!C.length) return `<div class="empty sm">Tidak ada izin unggah.</div>`;
+  if (!C.length) return `<div class="empty sm">No upload permission.</div>`;
   return `<div class="uploads">${C.map(([, ttl, hint, id, acc, multi, btn, msg]) => `<div class="drop"><b>${ttl}</b><span class="sub">${hint}</span><label class="btn upbtn" for="${id}">${btn}</label><input type="file" id="${id}" accept="${acc}" ${multi ? "multiple" : ""} class="vh"><div id="${msg}"></div></div>`).join("")}</div>`;
 }
 function vData() { return subnav("report") + vDataBody(); }
@@ -368,47 +366,52 @@ function vDataBody() {
   const rows = (V.coverage || []).map(r => [esc(r.label), d => r.cells[d] || ["wait", "–"]]);
   const grid = `<div class="scroll"><div class="mx" style="grid-template-columns:minmax(150px,220px) repeat(${days.length},minmax(22px,1fr))"><div></div>${days.map(d => `<div class="h">${new Date(dayMs(d)).getUTCDate()}</div>`).join("")}
     ${rows.map(([l, f]) => `<div class="rl">${l}</div>` + days.map(d => { const [k, t] = f(d); return `<span class="c ${k}" data-tip="${esc(dlong(d) + "\n" + t)}"></span>`; }).join("")).join("")}</div></div>
-    <div class="legend">${[["ok", "Lengkap"], ["dup", "Lengkap dengan catatan"], ["bad", "Gagal / kurang"], ["miss", "Tidak ada"], ["wait", "Belum waktunya"]].map(([k, l]) => `<span><b class="c ${k}"></b>${l}</span>`).join("")}</div>`;
-  const bl = (V.batches || []).slice().reverse().map(b => [b.file, dmon(b.from) + " – " + dmon(b.to), b.by, dtime(b.at), b.rows, b.skipped, {h: b.issues.some(i => i.k === "crit") ? pill("crit", "Gagal, tidak dipakai") : b.issues.length ? pill("warn", "Dipakai, ada catatan") : pill("good", "Valid")}, {h: b.issues.map(i => `<div class="sub">${esc(i.t)}</div>`).join("") || "–"}]);
-  return `<div class="grid">${panel("c12", "Kelengkapan Data per Hari", ctxTxt(APPLY.kelengkapan), grid)}
-  ${panel("c12", "Raw Data Upload", "", upCards())}  ${panel("c12", "Catatan Sinkron dan Unggah", (canUp("tickets") || canUp("prtg") || canUp("soc")) ? `<span class="acts">${canUp("tickets") ? `<button class="btn ghost" data-sync="manageengine">Sync ManageEngine</button>` : ""}${canUp("prtg") ? `<button class="btn ghost" data-sync="prtg">Sync PRTG</button>` : ""}${canUp("soc") ? `<button class="btn ghost" data-sync="panorama">Tarik Panorama sekarang</button>` : ""}</span>` : "Terbaru di atas", tbl(["Waktu", "Sumber", "Status", "Baris", "Keterangan"], (V.sync_log || []).slice(0, 12).map(x => [dtime(x.at), x.src, {h: x.ok ? pill("good", "OK") : pill("crit", "Gagal")}, x.rows, x.msg]), {tall: true}))}
-  ${panel("c12", "Riwayat Unggah SOC", "", tbl(["File", "Periode", "Diunggah oleh", "Waktu", "Baris terbaca", "Dilewati", "Status", "Catatan"], bl))}</div>`;
+    <div class="legend">${[["ok", "Complete"], ["dup", "Complete with notes"], ["bad", "Failed / incomplete"], ["miss", "None"], ["wait", "Not due yet"]].map(([k, l]) => `<span><b class="c ${k}"></b>${l}</span>`).join("")}</div>`;
+  const bl = (V.batches || []).slice().reverse().map(b => [b.file, dmon(b.from) + " – " + dmon(b.to), b.by, dtime(b.at), b.rows, b.skipped, {h: b.issues.some(i => i.k === "crit") ? pill("crit", "Failed, not used") : b.issues.length ? pill("warn", "Used, with notes") : pill("good", "Valid")}, {h: b.issues.map(i => `<div class="sub">${esc(i.t)}</div>`).join("") || "–"}]);
+  return `<div class="grid">${panel("c12", "Data Completeness per Day", ctxTxt(APPLY.kelengkapan), grid)}
+  ${panel("c12", "Raw Data Upload", "", upCards())}  ${panel("c12", "Sync and Upload Log", (canUp("tickets") || canUp("prtg") || canUp("soc")) ? `<span class="acts">${canUp("tickets") ? `<button class="btn ghost" data-sync="manageengine">Sync ManageEngine</button>` : ""}${canUp("prtg") ? `<button class="btn ghost" data-sync="prtg">Sync PRTG</button>` : ""}${canUp("soc") ? `<button class="btn ghost" data-sync="panorama">Pull Panorama now</button>` : ""}</span>` : "Newest first", tbl(["Time", "Source", "Status", "Rows", "Message"], (V.sync_log || []).slice(0, 12).map(x => [dtime(x.at), x.src, {h: x.ok ? pill("good", "OK") : pill("crit", "Failed")}, x.rows, x.msg]), {tall: true}))}
+  ${panel("c12", "SOC Upload History", "", tbl(["File", "Period", "Uploaded by", "Time", "Rows read", "Skipped", "Status", "Notes"], bl))}</div>`;
 }
 
-/* ---------- Report (unduh Excel / PDF / PowerPoint) ---------- */
+/* ---------- Report (Excel / PDF / PowerPoint download) ---------- */
 const fk = (v, k) => v == null || v === "" ? "–" : k === "n" ? fmt(v) : /^f\d$/.test(k) ? fx(v, +k[1]) : /^p\d$/.test(k) ? pc(v, +k[1]) : esc(v);
 function vReport() {
   const rp = V.report || {sections: [], kinds: []}, kinds = rp.kinds || [], nav = subnav("report");
-  if (!kinds.length) return nav + `<div class="grid"><section class="panel c12">${empty("Tidak ada laporan yang boleh diakses role ini.")}</section></div>`;
+  if (!kinds.length) return nav + `<div class="grid"><section class="panel c12">${empty("No reports are available to this role.")}</section></div>`;
   if (!kinds.some(k => k.key === S.rkind)) S.rkind = kinds[0].key;
   const kind = S.rkind, kd = kinds.find(k => k.key === kind) || {}, secs = kd.sections || [kind], shown = rp.sections.filter(s => kind === "full" || (kind === "summary" ? s.key === "ringkasan" : secs.includes(s.key) || (s.key === "ringkasan" && secs.length > 1)));
-  const chips = `<div class="chips">${kinds.map(k => `<button type="button" class="chip" data-rkind="${esc(k.key)}" aria-pressed="${k.key === kind}" title="${esc(k.desc)}">${esc(k.label)}</button>`).join("")}</div>`;
+  const chips = `<div class="chips rtypes">${kinds.map(k => `<button type="button" class="chip" data-rkind="${esc(k.key)}" aria-pressed="${k.key === kind}" title="${esc(k.desc)}">${esc(k.label)}</button>`).join("")}</div>`;
   const pre = `<div class="chips sm">${[["ringkas", "Compact"], ["standar", "Standard"], ["lengkap", "Full"]].map(([k, l]) => `<button type="button" class="chip" data-rpreset="${k}" aria-pressed="${k === S.rpreset}">${l}</button>`).join("")}</div>`;
   const dl = `<div class="rdl">${[["xlsx", "Excel"], ["pdf", "PDF"], ["pptx", "PowerPoint"]].map(([k, l]) => `<button type="button" class="btn" data-rep="${k}">${l}</button>`).join("")}</div>`;
   const kp = shown.flatMap(s => s.kpis).slice(0, 12), nc = shown.reduce((a, s) => a + s.charts.length, 0), nt = shown.reduce((a, s) => a + s.tables.length, 0);
-  const prev = `<div class="rkpi">${kp.map(k => `<div class="kpi"><span class="lbl">${esc(k.label)}</span><span class="v">${fk(k.value, k.kind)}</span><span class="d">${esc(k.sub || "")}</span></div>`).join("")}</div><div class="sub">${nc} grafik · ${nt} tabel</div>`;
-  return nav + `<div class="grid">${panel("c12", "Report", ctxTxt(), `<div class="rbar"><div class="rgroup"><span class="lbl">Jenis laporan</span>${chips}</div><div class="rgroup"><span class="lbl">Ukuran</span>${pre}</div><div class="rgroup"><span class="lbl">Unduh</span>${dl}</div></div>${prev}`)}</div>`;
+  const list = (a, n) => a.length ? `<ul>${a.slice(0, n).map(x => `<li>${esc(x.title)}</li>`).join("")}${a.length > n ? `<li class="sub">and ${a.length - n} more</li>` : ""}</ul>` : `<span class="sub">none</span>`;
+  const secs2 = shown.map(s => `<div class="rsec"><h4>${esc(s.title)}</h4><span class="lbl">Charts (${s.charts.length})</span>${list(s.charts, 5)}<span class="lbl">Tables (${s.tables.length})</span>${list(s.tables, 5)}</div>`).join("");
+  return nav + `<div class="grid">${panel("c12", "Report", ctxTxt(), `${chips}<div class="rmeta"><div class="rdesc"><b>${esc(kd.label || "")}</b><span>${esc(kd.desc || "")}</span></div><div class="rctl"><div class="rgroup"><span class="lbl">Size</span>${pre}</div><div class="rgroup"><span class="lbl">Download</span>${dl}</div></div></div>
+    <div class="rkpi2">${kp.map(k => `<div class="kpi"><span class="lbl">${esc(k.label)}</span><span class="v">${fk(k.value, k.kind)}</span><span class="d">${esc(k.sub || "")}</span></div>`).join("")}</div>
+    <div class="rsum sub">${shown.length} sections · ${nc} charts · ${nt} tables</div><div class="rsecs">${secs2}</div>`)}</div>`;
 }
 /* ---------- Admin ---------- */
 function vAdmin() {
+  admEnsure();
   let body = "";
   const eu = S.editUser ? (V.users || []).find(x => x.u === S.editUser) : null;
-  if (S.adm === "pengguna") body = `${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}<div class="toolbar"><button class="btn" data-adduser>+ Tambah Pengguna</button></div>
-    ${S.addUser || eu ? `<form id="uF" class="form formbox"><div class="fld"><label for="uU">Username *</label><input id="uU" type="text" value="${eu ? esc(eu.u) : ""}" ${eu ? "readonly" : ""}></div><div class="fld"><label for="uN">Nama *</label><input id="uN" type="text" value="${eu ? esc(eu.name) : ""}"></div><div class="fld"><label for="uR">Role *</label><select id="uR" ${eu && eu.u === CFG.me.username ? "disabled" : ""}>${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${eu && eu.role === k ? "selected" : ""}>${v}</option>`).join("")}</select></div><div class="fld"><label for="uS">Cabang (khusus EOS)</label><select id="uS"><option value="">–</option>${CFG.sites.map(x => `<option ${eu && eu.site === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div><div class="acts wide"><button class="btn" type="submit">Simpan</button><button class="btn ghost" type="button" data-adduser>Batal</button>${eu ? "" : `<span class="sub">Password awal dibuat acak dan wajib diganti saat login pertama.</span>`}<span class="msg err" id="uMsg"></span></div></form>` : ""}
-    <div class="ucards">${V.users.map(u => `<article class="ucard ${u.active ? "" : "off"}"><span class="av">${esc((u.name || u.u).split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase())}</span><div class="ub"><b>${esc(u.name)}</b><span class="sub">@${esc(u.u)} · ${esc(ROLES[u.role] || u.role)}${u.site ? " · " + esc(u.site) : ""}</span><span class="sub" title="${esc(roleAccess(u.role))}">${u.active ? "Aktif" : "Nonaktif"} · last login ${esc(dtime(u.last))}</span></div><span class="acts"><button class="btn ghost" data-edit-user="${esc(u.u)}">Ubah</button>${u.u === CFG.me.username ? "" : `<button class="btn ghost" data-toggle-user="${esc(u.u)}">${u.active ? "Nonaktifkan" : "Aktifkan"}</button><button class="btn ghost" data-reset-user="${esc(u.u)}">Atur Ulang</button>`}</span></article>`).join("")}</div>`;
+  if (S.adm === "pengguna") body = `${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}<div class="toolbar"><button class="btn" data-adduser>+ Add User</button></div>
+    ${S.addUser || eu ? `<form id="uF" class="form formbox"><div class="fld"><label for="uU">Username *</label><input id="uU" type="text" value="${eu ? esc(eu.u) : ""}" ${eu ? "readonly" : ""}></div><div class="fld"><label for="uN">Name *</label><input id="uN" type="text" value="${eu ? esc(eu.name) : ""}"></div><div class="fld"><label for="uR">Role *</label><select id="uR" ${eu && eu.u === CFG.me.username ? "disabled" : ""}>${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${eu && eu.role === k ? "selected" : ""}>${v}</option>`).join("")}</select></div><div class="fld"><label for="uS">Branch (EOS only)</label><select id="uS"><option value="">–</option>${CFG.sites.map(x => `<option ${eu && eu.site === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div><div class="acts wide"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-adduser>Cancel</button>${eu ? "" : `<span class="sub">The initial password is random and must be changed at first login.</span>`}<span class="msg err" id="uMsg"></span></div></form>` : ""}
+    <div class="ucards">${V.users.map(u => `<article class="ucard ${u.active ? "" : "off"}"><span class="av">${esc((u.name || u.u).split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase())}</span><div class="ub"><b>${esc(u.name)}</b><span class="sub">@${esc(u.u)} · ${esc(ROLES[u.role] || u.role)}${u.site ? " · " + esc(u.site) : ""}</span><span class="sub" title="${esc(roleAccess(u.role))}">${u.active ? "Active" : "Inactive"} · last login ${esc(dtime(u.last))}</span></div><span class="acts"><button class="btn ghost" data-edit-user="${esc(u.u)}">Edit</button>${u.u === CFG.me.username ? "" : `<button class="btn ghost" data-toggle-user="${esc(u.u)}">${u.active ? "Disable" : "Enable"}</button><button class="btn ghost" data-reset-user="${esc(u.u)}">Reset</button>`}</span></article>`).join("")}</div>`;
   if (S.adm === "integrasi") body = vIntegrations();
   if (S.adm === "apikeys") body = vApiKeys();
   if (S.adm === "smtp") body = vSmtp();
   if (S.adm === "webhooks") body = vWebhooks();
   if (S.adm === "roles") body = vRoles();
-  if (S.adm === "parameter") body = admTitle("Target dan Parameter", "Nilai yang dipakai dalam perhitungan dan tampilan. Perubahan langsung berlaku di semua halaman.") + paramForm() + `<h4 class="admsub">Target SLA</h4>` + masterView("sla_target");
-  if (S.adm === "rumus") body = admTitle("Rumus", "Keterangan rumus yang tampil pada tanda info di halaman.") + masterView("formula");
-  if (S.adm === "pemetaan") body = admTitle("Pemetaan", "Lokasi, kode dari Zabbix, sensor PRTG, dan ISP. Kode baru dari API terdaftar otomatis dan perlu diberi lokasi atau label di sini.") + masterView(null, ["site", "zbx_loc", "dev_code", "prtg_sensor", "isp"]);
-  if (S.adm === "personel") body = admTitle("Personel", "Daftar personel dan kontak yang tampil di halaman Personel dan Overview.") + masterView("person");
-  if (S.adm === "tim") body = admTitle("Tim dan Shift", "Pola rotasi tim diatur di Target dan Parameter.") + masterView(null, ["team", "shift"]);
-  if (S.adm === "menu") body = admTitle("Menu dan Widget", "Susunan menu dan widget bawaan. Ubah dengan hati-hati, perubahan terlihat oleh semua pengguna.") + masterView(null, ["module", "widget"]);
+  if (S.adm === "parameter") body = admTitle("Targets & Parameters", "Values used in calculations and display. Changes apply to every page immediately.") + paramForm() + `<h4 class="admsub">SLA Targets</h4>` + masterView("sla_target");
+  if (S.adm === "rumus") body = admTitle("Formulas", "Formula descriptions shown in the info tooltips.") + masterView("formula");
+  if (S.adm === "pemetaan") body = admTitle("Mapping", "Locations, Zabbix codes, PRTG sensors, and ISPs. New codes from the APIs are registered automatically and need a location or label here.") + masterView(null, ["site", "zbx_loc", "dev_code", "prtg_sensor", "isp"]);
+  if (S.adm === "personel") body = admTitle("Personnel", "People and contacts shown on the Personnel page and Overview.") + masterView("person");
+  if (S.adm === "tim") body = admTitle("Teams & Shifts", "The rotation pattern is set under Targets & Parameters.") + masterView(null, ["team", "shift"]);
+  if (S.adm === "menu") body = admTitle("Menus & Widgets", "Default menu and widget setup. Change with care: every user sees the result.") + masterView(null, ["module", "widget"]);
   if (S.adm === "dilengkapi") body = vTodo();
   if (S.adm === "status") body = vSourceStatus();
+  if (S.adm === "akses") body = vAccess();
   if (S.adm === "audit") body = vAudit();
   return `<div class="grid"><section class="panel c12">${admNav()}${body}</section></div>`;
 }

@@ -239,7 +239,7 @@ def build_from_template(m: dict) -> bytes:
         rest = sec["charts"][skip:]
         gw, gh = W0 / 2 - 6, (Y1 - Y0) / 2 - 6
         for i in range(0, len(rest), 4):
-            s = page(f"{pre} : Grafik" + (f" ({i // 4 + 1})" if len(rest) > 4 else ""))
+            s = page(f"{pre} : Charts" + (f" ({i // 4 + 1})" if len(rest) > 4 else ""))
             for j, ch in enumerate(rest[i:i + 4]):
                 _chart(s, ch, X0 + (j % 2) * (gw + 12), Y0 + (j // 2) * (gh + 12), gw, gh, fs=10)
 

@@ -19,7 +19,7 @@ def _parse(r: httpx.Response) -> ET.Element:
         x = ET.fromstring(r.text)
     except ET.ParseError:
         r.raise_for_status()
-        raise RuntimeError("Jawaban Panorama bukan XML (alamat salah atau bukan Panorama?)")
+        raise RuntimeError("The Panorama response is not XML (wrong address, or not a Panorama?)")
     if x.get("status") != "success":
         msg = " ".join((e.text or "").strip() for e in x.iter() if e.tag in ("line", "msg") and (e.text or "").strip()) or r.text[:160]
         raise RuntimeError(f"Panorama menolak (HTTP {r.status_code}, kode {x.get('code') or '-'}): {msg[:180]}")
@@ -46,7 +46,7 @@ def keygen(cl: httpx.Client, base: str, user: str, pw: str) -> str:
     x = _parse(cl.post(api_url(base), data={"type": "keygen", "user": user, "password": pw}))
     key = x.findtext(".//key")
     if not key:
-        raise RuntimeError("Panorama tidak mengembalikan key")
+        raise RuntimeError("Panorama did not return a key")
     return key
 
 
@@ -56,14 +56,14 @@ def run_report(cl: httpx.Client, base: str, key: str, name: str, wait_s: int = 9
     x = _parse(cl.post(api_url(base), headers=h, data={"type": "report", "reporttype": "custom", "reportname": name, "async": "yes", **(extra or {})}))
     job = x.findtext(".//job")
     if not job:
-        raise RuntimeError("Panorama tidak memberi job id untuk report " + name)
+        raise RuntimeError("Panorama gave no job id for report " + name)
     t0 = time.time()
     while True:
         y = _retry(lambda: _parse(cl.post(api_url(base), headers=h, data={"type": "report", "action": "get", "job-id": job})))
         if (y.findtext(".//job/status") or "FIN").upper() == "FIN":
             break
         if time.time() - t0 > wait_s:
-            raise RuntimeError("Report belum selesai dalam %d detik" % wait_s)
+            raise RuntimeError("Report not finished within %d seconds" % wait_s)
         time.sleep(2)
     rows = [{c.tag: (c.text or "").strip() for c in e} for e in y.iter("entry") if len(e)]
     cols = list(rows[0].keys()) if rows else []
@@ -78,14 +78,14 @@ def run_log(cl: httpx.Client, base: str, key: str, log_type: str = "threat", nlo
     x = _parse(cl.post(api_url(base), headers=h, data=data))
     job = x.findtext(".//job")
     if not job:
-        raise RuntimeError("Panorama tidak memberi job id untuk log " + log_type)
+        raise RuntimeError("Panorama gave no job id for log " + log_type)
     t0 = time.time()
     while True:
         y = _parse(cl.post(api_url(base), headers=h, data={"type": "log", "action": "get", "job-id": job}))
         if (y.findtext(".//job/status") or "FIN").upper() == "FIN":
             break
         if time.time() - t0 > wait_s:
-            raise RuntimeError("Log belum selesai dalam %d detik" % wait_s)
+            raise RuntimeError("Log not finished within %d seconds" % wait_s)
         time.sleep(1)
     rows = [{c.tag: (c.text or "").strip() for c in e} for e in y.iter("entry") if len(e)]
     return (list(rows[0].keys()) if rows else []), rows
@@ -125,14 +125,14 @@ def run_dynamic(cl: httpx.Client, base: str, key: str, typ: str, aggs: list[str]
     x = _retry(lambda: _parse(cl.post(api_url(base), headers=h, data={"type": "report", "reporttype": "dynamic", "reportname": "custom-dynamic-report", "cmd": cmd, "async": "yes"})))
     job = x.findtext(".//job")
     if not job:
-        raise RuntimeError("Panorama tidak memberi job id untuk dynamic report " + typ)
+        raise RuntimeError("Panorama gave no job id for dynamic report " + typ)
     t0 = time.time()
     while True:
         y = _retry(lambda: _parse(cl.post(api_url(base), headers=h, data={"type": "report", "action": "get", "job-id": job})))
         if (y.findtext(".//job/status") or "FIN").upper() == "FIN":
             break
         if time.time() - t0 > wait_s:
-            raise RuntimeError("Dynamic report %s belum selesai dalam %d detik" % (typ, wait_s))
+            raise RuntimeError("Dynamic report %s not finished within %d seconds" % (typ, wait_s))
         time.sleep(2)
     rep = y.find(".//report")
     return [{c.tag: (c.text or "").strip() for c in e} for e in (rep if rep is not None else []) if e.tag == "entry"]

@@ -44,9 +44,9 @@ def resolve(cl: httpx.Client, base: str) -> str:
         except Exception as e:
             errs.append(f"{type(e).__name__}: {e}")
     if any("CERTIFICATE_VERIFY_FAILED" in x or "certificate verify" in x.lower() for x in errs):
-        raise RuntimeError("Sertifikat HTTPS tidak dipercaya (sertifikat internal). Set Verifikasi TLS = Tidak lalu coba lagi.")
+        raise RuntimeError("The HTTPS certificate is not trusted (internal certificate). Set Verify TLS = No and try again.")
     last = errs[-1][:120] if errs else ""
-    raise RuntimeError("API Zabbix tidak ditemukan di " + ", ".join(candidates(base)) + f" ({last})")
+    raise RuntimeError("Zabbix API not found at " + ", ".join(candidates(base)) + f" ({last})")
 
 
 def rpc(cl: httpx.Client, url: str, method: str, params, token: str | None = None):
@@ -140,7 +140,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     c = src.config or {}
     token = vault.cred(db, "zabbix.token", c.get("token_env", "ZABBIX_TOKEN"))
     if not c.get("base_url") or not token:
-        raise RuntimeError("Base URL / API token Zabbix belum diatur (Admin → Sumber Data → Integrasi)")
+        raise RuntimeError("Zabbix Base URL / API token is not set (Admin → Data Sources → Integrations)")
     prefixes = c.get("group_prefixes") or list(LABEL)
     pats = [p.lower() for p in (c.get("down_patterns") or [])]
     tz = cfg.p("tz_offset_hours", 7)
@@ -150,7 +150,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         groups = rpc(cl, url, "hostgroup.get", {"output": ["groupid", "name"], "search": {"name": prefixes}, "searchByAny": True, "startSearch": True}, token)
         gids = [g["groupid"] for g in groups]
         if not gids:
-            raise RuntimeError("Tidak ada host group berawalan " + ", ".join(prefixes))
+            raise RuntimeError("No host group starting with " + ", ".join(prefixes))
         hosts = rpc(cl, url, "host.get", {"output": ["hostid", "host", "name", "status", "maintenance_status"], "groupids": gids,
                                           "selectHostGroups": ["groupid", "name"], "selectInterfaces": ["type", "available"]}, token)
         probs = rpc(cl, url, "problem.get", {"output": ["eventid", "name", "severity", "clock", "objectid", "suppressed"], "groupids": gids}, token)
@@ -185,7 +185,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         elif ps or h.get("maintenance_status") == "1":
             st, since, prob = "maintenance", None, (ps[0]["name"] if ps else None)
         elif any(i.get("available") == "2" for i in ifaces):
-            st, since, prob = ("down" if iface_down else "degraded"), None, "Interface tidak tersedia"
+            st, since, prob = ("down" if iface_down else "degraded"), None, "Interface unavailable"
         else:
             st, since, prob = "up", None, None
         zone, sub, dcode = parse_name(h["name"] or h["host"])
@@ -211,4 +211,4 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         evs = evs + [{"eventid": p["eventid"], "clock": p["clock"], "name": p["name"], "r_eventid": None, "hosts": [{"hostid": h} for h in trig_host.get(p["objectid"], ())]}
                      for p in probs if p["eventid"] not in have and str(p.get("suppressed")) == "0" and (not pats or any(x in p["name"].lower() for x in pats))]
     n_ev = save_history(db, cfg, src, rows, evs, rclock) if evs is not None else None
-    return len(rows), f"{len(rows)} perangkat dari {len(gids)} grup, {down} down" + (f", {n_ev} kejadian riwayat" if n_ev is not None else ", riwayat gagal diambil")
+    return len(rows), f"{len(rows)} devices from {len(gids)} groups, {down} down" + (f", {n_ev} history events" if n_ev is not None else ", history could not be fetched")
