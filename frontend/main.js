@@ -381,3 +381,21 @@ async function boot() {
   readHash(); render(true);
 }
 boot();
+
+/* If the server was rebuilt while this tab stayed open, offer a reload (otherwise the tab keeps running the old code). */
+let BUILD0 = null;
+async function checkBuild() {
+  try {
+    const r = await (await fetch("/api/public", {cache: "no-store"})).json();
+    if (!r.build) return;
+    if (BUILD0 === null) { BUILD0 = r.build; return; }
+    if (r.build !== BUILD0 && !document.getElementById("newver")) {
+      const d = document.createElement("div"); d.id = "newver";
+      d.innerHTML = "<span>A new version of TERA is available.</span><button type=\"button\">Reload</button>";
+      d.querySelector("button").onclick = () => location.reload();
+      document.body.appendChild(d);
+    }
+  } catch (e) { /* offline or logged out: try again later */ }
+}
+checkBuild(); setInterval(checkBuild, 120000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkBuild(); });
