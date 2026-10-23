@@ -89,7 +89,7 @@
  {"key": "ui.login_tagline", "label": "Sentence on the login page", "group": "tampilan", "editor": "text", "value": "Terminal Event, Response & Analytics. Pantau, tanggapi, analisis seluruh terminal dalam satu layar."},
  {"key": "ui.login_points", "label": "Points on the login page (one per line)", "group": "tampilan", "editor": "list", "value": ["Ticketing and SLA across all locations", "ISP link availability and traffic", "Threat events and firewall actions", "Excel, PDF, and PowerPoint reports"]},
  {"key": "ui.login_place", "label": "Photo location caption on the login page", "group": "tampilan", "editor": "text", "value": ""},
- {"key": "ui.login_eyebrow", "label": "Small text above the login page title", "group": "tampilan", "editor": "text", "value": "Pelindo Multi Terminal · IT Operation Center"},
+ {"key": "ui.login_eyebrow", "label": "Small text above the login page title", "group": "tampilan", "editor": "text", "value": "PT. Pelindo Multi Terminal · Divisi Teknologi Informasi"},
  {"key": "upload.soc_hint", "label": "Petunjuk unggah SOC", "group": "tampilan", "editor": "text", "value": "Before saving, the file is checked: the 'Impor SOC' sheet exists; the Time column reads as a date (Panorama export format Mon, Oct 14, 2026); periods do not overlap. Files that fail are not used in KPIs."},
  {"key": "admin.locked_pages", "label": "Admin pages visible to Super Admin only", "group": "keamanan", "editor": "list", "description": "Page keys. Set from Admin > System > Page Access", "value": ["pengguna", "roles", "apikeys", "integrasi", "smtp", "webhooks", "menu", "audit"]},
  {"key": "auth.min_password", "label": "Panjang password minimal", "group": "keamanan", "editor": "number", "ui": {"min": 8, "max": 64, "step": 1}, "value": 10}
