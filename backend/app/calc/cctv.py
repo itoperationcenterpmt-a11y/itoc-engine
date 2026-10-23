@@ -5,9 +5,15 @@ from ..models import CctvCamera, CctvHardware, DataSource
 from ..timeutil import ms
 
 
-def build(db, cfg) -> dict:
-    cams = db.query(CctvCamera).order_by(CctvCamera.server, CctvCamera.hardware, CctvCamera.channel, CctvCamera.name).all()
-    hws = db.query(CctvHardware).order_by(CctvHardware.cameras.desc(), CctvHardware.name).all()
+def build(db, cfg, server: str = "", hw_name: str = "", state: str = "") -> dict:
+    """Camera inventory. Filters: server, hardware name, and state (rec = recording centrally, norec = enabled but not recording, off = disabled)."""
+    all_cams = db.query(CctvCamera).order_by(CctvCamera.server, CctvCamera.hardware, CctvCamera.channel, CctvCamera.name).all()
+    all_hws = db.query(CctvHardware).order_by(CctvHardware.cameras.desc(), CctvHardware.name).all()
+    opts = {"servers": sorted({c.server for c in all_cams} | {h.server for h in all_hws}), "hardware": sorted({(h.server, h.name) for h in all_hws})}
+    opts["hardware"] = [{"server": s, "name": n} for s, n in opts["hardware"]]
+    ok = {"": lambda c: True, "rec": lambda c: c.recording, "norec": lambda c: c.enabled and not c.recording, "off": lambda c: not c.enabled}.get(state, lambda c: True)
+    cams = [c for c in all_cams if (not server or c.server == server) and (not hw_name or c.hardware == hw_name) and ok(c)]
+    hws = [h for h in all_hws if (not server or h.server == server) and (not hw_name or h.name == hw_name)]
     src = db.get(DataSource, "milestone")
     last = max((c.fetched_at for c in cams), default=None)
     every = (src.interval_min if src else 10) or 10
@@ -30,6 +36,6 @@ def build(db, cfg) -> dict:
     now = cfg.now()
     return {"configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled), "error": src.last_error if src else None,
             "total": len(cams), "camEnabled": sum(1 for c in cams if c.enabled), "recording": sum(1 for c in cams if c.recording), "noIp": sum(1 for c in cams if not c.ip),
-            "nHw": len(hws), "servers": [{**s, "updated": ms(s["updated"] + (now - datetime.utcnow())) if s["updated"] else None} for s in sv.values()], "hwOff": sum(1 for h in hws if not h.enabled), "hw": hw,
+            "opts": opts, "nHw": len(hws), "servers": [{**s, "updated": ms(s["updated"] + (now - datetime.utcnow())) if s["updated"] else None} for s in sv.values()], "hwOff": sum(1 for h in hws if not h.enabled), "hw": hw,
             "list": [{"name": c.name, "server": c.server, "hw": c.hardware or "-", "ip": c.ip or "", "ch": c.channel, "enabled": c.enabled, "rec": c.recording, "fps": c.fps or "", "mod": ms(c.modified_at)} for c in cams],
             "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": bool(last) and (datetime.utcnow() - last).total_seconds() > every * 60 * 3}

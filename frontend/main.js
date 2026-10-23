@@ -261,7 +261,7 @@ document.addEventListener("change", async e => {
   const t = e.target;
   if (t.id === "fFrom" || t.id === "fTo") { let f = $("fFrom").value, to = $("fTo").value; if (!f || !to) return; if (f > to) [f, to] = [to, f]; set({preset: "", from: f, to}); }
   else if (t.id === "fSite") set({site: t.value});
-  else if (t.id === "fGrp") set({grp: t.value});
+  else if (t.id === "fGrp") set(S.tab === "cctv" ? {grp: t.value, dtype: ""} : {grp: t.value});
   else if (t.id === "fTyp") set({dtype: t.value});
   else if (t.id === "fCmp") set({cmp: t.checked});
   else if (t.dataset.rkind) set({rkind: t.dataset.rkind});

@@ -105,8 +105,12 @@ function renderDuty() {
   const kinds = new Map(Object.entries(KL)); ((V.dev && V.dev.byKind) || []).forEach(k => kinds.set(k.key, KL[k.key] || k.k));
   const gl = ((V.dev && V.dev.groups) || []).filter(g => !S.kind || g.kind === S.kind);
   const WF = S.tab === "wifi" && V.wifi ? V.wifi.opts : null;
-  [["gKind", "Band", "Category"], ["gGrp", "SSID", "Group"], ["gTyp", "Zone", "Type"]].forEach(([id, w, d]) => { $(id).querySelector(".k").textContent = S.tab === "wifi" ? w : S.tab === "xdr" && id === "gKind" ? "Severity" : d; });
-  if (WF) {
+  [["gKind", "Band", "Category"], ["gGrp", "SSID", "Group"], ["gTyp", "Zone", "Type"]].forEach(([id, w, d]) => { $(id).querySelector(".k").textContent = S.tab === "wifi" ? w : S.tab === "xdr" && id === "gKind" ? "Severity" : S.tab === "cctv" ? {gGrp: "Server", gTyp: "Hardware"}[id] || d : d; });
+  const MS_ = S.tab === "cctv" && V.cctv ? V.cctv.opts : null;
+  if (MS_) {
+    $("fGrp").innerHTML = `<option value="">All servers</option>` + MS_.servers.map(z => `<option ${z === S.grp ? "selected" : ""}>${esc(z)}</option>`).join("");
+    $("fTyp").innerHTML = `<option value="">All hardware</option>` + MS_.hardware.filter(h => !S.grp || h.server === S.grp).map(h => `<option ${h.name === S.dtype ? "selected" : ""}>${esc(h.name)}</option>`).join("");
+  } else if (WF) {
     $("fTyp").innerHTML = `<option value="">All zones</option>` + WF.zones.map(z => `<option ${z === S.dtype ? "selected" : ""}>${esc(z)}</option>`).join("");
     $("fGrp").innerHTML = `<option value="">All SSIDs</option>` + WF.ssids.map(z => `<option ${z === S.grp ? "selected" : ""}>${esc(z)}</option>`).join("");
     $("fKind").innerHTML = [["", "All"], ["2.4 GHz", "2.4 GHz"], ["5 GHz", "5 GHz"], ["6 GHz", "6 GHz"]].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
@@ -116,7 +120,7 @@ function renderDuty() {
   $("fKind").innerHTML = [["", "All"], ...kinds].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
   }
   if (S.tab === "xdr") $("fKind").innerHTML = [["", "All"], ["critical", "Critical"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
-  $("fStat").innerHTML = SL.map(([k, l]) => `<button type="button" data-st="${k}" aria-pressed="${S.dstat === k}">${l}</button>`).join("");
+  $("fStat").innerHTML = (S.tab === "cctv" ? [["", "All"], ["rec", "Recording"], ["norec", "Not recording"], ["off", "Disabled"]] : SL).map(([k, l]) => `<button type="button" data-st="${k}" aria-pressed="${S.dstat === k}">${l}</button>`).join("");
   $("gKind").hidden = !ap.k; $("gStat").hidden = !ap.t; $("gGrp").hidden = !ap.g; $("gTyp").hidden = !ap.y;
   $("fwrap").hidden = !anyF;
   $("fbar").classList.toggle("off", !anyF);
