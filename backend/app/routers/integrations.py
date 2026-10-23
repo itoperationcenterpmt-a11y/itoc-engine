@@ -47,13 +47,13 @@ def _zbx_stats(db: Session):
     return {"total": sum(rows.values()), **{k: rows.get(k, 0) for k in ("up", "down", "maintenance", "disabled")}}
 
 
-def _milestone_servers(db: Session, c: dict) -> list[dict]:
+def _milestone_servers(db: Session, c: dict, errs: dict | None = None) -> list[dict]:
     """Configured Milestone servers with what was last synced for each."""
     from sqlalchemy import func
     cams = {k: (n, u) for k, n, u in db.query(CctvCamera.server, func.count(), func.max(CctvCamera.fetched_at)).group_by(CctvCamera.server)}
     hws = dict(db.query(CctvHardware.server, func.count()).group_by(CctvHardware.server).all())
-    lic = milestone.server_licenses(c)
-    return [{"name": n, "url": u, "enabled": on, "license": lic.get(n), "cameras": cams.get(n, (None, None))[0], "hardware": hws.get(n), "updated": cams[n][1].isoformat() if n in cams and cams[n][1] else None} for n, u, on in milestone.servers_all(c)]
+    lic, errs = milestone.server_licenses(c), errs or {}
+    return [{"name": n, "url": u, "enabled": on, "license": lic.get(n), "error": errs.get(n) if on else None, "cameras": cams.get(n, (None, None))[0], "hardware": hws.get(n), "updated": cams[n][1].isoformat() if n in cams and cams[n][1] else None} for n, u, on in milestone.servers_all(c)]
 
 
 @router.get("/integrations")
@@ -66,7 +66,7 @@ def integrations(db: Session = Depends(get_db)):
                      "api_capable": s.key in CREDS, "creds": _cred_state(db, s),
                      "extra": [{"key": k, "label": lb, "value": (s.config or {}).get(k) or []} for k, lb in EXTRA.get(s.key, [])],
                      "stats": _zbx_stats(db) if s.key == "zabbix" else None,
-                     "servers": _milestone_servers(db, s.config or {}) if s.key == "milestone" else None})
+                     "servers": _milestone_servers(db, s.config or {}, (s.cursor or {}).get("server_errors")) if s.key == "milestone" else None})
     return {"rows": rows}
 
 

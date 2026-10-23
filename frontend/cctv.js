@@ -8,13 +8,13 @@ function cctvPanels(C) {
   const off = C.total - C.camEnabled, norec = C.camEnabled - C.recording;
   return {
     kpi: () => `<section class="panel c4 dom"><header><h2>Milestone</h2></header><div class="mini">${kpi("Cameras", fmt(C.total), fmt(C.nHw) + " hardware")}${kpi("Enabled", frac(C.camEnabled, C.total), off ? fmt(off) + " disabled" : "", {cls: off ? "warnv" : ""})}${kpi("Recording Centrally", frac(C.recording, C.camEnabled), "")}${kpi("Recording On Site", fmt(norec), "")}</div>${go("cctv")}</section>`,
-    hw: () => panel("c8", "Hardware", fmt(C.nHw), tbl(["Server", "Hardware", "Address", "Model", "Type", "Devices", "Enabled", "Recording Centrally", "Online", "Status"],
+    hw: () => panel("c12", "Hardware", fmt(C.nHw), tbl(["Server", "Hardware", "Address", "Model", "Type", "Devices", "Enabled", "Recording Centrally", "Online", "Status"],
       C.hw.map(h => [h.server, h.name, h.host, h.model, {h: msType(h.type)}, h.cameras, frac(h.camEnabled, h.cameras), frac(h.rec, h.camEnabled), {h: !h.zn ? msDot("") : h.zdown ? msDot("down", h.zdown) : msDot("up")}, {h: h.enabled ? pill("good", "Active") : pill("idle", "Inactive")}]), {r: [5, 6, 7], empty: "No hardware yet."})),
     srv: () => panel("c12", "Milestone Servers", fmt(C.servers.length), 
       tbl(["Server", "Hardware", "Cameras", "Public Announcers", "Enabled", "Recording Centrally", "Licence", "Updated"],
         C.servers.map(s => [s.name, s.hw, s.cameras, s.pa, frac(s.enabled, s.cameras + s.pa), frac(s.rec, s.enabled),
-          {h: s.licTotal != null ? `<span class="${s.licUsed > s.licTotal ? "crit-t" : s.licUsed >= s.licTotal * 0.9 ? "warn-t" : ""}"><b>${fmt(s.licUsed)}</b>/${fmt(s.licTotal)}</span>` : fmt(s.licUsed)}, s.updated ? dtime(s.updated) : "-"]), {r: [1, 2, 3, 4, 5, 6], empty: "No servers yet."})),
-    rec: () => panel("c4", "Central Recording per Hardware", "", hbars(C.hw.filter(h => h.camEnabled).slice(0, 10).map(h => [h.name, h.rec, 0, frac(h.rec, h.camEnabled)])))
+          {h: s.licTotal != null ? `<span class="${s.licUsed > s.licTotal ? "crit-t" : s.licUsed >= s.licTotal * 0.9 ? "warn-t" : ""}"><b>${fmt(s.licUsed)}</b>/${fmt(s.licTotal)}</span>` : fmt(s.licUsed)}, s.updated ? {h: `<span class="nw">${dtime(s.updated)}</span>`} : "-"]), {r: [1, 2, 3, 4, 5, 6], empty: "No servers yet."})),
+    rec: () => panel("c12", "Central Recording per Hardware", "", hbars(C.hw.filter(h => h.camEnabled).slice(0, 10).map(h => [h.name, h.rec, 0, frac(h.rec, h.camEnabled)])))
   };
 }
 function vCctv() {
@@ -24,6 +24,7 @@ function vCctv() {
   const warns = [], off = C.total - C.camEnabled, norec = C.camEnabled - C.recording, over = C.servers.filter(s => s.licTotal != null && s.licUsed > s.licTotal);
   if (C.error) warns.push(`<li class="crit"><span><b>Milestone sync failed:</b> ${esc(C.error)}</span></li>`);
   else if (C.stale) warns.push(`<li class="warn"><span><b>Data not updated</b> since ${esc(dtime(C.updated))}. Check the Milestone connector.</span></li>`);
+  Object.entries(C.serverErrors || {}).forEach(([n, m]) => warns.push(`<li class="warn"><span><b>${esc(n)} did not sync:</b> ${esc(String(m).slice(0, 160))}</span></li>`));
   if (C.hwOff) warns.push(`<li class="warn"><span><b>${fmt(C.hwOff)} hardware disabled</b> in Milestone.</span></li>`);
   over.forEach(s => warns.push(`<li class="crit"><span><b>${esc(s.name)} uses ${fmt(s.licUsed)} licences</b>, more than the ${fmt(s.licTotal)} licensed.</span></li>`));
   const kp = `<div class="kpis k6">${kpi("Cameras", fmt(C.total), fmt(C.fix) + " FIX · " + fmt(C.ptz) + " PTZ")}${kpi("Enabled", frac(C.camEnabled, C.total), off ? fmt(off) + " disabled" : "", {cls: off ? "warnv" : ""})}${kpi("Recording Centrally", frac(C.recording, C.camEnabled), "")}${kpi("Recording On Site", fmt(norec), "")}${kpi("Zabbix Status", `<span class="ostv">${msDot("up", fmt(C.zbx.up + C.zbx.other))}${msDot("down", fmt(C.zbx.down))}${msDot("", fmt(C.zbx.none))}</span>`, "", {cls: C.zbx.down ? "warnv" : ""})}${kpi("Public Announcers", fmt(C.pa.total), C.pa.total ? frac(C.pa.enabled, C.pa.total) + " enabled" : "")}</div>`

@@ -14,7 +14,7 @@ const intOpt = (arr, cur) => arr.map(([v, l]) => `<option value="${esc(v)}" ${v 
 const msRow = x => `<div class="msrow"><input data-ms="name" type="text" placeholder="Name, e.g. Belawan" value="${esc(x.name || "")}" aria-label="Server name"><input data-ms="url" type="text" placeholder="https://10.181.3.1" value="${esc(x.url || "")}" aria-label="Server address" autocomplete="off">
   <label class="chk"><input data-ms="on" type="checkbox" ${x.enabled !== false ? "checked" : ""}> Active</label>
   <input data-ms="lic" type="number" min="0" max="100000" placeholder="Licences" value="${x.license != null ? esc(x.license) : ""}" aria-label="Licensed devices" title="Licensed devices on this server (optional)">
-  <span class="sub">${x.cameras != null ? fmt(x.cameras) + " cameras · " + fmt(x.hardware || 0) + " hardware · synced " + esc(intDt(x.updated)) : "not synced yet"}</span>
+  <span class="sub">${x.error ? `<b class="errtx">failed: ${esc(String(x.error).slice(0, 140))}</b>` : x.cameras != null ? fmt(x.cameras) + " cameras · " + fmt(x.hardware || 0) + " hardware · synced " + esc(intDt(x.updated)) : "not synced yet"}</span>
   <span class="acts"><button type="button" class="btn ghost sm" data-int="mstest" data-w>Test</button><button type="button" class="btn ghost sm" data-int="msdel">Remove</button></span></div>`;
 const msServers = s => `<div class="fld wide msrv"><label>Servers <span class="sub">The same Basic user account (below) is used on every server. Paused servers are skipped and their cameras leave the dashboard.</span></label>
   <div class="msrows" id="msRows">${(s.servers || []).map(msRow).join("") || msRow({})}</div><div class="acts"><button type="button" class="btn ghost sm" data-int="msadd">+ Add server</button></div></div>`;
@@ -38,7 +38,7 @@ function vIntegrations() {
         <div class="acts wide"><button class="btn" type="submit" data-w>Save</button><button class="btn ghost" type="button" data-int="test" data-key="${esc(s.key)}" data-w>Test connection</button><button class="btn ghost" type="button" data-int="sync" data-key="${esc(s.key)}" data-w>Sync now</button></div></form>`
       : `<p class="sub">This source has no API. Data comes in through RAW upload in Report → Data.</p>`;
     const tone = s.last_error ? "crit" : !s.enabled ? "idle" : s.last_ok_at ? "good" : "warn";
-    const sum = s.servers ? s.servers.length + " servers · " + fmt(s.servers.reduce((a, x) => a + (x.cameras || 0), 0)) + " cameras" : s.stats ? fmt(s.stats.total) + " devices · " + fmt(s.stats.down) + " down" : "";
+    const bad = s.servers ? s.servers.filter(x => x.error).length : 0, sum = s.servers ? s.servers.length + " servers · " + fmt(s.servers.reduce((a, x) => a + (x.cameras || 0), 0)) + " cameras" + (bad ? " · " + bad + " failing" : "") : s.stats ? fmt(s.stats.total) + " devices · " + fmt(s.stats.down) + " down" : "";
     return `<details class="icard isrc" data-isrc="${esc(s.key)}" ${INT.open && INT.open.has(s.key) ? "open" : ""}><summary><span class="idot ${tone}"></span><b>${esc(s.label)}</b><span class="tag ${s.enabled ? "on" : ""}">${s.enabled ? "Active" : "Inactive"}</span><span class="tag">${s.mode === "api" ? "API" : "Import"}</span>
       <span class="sub isum">${s.last_error ? `<b class="errtx">error: ${esc(String(s.last_error).slice(0, 70))}</b>` : s.last_ok_at ? "synced " + esc(intDt(s.last_ok_at)) : "never synced"}${sum ? " · " + sum : ""}</span><span class="cfg">Configure</span></summary>
       <span class="sub">${esc(s.tip || "")}</span>

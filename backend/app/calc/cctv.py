@@ -84,7 +84,7 @@ def build(db, cfg, server: str = "", hw_name: str = "", state: str = "", kind: s
     return {"configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled), "error": src.last_error if src else None,
             "total": len(cam_only), "ptz": sum(1 for c in cam_only if typ[c.id] == "ptz"), "fix": sum(1 for c in cam_only if typ[c.id] == "fix"), "camEnabled": sum(1 for c in cam_only if c.enabled), "recording": sum(1 for c in cam_only if c.recording), "noIp": sum(1 for c in cams if not c.ip),
             "pa": {"total": len(pa_only), "enabled": sum(1 for c in pa_only if c.enabled), "down": sum(1 for c in pa_only if z(c) == "down")},
-            "opts": opts, "zbx": {"matched": sum(1 for c in cam_only if z(c)), "up": sum(1 for c in cam_only if z(c) == "up"), "down": sum(1 for c in cam_only if z(c) == "down"),
+            "serverErrors": ((src.cursor or {}).get("server_errors") or {}) if src else {}, "opts": opts, "zbx": {"matched": sum(1 for c in cam_only if z(c)), "up": sum(1 for c in cam_only if z(c) == "up"), "down": sum(1 for c in cam_only if z(c) == "down"),
                                   "other": sum(1 for c in cam_only if z(c) in ("maintenance", "disabled", "degraded")), "none": sum(1 for c in cam_only if not z(c))},
             "nHw": len(hws), "servers": [{**s, "updated": ms(s["updated"] + (now - datetime.utcnow())) if s["updated"] else None} for s in sv.values()], "hwOff": sum(1 for h in hws if not h.enabled), "hw": hw,
             "list": [{"name": c.name, "server": c.server, "hw": c.hardware or "-", "ip": c.ip or "", "ch": c.channel, "enabled": c.enabled, "rec": c.recording, "fps": c.fps or "", "type": typ[c.id],

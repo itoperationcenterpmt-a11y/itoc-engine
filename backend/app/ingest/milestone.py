@@ -149,7 +149,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
             with httpx.Client(timeout=c.get("timeout_s", 60), verify=c.get("verify_tls", False), follow_redirects=False) as cl:
                 crow, hrow, nrec = fetch_server(cl, url, user, pw, name, tz)
         except (RuntimeError, httpx.HTTPError, ValueError, KeyError) as e:
-            fails.append(f"{name}: {str(e)[:100]}")
+            fails.append(f"{name}: {str(e)[:220]}")
             continue
         now = datetime.utcnow()
         for model, rows in ((CctvHardware, hrow), (CctvCamera, crow)):
@@ -159,10 +159,16 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
             db.query(model).filter(model.server == name, model.fetched_at < now - timedelta(seconds=1)).delete(synchronize_session=False)   # yang sudah dihapus di Milestone ikut hilang
         db.commit()
         total += len(crow)
-        parts.append(f"{name}: {len(crow)} kamera, {len(hrow)} hardware")
+        parts.append(f"{name}: {len(crow)} cameras, {len(hrow)} hardware")
     names = [n for n, _ in srv]
     for model in (CctvHardware, CctvCamera):                       # servers that were removed or paused no longer count
         db.query(model).filter(model.server.notin_(names)).delete(synchronize_session=False)
+    db.commit()
+    errs = {}
+    for f in fails:
+        n, _, m = f.partition(": ")
+        errs[n] = m
+    src.cursor = {**(src.cursor or {}), "server_errors": errs}      # shown per server in Integrations and on the Milestone page
     db.commit()
     if fails and not parts:
         raise RuntimeError("All servers failed. " + "; ".join(fails))
