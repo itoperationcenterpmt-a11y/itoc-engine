@@ -18,16 +18,27 @@ function insCard(r, o = {}) {
     <span class="sub">${r.site ? esc(r.site) + " · " : ""}${esc(INS_KIND[r.kind] || r.kind)} · first seen ${esc(dtime(r.first))} · last ${esc(dtime(r.last))}${r.ackBy ? " · by " + esc(r.ackBy) : ""}${r.reason ? " · reason: " + esc(r.reason) : ""}${r.until && r.status === "dismissed" ? " · hidden until " + esc(dtime(r.until)) : ""}</span>
     ${dis ? `<div class="insdis"><select id="insDays" aria-label="Hide for"><option value="7">Hide for 7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="90">90 days</option></select><input id="insWhy" type="text" placeholder="Reason (optional)" maxlength="200"><button type="button" class="btn sm" data-ins-dis-ok="${r.id}">Confirm</button><button type="button" class="btn ghost sm" data-ins-dis-x>Cancel</button></div>` : `<div class="acts">${acts}</div>`}</article>`;
 }
-function insightPanel(I, n = 5, size = "c12") {
-  const rows = I.open.slice(0, n);
-  return panel(size, "Insights", I.open.length + " active findings · calculated automatically from stored data", rows.length ? `<ul class="att">${rows.map(r => `<li class="${r.sev === "crit" ? "crit" : r.sev === "warn" ? "warn" : ""}"><span><b>${esc(r.title)}</b> ${esc(r.detail)}</span>${go("insight", "View")}</li>`).join("")}</ul>${I.open.length > n ? go("insight", "All insights") : ""}` : `<div class="empty sm">No active findings.</div>`);
+function insightPanel(I, n = 5, size = "c12", kinds = null) {
+  const all = kinds ? I.open.filter(r => kinds.includes(r.kind)) : I.open, rows = all.slice(0, n);
+  return panel(size, "Insights", all.length + " active findings · calculated automatically from stored data", rows.length ? `<ul class="att">${rows.map(r => `<li class="${r.sev === "crit" ? "crit" : r.sev === "warn" ? "warn" : ""}"><span><b>${esc(r.title)}</b> ${esc(r.detail)}</span>${go("insight", "View")}</li>`).join("")}</ul>${all.length > n ? go("insight", "All insights") : ""}` : `<div class="empty sm">No active findings.</div>`);
+}
+/* Insights for one area, shown on its own page (Ticketing, Network, Cyber Security, Devices, ...). Hidden when the area has no active findings. */
+const INS_AREA = {servicedesk: ["tickets"], network: ["links", "capacity", "wifi", "correlation"], noc: ["links", "capacity", "correlation"], wifi: ["wifi"], cyber: ["security"], soc: ["security"], xdr: ["security"],
+  devices: ["devices"], devnet: ["devices"], devcctv: ["devices"], devops: ["devices"]};
+function insArea(tab = S.tab) {
+  const I = V.insight, kinds = INS_AREA[tab];
+  return I && kinds && I.open.some(r => kinds.includes(r.kind)) ? `<div class="grid">${insightPanel(I, 4, "c12", kinds)}</div>` : "";
+}
+async function insSum() {
+  const sc = S.sumScope || "24h", q = "scope=" + sc + (S.sumDay && sc !== "24h" ? "&day=" + S.sumDay : "");
+  try { const x = await api("/api/insights/summary?" + q); set({sumText: x.text}); } catch (er) { alert(er.message); }
 }
 const insBar = v => `<span class="hbar"><i style="width:${Math.max(2, v)}%;background:var(${v >= 80 ? "--good" : v >= 60 ? "--warn" : "--crit"})"></i></span>`;
 function vInsight() {
   const I = V.insight, grid = h => `<div class="grid">${h}</div>`;
   if (!I) return subnav("report") + grid(`<section class="panel c12">${empty()}</section>`);
   const c = I.counts, tab = S.insTab || "findings", tabs = [["findings", "Findings (" + I.open.length + ")"], ["rankings", "Rankings"], ["health", "Location Health"], ["summary", "Shift Summary"], ["history", "History"]];
-  const kp = `<div class="kpis k6">${kpi("Critical", fmt(c.crit), "need action now", {cls: c.crit ? "warnv" : ""})}${kpi("Warning", fmt(c.warn), "need checking", {cls: c.warn ? "warnv" : ""})}${kpi("Info", fmt(c.info), "good to know")}${kpi("New", fmt(I.new), "not yet read")}${kpi("Dismissed", fmt((I.dismissed || []).length), "hidden for now")}${kpi("Last analysis", I.updated ? dtime(I.updated) : "-", "runs every 30 min")}</div>`;
+  const kp = `<div class="kpis k6">${kpi("Critical", fmt(c.crit), "need action now", {cls: c.crit ? "warnv" : ""})}${kpi("Warning", fmt(c.warn), "need checking", {cls: c.warn ? "warnv" : ""})}${kpi("Info", fmt(c.info), "good to know")}${kpi("New", fmt(I.new), "not yet read")}${kpi("Dismissed", fmt((I.dismissed || []).length), "hidden for now")}${kpi("Last analysis", I.updated ? hm(I.updated) : "-", (I.updated ? dtime(I.updated).replace(/, \d\d:\d\d$/, "") + " · " : "") + "runs every 30 min")}</div>`;
   const nav = `<div class="seg insnav">${tabs.map(([k, l]) => `<button type="button" data-ins-tab="${k}" aria-pressed="${k === tab}">${esc(l)}</button>`).join("")}</div>`;
   let body = "";
   if (tab === "findings") {
@@ -44,7 +55,11 @@ function vInsight() {
     body = `<p class="sub">Score 0 to 100 per location: link availability 45%, device availability 35%, ticket load 20% (open tickets past SLA). Lowest first. Links use the last 7 days; devices and tickets use the current state.</p>` +
       tbl(["Location", "Health", "Score", "Link availability", "Devices down", "Tickets past SLA"], H.map(x => [x.site, {h: insBar(x.score)}, x.score, x.link == null ? "–" : pc(x.link, 2), x.devTotal ? x.devDown + " / " + x.devTotal : "–", x.overdue]), {r: [2, 3, 4, 5], tall: true, empty: "No location data yet."});
   } else if (tab === "summary") {
-    body = `<p class="sub">Plain text built from stored numbers for the last 24 hours, ready to paste into the shift report or WhatsApp. No AI: every figure comes from the database.</p><pre class="sumtxt" id="sumTxt">${esc(I.summary)}</pre><div class="acts"><button type="button" class="btn" data-ins-copy>Copy text</button><button type="button" class="btn ghost" data-ins-refresh>Regenerate</button></div>`;
+    const sc = S.sumScope || "24h", wins = I.windows || [];
+    body = `<p class="sub">Plain text built from stored numbers, ready to paste into the shift report or WhatsApp (Indonesian, with English technical terms). No AI: every figure comes from the database.</p>
+      <div class="insbar"><label class="sub">Period <select id="sumScope" aria-label="Summary period">${wins.map(w => `<option value="${esc(w.key)}" ${w.key === sc ? "selected" : ""}>${esc(w.label)}</option>`).join("")}</select></label>
+      ${sc === "24h" ? "" : `<label class="sub">Date <input type="date" id="sumDay" value="${esc(S.sumDay || nowShift().today)}" max="${esc(nowShift().today)}" min="${esc(CFG.params.data_start)}"></label>`}</div>
+      <pre class="sumtxt" id="sumTxt">${esc(S.sumText || I.summary)}</pre><div class="acts"><button type="button" class="btn" data-ins-copy>Copy text</button><button type="button" class="btn ghost" data-ins-refresh>Regenerate</button></div>`;
   } else {
     const st = Object.entries(I.stats || {}).sort((a, b) => b[1].total - a[1].total);
     body = `<div class="grid" style="padding:0">${panel("c12", "Resolved in the last 14 days", "", I.done.length ? tbl(["Resolved", "Finding", "Detail"], I.done.map(r => [dtime(r.resolved), r.title, r.detail]), {tall: true}) : `<div class="empty sm">Nothing resolved yet.</div>`)}
@@ -67,7 +82,10 @@ document.addEventListener("click", async e => {
     else if ($re) { $re.disabled = true; await send("/api/insights/" + $re.dataset.insReopen + "/reopen", {}); refresh({msg: "Finding reopened."}, true); }
     else if ($h) { $h.disabled = true; await send("/api/insights/" + $h.dataset.insHo + "/handover", {}); refresh({msg: "Handover created. The next shift will see it."}, true); }
     else if ($run) { $run.disabled = true; $run.textContent = "Analyzing…"; const x = await send("/api/insights/run", {}); refresh({msg: x.msg || "Analysis finished."}, true); }
-    else if ($rf) refresh();
+    else if ($rf) insSum();
     else if ($c) { const t = $("sumTxt").textContent; try { await navigator.clipboard.writeText(t); $c.textContent = "Copied"; } catch (er) { const r = document.createRange(); r.selectNode($("sumTxt")); getSelection().removeAllRanges(); getSelection().addRange(r); $c.textContent = "Selected, press Ctrl+C"; } }
   } catch (er) { if (er) alert(er.message); }
+});
+document.addEventListener("change", e => {
+  if (e.target.id === "sumScope" || e.target.id === "sumDay") { S.sumScope = $("sumScope").value; S.sumDay = $("sumDay") ? $("sumDay").value : ""; insSum(); }
 });

@@ -3,7 +3,7 @@
 function cctvPanels(C) {
   const off = C.total - C.camEnabled, norec = C.camEnabled - C.recording;
   return {
-    kpi: () => `<section class="panel c4 dom"><header><h2>CCTV</h2></header><div class="mini">${kpi("Cameras", fmt(C.total), fmt(C.nHw) + " hardware")}${kpi("Enabled", fmt(C.camEnabled), fmt(off) + " disabled", {cls: off ? "warnv" : ""})}${kpi("Recording Centrally", fmt(C.recording), "recording active on this server")}${kpi("Recording On Site", fmt(norec), "not recording on the central server")}</div>${go("cctv")}</section>`,
+    kpi: () => `<section class="panel c4 dom"><header><h2>Milestone</h2></header><div class="mini">${kpi("Cameras", fmt(C.total), fmt(C.nHw) + " hardware")}${kpi("Enabled", fmt(C.camEnabled), fmt(off) + " disabled", {cls: off ? "warnv" : ""})}${kpi("Recording Centrally", fmt(C.recording), "recording active on this server")}${kpi("Recording On Site", fmt(norec), "not recording on the central server")}</div>${go("cctv")}</section>`,
     hw: () => panel("c8", "Cameras per Hardware", fmt(C.nHw) + " hardware (NVR/interconnect) · most at the top", tbl(["Server", "Hardware", "Address", "Model", "Cameras", "Enabled", "Recording Centrally", "Status"],
       C.hw.map(h => [h.server, h.name, h.host, h.model, h.cameras, h.camEnabled, h.rec, {h: h.enabled ? pill("good", "Active") : pill("idle", "Inactive")}]), {r: [4, 5, 6], empty: "No hardware yet."})),
     srv: () => panel("c12", "Server Milestone", fmt(C.servers.length) + " server", tbl(["Server", "Hardware", "Cameras", "Enabled", "Recording Centrally", "Updated"], C.servers.map(s => [s.name, s.hw, s.cameras, s.enabled, s.rec, s.updated ? dtime(s.updated) : "-"]), {r: [1, 2, 3, 4], empty: "No servers yet."})),
@@ -13,7 +13,7 @@ function cctvPanels(C) {
 function vCctv() {
   const C = V.cctv, grid = h => `<div class="grid">${h}</div>`;
   if (!C) return grid(`<section class="panel c12">${empty()}</section>`);
-  if (!C.configured || !C.total) return grid(panel("c12", "CCTV", "", `<div class="empty"><b>No CCTV data yet</b><span>${C.error ? "Last sync failed: " + esc(C.error) : "Enter the Milestone Basic user account in Admin → Integrations → Milestone XProtect (CCTV), enable it, then click Sync now."}</span></div>`));
+  if (!C.configured || !C.total) return grid(panel("c12", "Milestone", "", `<div class="empty"><b>No CCTV data yet</b><span>${C.error ? "Last sync failed: " + esc(C.error) : "Enter the Milestone Basic user account in Admin → Integrations → Milestone XProtect (CCTV), enable it, then click Sync now."}</span></div>`));
   const warns = [], off = C.total - C.camEnabled, norec = C.camEnabled - C.recording;
   if (C.error) warns.push(`<li class="crit"><span><b>Milestone sync failed:</b> ${esc(C.error)}</span></li>`);
   else if (C.stale) warns.push(`<li class="warn"><span><b>Data not updated</b> since ${esc(dtime(C.updated))}. Check the Milestone connector.</span></li>`);

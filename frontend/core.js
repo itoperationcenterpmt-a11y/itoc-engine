@@ -15,8 +15,9 @@ let CFG = null, V = {}, PAR, MB = [], HR = [], TABS = [], APPLY = {}, PRESETS = 
 const dmon = s => { const d = new Date(dayMs(s)); return d.getUTCDate() + " " + MB[d.getUTCMonth()]; };
 const dfull = s => { const d = new Date(dayMs(s)); return d.getUTCDate() + " " + MB[d.getUTCMonth()] + " " + d.getUTCFullYear(); };
 const dlong = s => { const d = new Date(dayMs(s)); return HR[d.getUTCDay()] + ", " + d.getUTCDate() + " " + MB[d.getUTCMonth()] + " " + d.getUTCFullYear(); };
-const dtime = ms => { if (ms == null) return "–"; const d = new Date(ms); return d.getUTCDate() + " " + MB[d.getUTCMonth()] + " " + pad(d.getUTCHours()) + "." + pad(d.getUTCMinutes()); };
-const hm = ms => { const d = new Date(ms); return pad(d.getUTCHours()) + "." + pad(d.getUTCMinutes()); };
+const DEVTAB = t => t === "devices" || t in (CFG.params["dev.tab_kinds"] || {});   // Devices summary and its Network / CCTV / Operational sub-menus
+const dtime = ms => { if (ms == null) return "–"; const d = new Date(ms); return d.getUTCDate() + " " + MB[d.getUTCMonth()] + " " + d.getUTCFullYear() + ", " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()); };
+const hm = ms => { const d = new Date(ms); return pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()); };
 
 /* ---------- API ---------- */
 /* Session = HttpOnly cookie from the server (not readable by JavaScript). The X-Requested-With header is required for data changes (CSRF protection). */

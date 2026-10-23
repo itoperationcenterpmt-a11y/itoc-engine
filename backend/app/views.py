@@ -107,7 +107,8 @@ def _open_tickets(db, cfg, site, limit=None, older_than_days=None):
     return [{"id": t.id, "subject": t.subject, "site": t.site, "age": (now - t.created_at).total_seconds() / 86400} for t in db.scalars(q)]
 
 
-# ---------------- bundel per halaman ----------------
+# ---------------- page bundles ----------------
+INSIGHT_TABS = ("ringkasan", "servicedesk", "network", "noc", "wifi", "cyber", "soc", "xdr", "devices", "devnet", "devcctv", "devops", "cctv")   # pages that show an Insights panel for their own area
 def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
     V: dict = {}
     ok = lambda k: tab == k or can_see(user, k)  # Ringkasan hanya memuat bagian yang boleh dilihat role ini (mis. IT Care/EOS tanpa SOC)
@@ -131,13 +132,16 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
             if st:
                 q = q.where(M.Handover.site == st)
             V["ho_open"] = [ho_json(h) for h in db.scalars(q.order_by(M.Handover.created_at.desc()))]
-    if tab == "devices" or (tab == "ringkasan" and ok("devices")):
-        V["dev"] = DEV.build(db, cfg, st, f.kind, f.dstat, full=(tab == "devices"), grp=f.grp, dtype=f.dtype)
-        if tab == "devices":
-            V["dev"]["hist"] = DEV.history(db, cfg, f.d_from, f.d_to, st, f.kind, f.dtype)
+    tab_kinds = cfg.p("dev.tab_kinds", {}) or {}
+    dev_tab = tab == "devices" or tab in tab_kinds                      # Summary plus the Network / CCTV / Operational sub-menus (one Zabbix category each)
+    dkind = tab_kinds.get(tab) or f.kind
+    if dev_tab or (tab == "ringkasan" and ok("devices")):
+        V["dev"] = DEV.build(db, cfg, st, dkind, f.dstat, full=dev_tab, grp=f.grp, dtype=f.dtype)
+        if dev_tab:
+            V["dev"]["hist"] = DEV.history(db, cfg, f.d_from, f.d_to, st, dkind, f.dtype)
     if tab == "xdr" or (tab in ("ringkasan", "cyber") and ok("xdr")):
         V["xdr"] = XDR.build(db, cfg, a, b, f.kind if tab == "xdr" and f.kind in XDR.SEV else "")
-    if tab == "insight" or (tab == "ringkasan" and ok("insight")):
+    if tab == "insight" or (tab in INSIGHT_TABS and ok("insight")):
         V["insight"] = INSIGHT.build(db, cfg, full=tab == "insight")
     if tab == "cctv" or (tab == "ringkasan" and ok("cctv")):
         V["cctv"] = CCTV.build(db, cfg)

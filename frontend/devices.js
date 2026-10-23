@@ -79,7 +79,7 @@ function devHist(H) {
 function vDevices() {
   const D = V.dev, grid = h => `<div class="grid">${h}</div>`;
   if (!D) return grid(`<section class="panel c12">${empty()}</section>`);
-  const A = D.all;
+  const A = D.all, kt = S.tab !== "devices";
   if (!D.configured || !(A.total || D.byKind.length)) return grid(panel("c12", "Devices", "", `<div class="empty"><b>No device data yet</b><span>${D.error ? "Last sync failed: " + esc(D.error) : "Enter the Zabbix URL and token in Admin → Integrations → Zabbix, enable it, then click Sync now."}</span></div>`));
   const warns = [];
   if (D.error) warns.push(`<li class="crit"><span><b>Zabbix sync failed:</b> ${esc(D.error)}</span></li>`);
@@ -91,11 +91,11 @@ function vDevices() {
   const locs = D.byLoc.map(r => [r.k, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, r.deg || 0, r.maint, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}, {h: stBar(r)}]);
   const downByLoc = D.byLoc.filter(r => r.down).slice(0, 12).map(r => [r.k, r.down, 0, r.down + " / " + r.total]);
   const rows = D.list.map(x => [x.name, x.typeLabel, x.loc, {h: devPill(x.status)}, x.since ? dtime(x.since) : "-", {h: `<span class="${x.ageH != null && x.ageH > 24 ? "crit-t" : ""}">${durTxt(x.ageH)}</span>`}, x.problem]);
-  return (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
-    panel("c7", "Site Map", D.map.length + " locations", mapLegend() + mapSvg(D)) +
-    panel("c5", "Status by Category", "Updated " + dtime(D.updated), devLegend() + kinds) +
+  return insArea() + (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
+    panel(kt ? "c8" : "c7", "Site Map", D.map.length + " locations", mapLegend() + mapSvg(D)) +
+    (kt ? "" : panel("c5", "Status by Category", "Updated " + dtime(D.updated), devLegend() + kinds)) +
     panel("c4", "Down Duration", D.downN + " devices down", hbars(D.ageDist.map(x => [x.k, x.n, 0, fmt(x.n)]))) +
-    panel("c8", "Down by Location", "devices down / total", hbars(downByLoc)) +
+    panel(kt ? "c12" : "c8", "Down by Location", "devices down / total", hbars(downByLoc)) +
     panel("c12", "By Device Type", D.byType.length + " types", tbl(["Type", "Code", "Devices", "Down", "Interface", "Availability", "Status"], D.byType.map(r => [r.k, r.code === "-" ? "-" : r.code, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, r.deg || 0, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}, {h: stBar(r)}]), {r: [2, 3, 4, 5], tall: true, empty: "No data yet."})) +
     panel("c12", "Per Location", D.byLoc.length + " locations", tbl(["Location", "Devices", "Down", "Interface", "Maintenance", "Availability", "Status"], locs, {r: [1, 2, 3, 4, 5], tall: true, empty: "No data yet."})) +
     panel("c12", "Device List", D.listN + " devices" + (D.listN > D.list.length ? ", showing " + D.list.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Search name, location, or problem" aria-label="Search devices"><span class="sub">Location, category, and status filters are in the top filter bar</span></div><div id="dlist">${tbl(["Device", "Type", "Location", "Status", "Down since", "Duration", "Problem"], rows, {tall: true, empty: "No devices for this filter."})}</div>`)) + (D.hist ? grid(devHist(D.hist)) : "");

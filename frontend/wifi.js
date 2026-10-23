@@ -20,7 +20,7 @@ async function wifiKill(mac, mode) {
 }
 /* WiFi panels used by the WiFi Users page, Overview (widget catalog), and catalog widgets. */
 function wifiPanels(W) {
-  const hh = t => { const d = new Date(t); return {label: pad(d.getUTCHours()) + "." + pad(d.getUTCMinutes()), full: dtime(t)}; };
+  const hh = t => { const d = new Date(t); return {label: pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()), full: dtime(t)}; };
   const hb = (a, f) => hbars(a.map(x => [x.k, x.n, 0, f ? f(x) : fmt(x.n)]));
   return {
     kpi: () => `<section class="panel c4 dom"><header><h2>WiFi Users</h2></header><div class="mini">${kpi("Active Clients", fmt(W.total), "connected now")}${kpi("Access Point", W.apTotal ? fmt(W.apOnline) + " / " + fmt(W.apTotal) : "-", "online", {cls: W.apTotal && W.apOnline < W.apTotal ? "warnv" : ""})}${kpi("Weak Signal", fmt(W.weak), "below " + W.weakAt + " dBm", {cls: W.weak ? "warnv" : ""})}${kpi("Usage", wBytes(W.tx + W.rx), "running sessions")}</div>${go("wifi")}</section>`,
@@ -69,7 +69,7 @@ function wifiHist(W) {
     .concat(W.canKill ? [{h: `<button type="button" class="btn ghost sm" data-wkill="${esc(x.mac)}" data-mode="disconnect" title="Disconnect this client's session">Disconnect</button> <button type="button" class="btn ghost sm" data-wkill="${esc(x.mac)}" data-mode="deauth" title="Deauth: remove the authorization state (the portal asks for login again)">Deauth</button>`}] : []));
   const heads = ["Username", "Host", "MAC", "IP", "SSID", "AP", "Zone", "Location", "Band", "Signal", "Connected since", "Download", "Upload"].concat(W.canKill ? ["Action"] : []);
   const L = W.list;
-  return (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
+  return insArea("wifi") + (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
     P.portal() + P.trend() + P.band() + P.ssid() + P.usage() + P.ap() + P.zone() + P.loc() + P.top() + P.apdown() +
     panel("c12", "Client List", W.total + " clients" + (W.total > L.length ? ", showing " + L.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Search username, host, MAC, IP, SSID, or AP" aria-label="Search clients">${wSel("wfSsid", "All SSIDs", L.map(x => x.ssid))}${wSel("wfAp", "All APs", L.map(x => x.ap))}${wSel("wfZone", "All zones", L.map(x => x.zone))}${wSel("wfBand", "All bands", L.map(x => x.band))}<span class="sub">${W.canKill ? "Disconnect ends the session; Deauth makes the client log in again" : "Your account can only view"}</span></div><div id="dlist">${tbl(heads, rows, {tall: true, empty: "No active clients."})}</div>`)) + (W.hist ? wifiHist(W) : "");
 }

@@ -6,7 +6,7 @@ and a location health score. Every finding carries its numbers and comparison. F
 longer appears is closed automatically. A dismissed finding stays hidden for the chosen number of days."""
 import statistics
 from datetime import date, datetime, timedelta
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 from . import models as M
 from .store import Config
@@ -488,30 +488,88 @@ def site_health(db: Session, cfg: Config) -> list[dict]:
     return sorted(out, key=lambda r: r["score"])
 
 
-def shift_summary(db: Session, cfg: Config, top: list[dict]) -> str:
-    """Plain text summary of the last 24 hours for the shift handover (WhatsApp friendly). Every number comes from stored data."""
+MONTHS_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+
+
+def _dt(d: datetime) -> str:
+    return f"{d.day} {MONTHS_ID[d.month - 1]} {d:%H:%M}"
+
+
+def summary_windows(cfg: Config) -> list[dict]:
+    """Choices for the shift summary: last 24 hours, full day, two half days, and one entry per shift."""
+    out = [{"key": "24h", "label": "Last 24 hours"}, {"key": "day", "label": "Full day (00:00–24:00)"}, {"key": "half1", "label": "First half (00:00–12:00)"}, {"key": "half2", "label": "Second half (12:00–24:00)"}]
+    sh = sorted(cfg.shifts, key=lambda s: s["start"])
+    for i, s in enumerate(sh):
+        end = sh[(i + 1) % len(sh)]["start"]
+        out.append({"key": f"s{s['no']}", "label": f"Shift {s['name']} ({s['start']:02d}:00–{end:02d}:00)"})
+    return out
+
+
+def _window(cfg: Config, scope: str, day: date | None) -> tuple[datetime, datetime, str]:
     now = cfg.now()
-    a = now - timedelta(hours=24)
-    n_in = db.scalar(select(func.count()).select_from(M.Ticket).where(M.Ticket.created_at >= a)) or 0
-    n_done = db.scalar(select(func.count()).select_from(M.Ticket).where(M.Ticket.resolved_at >= a)) or 0
+    d = day or now.date()
+    mid = datetime(d.year, d.month, d.day)
+    if scope == "day":
+        return mid, mid + timedelta(days=1), f"Hari penuh {d.day} {MONTHS_ID[d.month - 1]} {d.year}"
+    if scope == "half1":
+        return mid, mid + timedelta(hours=12), f"Setengah hari pertama, {d.day} {MONTHS_ID[d.month - 1]} (00.00–12.00)"
+    if scope == "half2":
+        return mid + timedelta(hours=12), mid + timedelta(days=1), f"Setengah hari kedua, {d.day} {MONTHS_ID[d.month - 1]} (12.00–24.00)"
+    if scope.startswith("s") and scope[1:].isdigit():
+        sh = sorted(cfg.shifts, key=lambda s: s["start"])
+        for i, s in enumerate(sh):
+            if str(s["no"]) == scope[1:]:
+                end = sh[(i + 1) % len(sh)]["start"]
+                a = mid + timedelta(hours=s["start"])
+                b = mid + timedelta(hours=end) if end > s["start"] else mid + timedelta(days=1, hours=end)
+                return a, b, f"Shift {s['name']}, {d.day} {MONTHS_ID[d.month - 1]} ({s['start']:02d}.00–{end:02d}.00)"
+    return now - timedelta(hours=24), now, "24 jam terakhir"
+
+
+def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope: str = "24h", day: date | None = None) -> str:
+    """Plain-text summary for the shift handover (WhatsApp friendly, Indonesian with English technical terms). Every number comes from stored data."""
+    now = cfg.now()
+    a, b, label = _window(cfg, scope, day)
+    end = min(b, now)
+    if a >= now:
+        return f"*Ringkasan Shift ITOC* ({label})\n\nPeriode ini belum dimulai, belum ada data."
+    live = b > now                                              # window still running: "open now" is meaningful
+    tk = lambda col: db.scalar(select(func.count()).select_from(M.Ticket).where(col >= a, col < end)) or 0
+    n_in, n_done = tk(M.Ticket.created_at), tk(M.Ticket.resolved_at)
     n_open = db.scalar(select(func.count()).select_from(M.Ticket).where(M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED))) or 0
-    link_rows = db.execute(select(M.PrtgHourly.sensor_id, func.sum(M.PrtgHourly.down_s)).where(M.PrtgHourly.ts >= a).group_by(M.PrtgHourly.sensor_id).having(func.sum(M.PrtgHourly.down_s) >= 1800).order_by(func.sum(M.PrtgHourly.down_s).desc()).limit(5)).all()
+    old_days = cfg.p("sd.open_alert_days", 3)
+    n_old = db.scalar(select(func.count()).select_from(M.Ticket).where(M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED), M.Ticket.created_at < now - timedelta(days=old_days))) or 0
+    link_rows = db.execute(select(M.PrtgHourly.sensor_id, func.sum(M.PrtgHourly.down_s)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end).group_by(M.PrtgHourly.sensor_id).having(func.sum(M.PrtgHourly.down_s) >= 1800).order_by(func.sum(M.PrtgHourly.down_s).desc()).limit(5)).all()
     name = _sensor_names(db)
-    tot_n, down_s = db.execute(select(func.count(), func.coalesce(func.sum(M.PrtgHourly.down_s), 0)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.seen.is_(True))).one()
+    tot_n, down_s = db.execute(select(func.count(), func.coalesce(func.sum(M.PrtgHourly.down_s), 0)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end, M.PrtgHourly.seen.is_(True))).one()
     avail = 1 - down_s / (tot_n * 3600) if tot_n else None
+    xdr_new = db.scalar(select(func.count()).select_from(M.XdrAlert).where(M.XdrAlert.created_at >= a, M.XdrAlert.created_at < end)) or 0
     xdr_open = db.scalar(select(func.count()).select_from(M.XdrAlert).where(M.XdrAlert.severity.in_(["critical", "high"]), func.lower(func.coalesce(M.XdrAlert.status, "")) != "closed", func.lower(func.coalesce(M.XdrAlert.investigation_status, "")) != "closed")) or 0
-    xdr_new = db.scalar(select(func.count()).select_from(M.XdrAlert).where(M.XdrAlert.created_at >= a)) or 0
     dev_down = db.scalar(select(func.count()).select_from(M.ZbxHost).where(M.ZbxHost.status == "down")) or 0
-    dev_new = db.scalar(select(func.count()).select_from(M.ZbxEvent).where(M.ZbxEvent.start_at >= a)) or 0
-    L = [f"*TERA shift summary* ({now:%d %b %Y %H:%M}, last 24 hours)", "", f"*Tickets*: {n_in} in, {n_done} closed, {n_open} open now."]
-    L.append(f"*Network*: availability {fmt(avail * 100, 2)}%." if avail is not None else "*Network*: no hourly data.")
+    dev_new = db.scalar(select(func.count()).select_from(M.ZbxEvent).where(M.ZbxEvent.start_at >= a, M.ZbxEvent.start_at < end)) or 0
+    ho_new = db.scalar(select(func.count()).select_from(M.Handover).where(M.Handover.created_at >= a, M.Handover.created_at < end)) or 0
+    ho_open = db.scalars(select(M.Handover).where(M.Handover.is_open.is_(True)).order_by(M.Handover.created_at.desc()).limit(3)).all()
+    ho_open_n = db.scalar(select(func.count()).select_from(M.Handover).where(M.Handover.is_open.is_(True))) or 0
+
+    L = [f"*Ringkasan Shift ITOC*", f"{label}", f"Data {_dt(a)} – {_dt(end)} · dibuat {_dt(now)}" + (" (periode masih berjalan)" if live else ""), ""]
+    L.append(f"*Tiket*: {n_in} masuk, {n_done} selesai" + (f", {n_open} masih open" + (f" ({n_old} lebih dari {old_days} hari)" if n_old else "") if live else "") + ".")
+    L.append(f"*Jaringan*: availability link {fmt(avail * 100, 2).replace('.', ',')}%." if avail is not None else "*Jaringan*: belum ada data PRTG per jam untuk periode ini.")
     for sid, secs in link_rows:
-        L.append(f"- {name.get(sid, sid)}: {fmt(secs / 60)} min down")
-    L.append(f"*Security*: {xdr_open} critical/high XDR alerts open, {xdr_new} new alerts in 24 h.")
-    L.append(f"*Devices*: {dev_down} down now, {dev_new} new down events in 24 h.")
-    crit = [i for i in top if i["sev"] in ("crit", "warn")][:6]
-    if crit:
-        L += ["", "*Findings*"] + [f"- [{'CRITICAL' if i['sev'] == 'crit' else 'WARNING'}] {i['title']}" for i in crit]
+        L.append(f"- {name.get(sid, sid)}: down {fmt(secs / 60)} menit")
+    L.append(f"*Keamanan*: {xdr_new} alert XDR baru" + (f", {xdr_open} critical/high masih open" if live else "") + ".")
+    L.append(f"*Perangkat*: {dev_new} kejadian down baru" + (f", {dev_down} perangkat down saat ini" if live else "") + ".")
+    L.append(f"*Handover*: {ho_new} dibuat pada periode ini" + (f", {ho_open_n} masih open" if live else "") + ".")
+    for h in ho_open if live else []:
+        L.append(f"- [{h.priority}] {h.title[:90]}")
+    rows = db.scalars(select(M.Insight).where(M.Insight.severity.in_(["crit", "warn"]), M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
+                      .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(20)).all()
+    seen, pick = set(), []
+    for r in rows:                                              # the same title can appear for more than one key
+        if r.title not in seen:
+            seen.add(r.title)
+            pick.append(r)
+    if pick:
+        L += ["", "*Temuan otomatis*"] + [f"- [{'KRITIS' if r.severity == 'crit' else 'PERINGATAN'}] {r.title}" for r in pick[:8]]
     return "\n".join(L)
 
 

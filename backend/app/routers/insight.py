@@ -1,11 +1,12 @@
 """Insights: acknowledge, dismiss with a reason, reopen, add to handover, and run the analysis now."""
-from datetime import timedelta
+from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Handover, Insight, User
 from ..security import current_user, can_see, rate_limit, require_admin
+from ..insight import shift_summary, summary_windows as shift_summary_windows
 from ..store import audit, bump_data, load_config
 
 router = APIRouter(prefix="/api/insights", tags=["insight"])
@@ -93,3 +94,14 @@ def run_now(db: Session = Depends(get_db), user: User = Depends(require_admin)):
     audit(db, user.username, "Ran the insight analysis", {"found": r.get("found")}, load_config(db).p("tz_offset_hours", 7))
     db.commit()
     return r
+
+
+@router.get("/summary", dependencies=[Depends(rate_limit("inssum", 60, 60))])
+def summary(scope: str = "24h", day: date | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Shift summary text for a chosen window (last 24 hours, full day, half day, or one shift)."""
+    if not can_see(user, "insight"):
+        raise HTTPException(403, "This account has no access to Insights")
+    cfg = load_config(db)
+    if scope not in {w["key"] for w in shift_summary_windows(cfg)}:
+        raise HTTPException(422, "Unknown summary period")
+    return {"text": shift_summary(db, cfg, None, scope, day)}

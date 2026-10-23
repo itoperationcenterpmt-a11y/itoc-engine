@@ -31,5 +31,5 @@ def build(db, cfg, full: bool = False) -> dict:
         s["total"] += 1
         s["dismissed"] += 1 if status == "dismissed" else 0
     out.update({"done": [_j(r) for r in done], "dismissed": [_j(r) for r in dis], "rank": ENG.rankings(db, cfg), "stats": kinds,
-                "summary": ENG.shift_summary(db, cfg, [{"sev": r.severity, "title": r.title} for r in live])})
+                "summary": ENG.shift_summary(db, cfg), "windows": ENG.summary_windows(cfg)})
     return out
