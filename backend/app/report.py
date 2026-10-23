@@ -445,7 +445,12 @@ def _period(cfg, d1, d2):
 def build(db, cfg, user, f, kind="full", preset="standar"):
     """kind = kunci jenis laporan. Bagian di luar izin role dibuang diam-diam."""
     ks = kinds_for(cfg, user)
-    spec = ks.get(kind) or ks.get("full") or (next(iter(ks.values())) if ks else None)
+    if kind.startswith("custom:"):                                  # custom: any combination of sections the role may see, e.g. custom:servicedesk,devices
+        titles = dict(SECTIONS)
+        keys = [x for x, _ in SECTIONS if x in kind[7:].split(",") and can_see(user, x)]
+        spec = {"key": "custom", "label": "Custom", "desc": "", "title": "Report ITOC : Custom", "subtitle": " + ".join(titles[x] for x in keys), "prefix": "", "sections": keys, "allowed": keys} if keys else None
+    else:
+        spec = ks.get(kind) or ks.get("full") or (next(iter(ks.values())) if ks else None)
     if spec is None:
         return {"title": cfg.p("ui.brand_name", "Dashboard"), "sections": [], "kinds": []}
     secs = [_BUILD[k](db, cfg, f, preset) for k in spec["allowed"]]
@@ -471,4 +476,5 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     return {"title": cfg.p("ui.brand_name", "Dashboard"), "kind": spec["key"], "subtitle": spec["title"], "tagline": spec["subtitle"], "prefix": spec.get("prefix", ""),
             "company": cfg.p("report.company", ""), "contact": cfg.p("report.contact", {}), "period": _period(cfg, f.d_from, f.d_to),
             "preset": preset, "filters": filt, "generated": cfg.now().strftime("%d/%m/%Y %H.%M") + " WIB", "by": user.full_name, "sections": body,
-            "kinds": [{"key": k, "label": v["label"], "desc": v["desc"], "sections": v["allowed"]} for k, v in ks.items()]}
+            "kinds": [{"key": k, "label": v["label"], "desc": v["desc"], "sections": v["allowed"]} for k, v in ks.items()],
+            "avail": [{"key": x, "label": t} for x, t in SECTIONS if can_see(user, x)]}

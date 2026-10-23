@@ -289,6 +289,29 @@ def apikey_create(body: KeyIn, db: Session = Depends(get_db), user: User = Depen
     return {"ok": True, "key": raw}
 
 
+class KeyEditIn(BaseModel):
+    name: str
+    role_key: str
+    site: str | None = None
+    days: int | None = None          # None = keep the current expiry, 0 = no expiry, N = expires in N days from now
+
+
+@router.put("/apikeys/{kid}")
+def apikey_edit(kid: int, body: KeyEditIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    k = db.get(ApiKey, kid)
+    r = db.get(Role, body.role_key)
+    if not k or k.revoked_at:
+        raise HTTPException(404, "Key not found or already revoked")
+    if not body.name.strip() or not r or r.is_admin:
+        raise HTTPException(422, "A name is required and the role must not be admin")
+    k.name, k.role_key, k.site = body.name.strip(), body.role_key, body.site or None
+    if body.days is not None:
+        k.expires_at = datetime.now() + timedelta(days=body.days) if body.days else None
+    audit(db, user.username, f"Edited API key {k.name} (role {k.role_key})")
+    db.commit()
+    return {"ok": True}
+
+
 @router.delete("/apikeys/{kid}")
 def apikey_revoke(kid: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     k = db.get(ApiKey, kid)

@@ -23,16 +23,16 @@ def export(fmt: str, d_from: date = Query(alias="from"), d_to: date = Query(alia
     if (d_to - d_from).days > max_days:
         raise HTTPException(400, f"Rentang maksimal {max_days} hari")
     site = effective_site(user, db) or site
-    if kind not in report.DEFAULT_KINDS:
+    if kind not in report.DEFAULT_KINDS and not kind.startswith("custom:"):
         raise HTTPException(404, "Unknown report type")
     model = report.build(db, cfg, user, views.Filt(d_from, d_to, shift, site, False), kind, preset)
-    if kind not in [k["key"] for k in model["kinds"]] or not model["sections"]:
+    if (not kind.startswith("custom:") and kind not in [k["key"] for k in model["kinds"]]) or not model["sections"]:
         raise HTTPException(403, "This role may not access any report section")
     try:
         data = report_export.RENDER[fmt](model)
     except ImportError as e:
         raise HTTPException(500, f"A report library is not installed on the server ({e.name}). Rebuild the image.")
-    audit(db, user.username, f"Mengunduh laporan {kind} {fmt.upper()} {d_from} – {d_to}" + (f" ({site})" if site else ""))
+    audit(db, user.username, f"Downloaded report {kind} {fmt.upper()} {d_from} – {d_to}" + (f" ({site})" if site else ""))
     db.commit()
-    name = f"Laporan_{kind}_{d_from}_{d_to}.{fmt}"
+    name = f"Report_{kind.split(':')[0]}_{d_from}_{d_to}.{fmt}"
     return Response(content=data, media_type=report_export.MIME[fmt], headers={"Content-Disposition": f'attachment; filename="{name}"'})

@@ -26,7 +26,7 @@ function lockAdmin() {
   v.insertAdjacentHTML("afterbegin", `<div class="msg" style="margin-bottom:10px">Read-only</div>`);
 }
 async function downloadReport(kind, btn) {
-  const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, kind: S.rkind || "full", preset: S.rpreset}), old = btn.innerHTML;
+  const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, kind: S.rkind === "custom" ? "custom:" + (S.rsecs || []).join(",") : S.rkind || "full", preset: S.rpreset}), old = btn.innerHTML;
   btn.disabled = true; btn.textContent = "Menyiapkan…";
   try {
     const r = await fetch(`/api/report/${kind}?${q}`, {credentials: "same-origin"});
@@ -265,6 +265,7 @@ document.addEventListener("change", async e => {
   else if (t.id === "fTyp") set({dtype: t.value});
   else if (t.id === "fCmp") set({cmp: t.checked});
   else if (t.dataset.rkind) set({rkind: t.dataset.rkind});
+  else if (t.dataset.rsec) set({rsecs: [...document.querySelectorAll("[data-rsec]:checked")].map(x => x.dataset.rsec)});
   else if (t.id === "layRole") set({layRole: t.value});
   else if (t.dataset.wf !== undefined) applyWF();
   else if (t.dataset.wp !== undefined) applyWP();

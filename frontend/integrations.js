@@ -27,7 +27,7 @@ function vIntegrations() {
     const creds = s.creds.map(c => `<div class="fld"><label for="${f}_${c.name}">${esc(c.label)} ${c.set ? `<span class="tag">saved</span>` : c.env_set ? `<span class="tag">from .env (${esc(c.env)})</span>` : `<span class="tag warn">not set</span>`}</label>
       <input id="${f}_${c.name}" data-secret="${esc(c.name)}" type="password" autocomplete="new-password" placeholder="${c.set ? "•••••••• (leave empty = unchanged)" : "Fill in to save"}">${c.set ? `<button type="button" class="btn ghost sm" data-w data-int="clear" data-key="${esc(s.key)}" data-name="${esc(c.name)}">Remove saved</button>` : ""}</div>`).join("");
     const body = s.api_capable ? `<form class="form intform" data-int-form="${esc(s.key)}">
-        ${intField(f + "_mode", "Mode", `<select id="${f}_mode" data-f="mode">${intOpt([["api", "API (sinkron terjadwal)"], ["import", "Impor RAW manual"]], s.mode)}</select>`)}
+        ${intField(f + "_mode", "Mode", `<select id="${f}_mode" data-f="mode">${intOpt([["api", "API (scheduled sync)"], ["import", "Manual RAW import"]], s.mode)}</select>`)}
         ${intField(f + "_en", "Status", `<select id="${f}_en" data-f="enabled">${intOpt([["true", "Active"], ["false", "Inactive"]], String(s.enabled))}</select>`)}
         ${intField(f + "_iv", "Interval (minutes)", `<input id="${f}_iv" data-f="interval_min" type="number" min="1" max="1440" value="${esc(s.interval_min)}">`)}
         ${intField(f + "_tls", "Verify TLS", `<select id="${f}_tls" data-f="verify_tls">${intOpt([["true", "Yes"], ["false", "No (internal certificate)"]], String(s.verify_tls))}</select>`)}
@@ -52,16 +52,17 @@ function vApiKeys(roles) {
   const rk = Object.entries(CFG.roles).filter(([k, r]) => !r.is_admin).map(([k, r]) => [k, r.label]);
   const o = location.origin;
   const nk = INT.newKey ? `<div class="keybox"><b>Copy this key now, it will not be shown again:</b><code id="newKeyVal">${esc(INT.newKey)}</code><button class="btn ghost sm" type="button" data-int="copykey">Copy</button></div>` : "";
-  const form = INT.keyForm ? `<form class="form formbox intform" data-int-form="apikey">
-      ${intField("k_name", "Name / purpose *", `<input id="k_name" data-f="name" type="text" placeholder="mis. Power BI">`)}
-      ${intField("k_role", "Hak akses (role) *", `<select id="k_role" data-f="role_key">${intOpt(rk, "")}</select>`)}
-      ${intField("k_site", "Limit to location", `<select id="k_site" data-f="site"><option value="">All allowed by role</option>${CFG.sites.map(x => `<option>${esc(x)}</option>`).join("")}</select>`)}
-      ${intField("k_days", "Valid for", `<select id="k_days" data-f="days">${intOpt([["", "No expiry"], ["30", "30 days"], ["90", "90 days"], ["365", "1 year"]], "90")}</select>`)}
-      <div class="acts wide"><button class="btn" type="submit" data-w>Generate</button><button class="btn ghost" type="button" data-int="keyform">Cancel</button><span class="sub">Keys are read-only (GET) and have no Admin access.</span></div></form>` : "";
+  const ek = INT.keyEdit ? INT.apikeys.rows.find(k => k.id === INT.keyEdit) : null;
+  const form = INT.keyForm || ek ? `<form class="form formbox intform" data-int-form="apikey">
+      ${intField("k_name", "Name / purpose *", `<input id="k_name" data-f="name" type="text" placeholder="e.g. Power BI" value="${ek ? esc(ek.name) : ""}">`)}
+      ${intField("k_role", "Role *", `<select id="k_role" data-f="role_key">${intOpt(rk, ek ? ek.role_key : "")}</select>`)}
+      ${intField("k_site", "Limit to location", `<select id="k_site" data-f="site"><option value="">All allowed by role</option>${CFG.sites.map(x => `<option ${ek && ek.site === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`)}
+      ${intField("k_days", ek ? "Expiry" : "Valid for", `<select id="k_days" data-f="days">${intOpt([...(ek ? [["keep", "Keep current" + (ek.expires_at ? " (" + intDt(ek.expires_at) + ")" : " (none)")]] : []), ["", "No expiry"], ["30", ek ? "30 days from now" : "30 days"], ["90", ek ? "90 days from now" : "90 days"], ["365", ek ? "1 year from now" : "1 year"]], ek ? "keep" : "90")}</select>`)}
+      <div class="acts wide"><button class="btn" type="submit" data-w>${ek ? "Save" : "Generate"}</button><button class="btn ghost" type="button" data-int="keyform">Cancel</button></div></form>` : "";
   return intMsg() + `<div class="toolbar"><span class="sub">API keys for other systems that read dashboard data.</span><button class="btn" type="button" data-w data-int="keyform">+ Generate key</button></div>${nk}${form}
     <div class="mcards">${INT.apikeys.rows.map(k => `<article class="mcard ${k.revoked ? "off" : ""}"><div class="mh"><b>${esc(k.name)}</b><span class="mid">${esc(k.prefix)}…</span></div>
       <div class="mchips"><span class="mchip"><i>role</i>${esc(CFG.roles[k.role_key] ? CFG.roles[k.role_key].label : k.role_key)}</span>${k.site ? `<span class="mchip"><i>location</i>${esc(k.site)}</span>` : ""}<span class="mchip"><i>last used</i>${esc(intDt(k.last_used_at))}</span><span class="mchip"><i>expires</i>${k.expires_at ? esc(intDt(k.expires_at)) : "never"}</span>${k.revoked ? `<span class="mchip">revoked</span>` : ""}</div>
-      ${k.revoked ? "" : `<button class="btn ghost" type="button" data-w data-int="revoke" data-id="${k.id}">Revoke</button>`}</article>`).join("") || `<div class="empty sm">No API keys yet.</div>`}</div>
+      ${k.revoked ? "" : `<span class="acts"><button class="btn ghost" type="button" data-int="keyedit" data-id="${k.id}">Edit</button><button class="btn ghost" type="button" data-w data-int="revoke" data-id="${k.id}">Revoke</button></span>`}</article>`).join("") || `<div class="empty sm">No API keys yet.</div>`}</div>
     <details class="howto"><summary>How to use</summary><pre>curl -H "X-API-Key: itoc_xxx" "${esc(o)}/api/view/servicedesk?from=2026-10-01&amp;to=2026-10-19"</pre><span class="sub">The same read endpoints as the dashboard (/api/view/…, /api/report/…) follow the role rights on the key.</span></details>`;
 }
 
@@ -72,10 +73,10 @@ function vSmtp() {
     <form class="form formbox intform" data-int-form="smtp">
       ${intField("m_host", "Host", `<input id="m_host" data-f="host" type="text" placeholder="smtp.pelindo.co.id" value="${esc(c.host)}">`)}
       ${intField("m_port", "Port", `<input id="m_port" data-f="port" type="number" value="${esc(c.port)}">`)}
-      ${intField("m_sec", "Keamanan", `<select id="m_sec" data-f="security">${intOpt([["starttls", "STARTTLS (587)"], ["ssl", "SSL/TLS (465)"], ["none", "No encryption"]], c.security)}</select>`)}
+      ${intField("m_sec", "Security", `<select id="m_sec" data-f="security">${intOpt([["starttls", "STARTTLS (587)"], ["ssl", "SSL/TLS (465)"], ["none", "No encryption"]], c.security)}</select>`)}
       ${intField("m_user", "Username", `<input id="m_user" data-f="user" type="text" autocomplete="off" value="${esc(c.user)}">`)}
       ${intField("m_pw", "Password " + (c.password_set ? "(saved)" : ""), `<input id="m_pw" data-f="password" type="password" autocomplete="new-password" placeholder="${c.password_set ? "•••••••• (empty = unchanged)" : ""}">`)}
-      ${intField("m_from", "Alamat pengirim", `<input id="m_from" data-f="sender" type="email" placeholder="itoc@pelindo.co.id" value="${esc(c.sender)}">`)}
+      ${intField("m_from", "Sender address", `<input id="m_from" data-f="sender" type="email" placeholder="itoc@pelindo.co.id" value="${esc(c.sender)}">`)}
       ${intField("m_fn", "Sender name", `<input id="m_fn" data-f="from_name" type="text" value="${esc(c.from_name)}">`)}
       <div class="acts wide"><button class="btn" type="submit" data-w>Save</button></div></form>
     <form class="form intform smtptest" data-int-form="smtptest"><div class="fld"><label for="m_to">Send test email to</label><input id="m_to" data-f="to" type="email" placeholder="name@pelindo.co.id"></div><div class="acts"><button class="btn ghost" type="submit" data-w>Send test</button></div></form>`;
@@ -116,15 +117,16 @@ document.addEventListener("click", async e => {
     if (a === "msdel") { b.closest(".msrow").remove(); return; }
     if (a === "mstest") { const nm = b.closest(".msrow").querySelector('[data-ms="name"]').value.trim(); b.disabled = true; b.textContent = "Testing…"; await intSaveIntegration(b.closest("form"));
       const r = await send("/api/admin/integrations/milestone/test?server=" + encodeURIComponent(nm), {}).catch(er => ({ok: false, msg: er.message})); INT.integrations = null; INT.msg = {ok: r.ok, t: r.msg || "Failed"}; render(false); return; }
-    if (a === "test" || a === "sync") { const fm = b.closest("form"); if (fm) { b.disabled = true; b.textContent = "Menyimpan…"; await intSaveIntegration(fm); } }
+    if (a === "test" || a === "sync") { const fm = b.closest("form"); if (fm) { b.disabled = true; b.textContent = "Saving…"; await intSaveIntegration(fm); } }
     if (a === "test") { b.disabled = true; b.textContent = "Testing…"; const r = await send("/api/admin/integrations/" + key + "/test", {}).catch(er => ({ok: false, msg: er.message})); INT.msg = {ok: r.ok, t: r.msg || "Failed"}; render(false); }
     else if (a === "sync") { b.disabled = true; b.textContent = "Syncing…"; const r = await send("/api/ingest/sync/" + key, {}).catch(er => ({ok: false, msg: er.message})); INT.integrations = null; INT.msg = {ok: r.ok !== false, t: r.ok === false ? r.msg : "Sync finished: " + (r.rows ?? 0) + " rows"}; render(false); }
     else if (a === "clear") { if (!confirm("Remove the saved credentials?")) return; await send("/api/admin/integrations/" + key, {clear: [b.dataset.name]}, "PUT"); intDone("integrations", true, "Credentials removed."); }
-    else if (a === "keyform") { INT.keyForm = !INT.keyForm; INT.newKey = null; render(false); }
-    else if (a === "copykey") { try { await navigator.clipboard.writeText($("newKeyVal").textContent); b.textContent = "Tersalin"; } catch (er) { const r = document.createRange(); r.selectNode($("newKeyVal")); getSelection().removeAllRanges(); getSelection().addRange(r); } }
+    else if (a === "keyform") { INT.keyForm = !INT.keyForm && !INT.keyEdit; INT.keyEdit = null; INT.newKey = null; render(false); }
+    else if (a === "keyedit") { INT.keyEdit = +id; INT.keyForm = false; INT.newKey = null; INT.msg = null; render(false); }
+    else if (a === "copykey") { try { await navigator.clipboard.writeText($("newKeyVal").textContent); b.textContent = "Copied"; } catch (er) { const r = document.createRange(); r.selectNode($("newKeyVal")); getSelection().removeAllRanges(); getSelection().addRange(r); } }
     else if (a === "revoke") { if (!confirm("Revoke this API key? Systems using it will be rejected.")) return; await api("/api/admin/apikeys/" + id, {method: "DELETE"}); intDone("apikeys", true, "API key revoked."); }
     else if (a === "hookform") { INT.hookEdit = id === "x" ? null : id === "new" ? {events: ["handover_high"], enabled: true} : Object.assign({}, INT.webhooks.rows.find(w => String(w.id) === id)); INT.msg = null; render(false); }
-    else if (a === "hooktest") { b.disabled = true; b.textContent = "Mengirim…"; const r = await send("/api/admin/webhooks/" + id + "/test", {}).catch(er => ({ok: false, msg: er.message})); INT.webhooks = null; INT.msg = {ok: r.ok, t: r.msg || "Failed"}; render(false); }
+    else if (a === "hooktest") { b.disabled = true; b.textContent = "Sending…"; const r = await send("/api/admin/webhooks/" + id + "/test", {}).catch(er => ({ok: false, msg: er.message})); INT.webhooks = null; INT.msg = {ok: r.ok, t: r.msg || "Failed"}; render(false); }
     else if (a === "hookdel") { if (!confirm("Delete this webhook?")) return; await api("/api/admin/webhooks/" + id, {method: "DELETE"}); intDone("webhooks", true, "Webhook deleted."); }
   } catch (er) { if (er) { INT.msg = {ok: false, t: er.message || String(er)}; render(false); } }
 });
@@ -136,6 +138,7 @@ document.addEventListener("submit", async e => {
   try {
     if (k === "smtp") { await send("/api/admin/smtp", {host: v.host, port: +v.port || 587, security: v.security, user: v.user, password: v.password || null, sender: v.sender, from_name: v.from_name}, "PUT"); intDone("smtp", true, "SMTP settings saved."); }
     else if (k === "smtptest") { const r = await send("/api/admin/smtp/test", {to: v.to}); INT.msg = {ok: true, t: r.msg}; render(false); }
+    else if (k === "apikey" && INT.keyEdit) { await send("/api/admin/apikeys/" + INT.keyEdit, {name: v.name, role_key: v.role_key, site: v.site || null, days: v.days === "keep" ? null : v.days ? +v.days : 0}, "PUT"); INT.keyEdit = null; intDone("apikeys", true, "API key updated."); }
     else if (k === "apikey") { const r = await send("/api/admin/apikeys", {name: v.name, role_key: v.role_key, site: v.site || null, days: v.days ? +v.days : null}); INT.apikeys = null; INT.keyForm = false; INT.newKey = r.key; INT.msg = {ok: true, t: "API key created."}; render(false); }
     else if (k === "webhook") {
       const body = {name: v.name, kind: v.kind, url: v.url || null, enabled: v.enabled === "true", events: [...f.querySelectorAll("[data-ev]:checked")].map(x => x.dataset.ev)};

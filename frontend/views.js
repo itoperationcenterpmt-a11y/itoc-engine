@@ -383,17 +383,17 @@ const fk = (v, k) => v == null || v === "" ? "–" : k === "n" ? fmt(v) : /^f\d$
 function vReport() {
   const rp = V.report || {sections: [], kinds: []}, kinds = rp.kinds || [], nav = subnav("report");
   if (!kinds.length) return nav + `<div class="grid"><section class="panel c12">${empty("No reports are available to this role.")}</section></div>`;
-  if (!kinds.some(k => k.key === S.rkind)) S.rkind = kinds[0].key;
-  const kind = S.rkind, kd = kinds.find(k => k.key === kind) || {}, secs = kd.sections || [kind], shown = rp.sections.filter(s => kind === "full" || (kind === "summary" ? s.key === "ringkasan" : secs.includes(s.key) || (s.key === "ringkasan" && secs.length > 1)));
-  const chips = `<div class="chips rtypes">${kinds.map(k => `<button type="button" class="chip" data-rkind="${esc(k.key)}" aria-pressed="${k.key === kind}" title="${esc(k.desc)}">${esc(k.label)}</button>`).join("")}</div>`;
+  if (S.rkind !== "custom" && !kinds.some(k => k.key === S.rkind)) S.rkind = kinds[0].key;
+  const kind = S.rkind, avail = rp.avail || [], picked = (S.rsecs || []).filter(x => avail.some(a => a.key === x)), kd = kind === "custom" ? {label: "Custom", desc: "", sections: picked} : kinds.find(k => k.key === kind) || {}, secs = kd.sections || [kind], shown = rp.sections.filter(s => kind === "custom" ? picked.includes(s.key) : kind === "full" || (kind === "summary" ? s.key === "ringkasan" : secs.includes(s.key) || (s.key === "ringkasan" && secs.length > 1)));
+  const chips = `<div class="chips rtypes">${kinds.map(k => `<button type="button" class="chip" data-rkind="${esc(k.key)}" aria-pressed="${k.key === kind}" title="${esc(k.desc)}">${esc(k.label)}</button>`).join("")}<button type="button" class="chip" data-rkind="custom" aria-pressed="${kind === "custom"}">Custom…</button></div>${kind === "custom" ? `<div class="rpick">${avail.map(a => `<label class="chk"><input type="checkbox" data-rsec="${esc(a.key)}" ${picked.includes(a.key) ? "checked" : ""}> ${esc(a.label)}</label>`).join("")}</div>` : ""}`;
   const pre = `<div class="chips sm">${[["ringkas", "Compact"], ["standar", "Standard"], ["lengkap", "Full"]].map(([k, l]) => `<button type="button" class="chip" data-rpreset="${k}" aria-pressed="${k === S.rpreset}">${l}</button>`).join("")}</div>`;
-  const dl = `<div class="rdl">${[["xlsx", "Excel"], ["pdf", "PDF"], ["pptx", "PowerPoint"]].map(([k, l]) => `<button type="button" class="btn" data-rep="${k}">${l}</button>`).join("")}</div>`;
+  const dl = `<div class="rdl">${[["xlsx", "Excel"], ["pdf", "PDF"], ["pptx", "PowerPoint"]].map(([k, l]) => `<button type="button" class="btn" data-rep="${k}" ${kind === "custom" && !picked.length ? "disabled" : ""}>${l}</button>`).join("")}</div>`;
   const kp = shown.flatMap(s => s.kpis).slice(0, 12), nc = shown.reduce((a, s) => a + s.charts.length, 0), nt = shown.reduce((a, s) => a + s.tables.length, 0);
   const list = (a, n) => a.length ? `<ul>${a.slice(0, n).map(x => `<li>${esc(x.title)}</li>`).join("")}${a.length > n ? `<li class="sub">and ${a.length - n} more</li>` : ""}</ul>` : `<span class="sub">none</span>`;
   const secs2 = shown.map(s => `<div class="rsec"><h4>${esc(s.title)}</h4><span class="lbl">Charts (${s.charts.length})</span>${list(s.charts, 5)}<span class="lbl">Tables (${s.tables.length})</span>${list(s.tables, 5)}</div>`).join("");
   return nav + `<div class="grid">${panel("c12", "Report", ctxTxt(), `${chips}<div class="rmeta"><div class="rdesc"><b>${esc(kd.label || "")}</b><span>${esc(kd.desc || "")}</span></div><div class="rctl"><div class="rgroup"><span class="lbl">Size</span>${pre}</div><div class="rgroup"><span class="lbl">Download</span>${dl}</div></div></div>
-    <div class="rkpi2">${kp.map(k => `<div class="kpi"><span class="lbl">${esc(k.label)}</span><span class="v">${fk(k.value, k.kind)}</span><span class="d">${esc(k.sub || "")}</span></div>`).join("")}</div>
-    <div class="rsum sub">${shown.length} sections · ${nc} charts · ${nt} tables</div><div class="rsecs">${secs2}</div>`)}</div>`;
+    <div class="rkpi2">${kp.map(k => { const p = String(k.label).split(" · "); return `<div class="kpi"><span class="src">${esc(p.length > 1 ? p[0] : "")}</span><span class="lbl">${esc(p.slice(p.length > 1 ? 1 : 0).join(" · "))}</span><span class="v">${fk(k.value, k.kind)}</span><span class="d">${esc(k.sub || "")}</span></div>`; }).join("") || `<div class="empty sm">${kind === "custom" ? "Pick at least one section." : "No data."}</div>`}</div>
+    <div class="rsum sub">${pl(shown.length, "section")} · ${pl(nc, "chart")} · ${pl(nt, "table")}</div><div class="rsecs">${secs2}</div>`)}</div>`;
 }
 /* ---------- Admin ---------- */
 function vAdmin() {
