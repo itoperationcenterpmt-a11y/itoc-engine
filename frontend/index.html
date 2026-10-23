@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboard IT Pelindo Multi Terminal</title>
-<link rel="icon" type="image/png" href="assets/logo.png">
+<title>TERA Dashboard</title>
+<link rel="icon" type="image/png" href="assets/tera-favicon.png">
+<link rel="apple-touch-icon" href="assets/tera-favicon-180.png">
 <meta name="theme-color" content="#0f3d7a">
-<link rel="icon" type="image/png" href="assets/logo.png">
 <link rel="stylesheet" href="assets/fonts/fonts.css">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <style>
@@ -421,10 +421,22 @@ tbody tr:hover td{background:var(--wash)}
 .lg-pts{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:12px}
 .lg-pts li{display:flex;align-items:center;gap:12px;font-size:16px;color:var(--ink)}.lg-pts li:before{content:"";width:9px;height:9px;border-radius:50%;background:var(--accent);flex:none}
 .lg-form{display:flex;flex-direction:column;justify-content:center;gap:6px}
-.lg-logo{display:block;width:min(250px,80%);height:auto;margin:0 auto 18px}
+.lg-logo{display:block;width:min(340px,86%);height:auto;margin:0 auto 20px}
 .lg-d{display:none}:root[data-theme="dark"] .lg-l{display:none}:root[data-theme="dark"] .lg-d{display:block}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lg-l{display:none}:root:not([data-theme="light"]) .lg-d{display:block}}
 .lg-info h2 .b1,.lg-info h2 .b2{display:block;white-space:nowrap}.lg-info h2{font-size:clamp(22px,3.3vw,44px)}
+/* TERA brand: icon + wordmark in the sidebar, lockup on the login page. The wordmark is text (Montserrat 800) so it stays sharp at any size. */
+.wm{font-family:"Montserrat",var(--f-head,sans-serif);font-weight:800;letter-spacing:.09em}.wm .e{color:#5BB5E2}
+.brand-tera{flex-direction:row;align-items:center;gap:12px;padding:6px 8px 8px}.brand-tera .g2{width:46px;height:46px;max-width:none;flex:none;object-fit:contain}
+.brand-tera .bt{display:flex;flex-direction:column;min-width:0;line-height:1.15}
+.brand-tera h1{font-family:"Montserrat",var(--f-head,sans-serif);font-size:23px;font-weight:800;letter-spacing:.09em;color:#fff;line-height:1}.brand-tera h1 .e{color:#5BB5E2}
+.brand-tera .bprod{font-size:10.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#8FCFEE;margin-top:6px}.brand-tera .bby{font-size:10.5px;color:var(--side-ink);opacity:.75;margin-top:2px;white-space:nowrap}
+.shell.rail .brand-tera .bt{display:none}.shell.rail .brand-tera{padding:2px 0}.shell.rail .brand-tera .g2{width:44px;height:44px;object-fit:contain;object-position:center}
+.mtop .brand-tera{gap:9px;padding:0}.mtop .brand-tera .g2{width:34px;height:34px}.mtop .brand-tera h1{font-size:17px}.mtop .brand-tera .bprod{font-size:9.5px;margin-top:3px}
+.lg-info h2.brandName .b1{font-family:"Montserrat",var(--f-head,sans-serif);font-weight:800;letter-spacing:.09em}.lg-info h2 .e{color:#5BB5E2}
+:root[data-theme="light"] .lg-info h2 .e{color:#0067B4}@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .lg-info h2 .e{color:#0067B4}}
+.lg-prod{display:inline-block;align-self:flex-start;width:fit-content;margin:2px 0 14px;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;background:#0067B4;color:#fff;padding:5px 12px;border-radius:99px}
+@media (max-width:420px){.lg-logo{width:min(250px,88%)}}
 .brand-g2{flex-direction:column;align-items:flex-start;gap:12px;padding:6px 8px 4px}.brand-g2 .g2{display:block;width:100%;max-width:200px;height:auto}
 .brand-g2 h1{font-size:19px;font-weight:800;letter-spacing:-.01em}.brand-g2 h1 .b1{display:block}
 .mtop .brand-g2{flex-direction:row;align-items:center;gap:10px;padding:0}.mtop .g2chip{background:#fff;border-radius:10px;padding:4px 10px;display:grid;place-items:center}.mtop .brand-g2 .g2{width:auto;height:26px;max-width:none}.mtop .brand-g2 h1{font-size:15px}
@@ -512,7 +524,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
 <div id="login" hidden></div>
 <div id="app" class="shell" hidden>
 <aside class="side">
-  <div class="brand brand-g2"><img class="g2" src="assets/logo-g2-dark.png" alt="IT Operation Center"><h1 class="brandName"><span class="b1">Dashboard IT</span></h1><button class="railbtn" id="railBtn" type="button" aria-label="Menu">‹</button></div>
+  <div class="brand brand-tera"><img class="g2" src="assets/tera-icon-rev.png" alt="TERA"><div class="bt"><h1 class="brandName"><span class="b1">TERA</span></h1><span class="bprod">Dashboard</span><span class="bby">by IT Operation Center</span></div><button class="railbtn" id="railBtn" type="button" aria-label="Menu">‹</button></div>
   <nav class="tabs" role="tablist" id="tabs" aria-label="Menu"></nav>
   <button class="more" id="moreBtn" type="button" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Menu</span></button>
   <div class="side-foot">
@@ -522,7 +534,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
 </aside>
 <div class="main">
   <div class="mtop">
-    <div class="brand brand-g2"><span class="g2chip"><img class="g2" src="assets/logo-g2.png" alt="IT Operation Center"></span><h1 class="brandName"><span class="b1">Dashboard IT</span></h1></div>
+    <div class="brand brand-tera"><img class="g2" src="assets/tera-icon-rev.png" alt="TERA"><div class="bt"><h1 class="brandName"><span class="b1">TERA</span></h1><span class="bprod">Dashboard</span></div></div>
     <div class="mr"><span id="dutyM"></span></div>
   </div>
   <div class="wrap">

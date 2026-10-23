@@ -349,7 +349,7 @@ setInterval(() => { if (!CFG || $("app").hidden || document.hidden) return; rend
 function showLogin(msg, change) {
   $("app").hidden = true; $("login").hidden = false;
   const form = change
-    ? `<form id="pwF" class="loginbox"><div class="brand"><span class="mk"><img src="assets/logo.png" alt=""></span><h1>Change password</h1></div><span class="sub">The initial password must be changed before using the dashboard.</span>
+    ? `<form id="pwF" class="loginbox"><div class="brand"><span class="mk"><img src="assets/tera-icon-col.png" alt=""></span><h1>Change password</h1></div><span class="sub">The initial password must be changed before using the dashboard.</span>
       <div class="fld"><label for="oP">Current password</label><input type="password" id="oP" autocomplete="current-password"></div><div class="fld"><label for="nP">New password</label><input type="password" id="nP" autocomplete="new-password"></div><div class="fld"><label for="nP2">Repeat new password</label><input type="password" id="nP2" autocomplete="new-password"></div>
       <button class="btn" type="submit">Save</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`
     : `<form id="loginF" class="loginbox"><div class="lhead"><h1>Sign in</h1></div>
@@ -357,15 +357,15 @@ function showLogin(msg, change) {
       <button class="btn" type="submit">Sign in</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`;
       $("login").innerHTML = `<div class="lg"><div class="lg-bg"></div><div class="lg-wrap">
     <section class="lg-card lg-info"><button type="button" class="lg-theme" id="themeL" aria-label="Ganti tema terang/gelap">◐</button>
-      ${LOGIN.eyebrow ? `<span class="lg-eyebrow">${esc(LOGIN.eyebrow)}</span>` : ""}<h2>${brandHtml()}</h2>${LOGIN.tagline ? `<p>${esc(LOGIN.tagline)}</p>` : ""}
+      ${LOGIN.eyebrow ? `<span class="lg-eyebrow">${esc(LOGIN.eyebrow)}</span>` : ""}<h2 class="brandName">${brandHtml()}</h2><span class="lg-prod">Dashboard</span>${LOGIN.tagline ? `<p>${esc(LOGIN.tagline)}</p>` : ""}
       ${LOGIN.points.length ? `<ul class="lg-pts">${LOGIN.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>
-    <section class="lg-card lg-form"><img class="lg-logo lg-l" src="assets/logo-g2.png" alt="IT Operation Center"><img class="lg-logo lg-d" src="assets/logo-g2-dark.png" alt="">${form}<div class="loginfoot">${esc(footText())}</div></section></div></div>`;
+    <section class="lg-card lg-form"><img class="lg-logo lg-l" src="assets/tera-lockup-col.png" alt="TERA, Divisi Teknologi Informasi, Pelindo Multi Terminal"><img class="lg-logo lg-d" src="assets/tera-lockup-rev.png" alt="">${form}<div class="loginfoot">${esc(footText())}</div></section></div></div>`;
   const first = $("login").querySelector("input"); if (first) first.focus();
 }function logout(msg) { fetch("/api/auth/logout", {method: "POST", credentials: "same-origin", headers: {"X-Requested-With": "itoc"}}).catch(() => {}); CFG = null; showLogin(typeof msg === "string" ? msg : ""); }
 const footText = () => FOOT.replace("{year}", new Date().getFullYear()) + (CFG && CFG.build ? " · build " + CFG.build : "");
 /* First line is the main name (not truncated), the last word ("Dashboard") goes on the second line */
 /* The name shown in the sidebar and login page is the first BSPLIT words ("Dashboard IT"); the full name is used in the tab title, reports, and email. */
-const brandHtml = () => { const w = BRAND.trim().split(/\s+/), n = Math.max(1, Math.min(typeof BSPLIT === "number" ? BSPLIT : 2, w.length)); return `<span class="b1">${esc(w.slice(0, n).join(" "))}</span>`; };
+const brandHtml = () => { const w = BRAND.trim().split(/\s+/), n = Math.max(1, Math.min(typeof BSPLIT === "number" ? BSPLIT : 2, w.length)), t = w.slice(0, n).join(" "); return `<span class="b1">${/^tera$/i.test(t) ? `T<span class="e">E</span>RA` : esc(t)}</span>`; };
 function applyBrand() { document.title = BRAND; document.querySelectorAll(".brandName").forEach(e => e.innerHTML = brandHtml()); }
 let LOGIN = {tagline: "", points: [], place: "", eyebrow: ""};
 async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || ""}; } catch (_) {} applyBrand(); }
