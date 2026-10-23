@@ -120,7 +120,7 @@ function renderDuty() {
   $("fKind").innerHTML = [["", "All"], ...kinds].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
   }
   if (S.tab === "xdr") $("fKind").innerHTML = [["", "All"], ["critical", "Critical"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
-  $("fStat").innerHTML = (S.tab === "cctv" ? [["", "All"], ["rec", "Recording"], ["norec", "Not recording"], ["off", "Disabled"]] : SL).map(([k, l]) => `<button type="button" data-st="${k}" aria-pressed="${S.dstat === k}">${l}</button>`).join("");
+  $("fStat").innerHTML = (S.tab === "cctv" ? [["", "All"], ["rec", "Recording"], ["norec", "Not recording"], ["off", "Disabled"], ["down", "Offline (Zabbix)"], ["nozbx", "Not in Zabbix"]] : SL).map(([k, l]) => `<button type="button" data-st="${k}" aria-pressed="${S.dstat === k}">${l}</button>`).join("");
   $("gKind").hidden = !ap.k; $("gStat").hidden = !ap.t; $("gGrp").hidden = !ap.g; $("gTyp").hidden = !ap.y;
   $("fwrap").hidden = !anyF;
   $("fbar").classList.toggle("off", !anyF);

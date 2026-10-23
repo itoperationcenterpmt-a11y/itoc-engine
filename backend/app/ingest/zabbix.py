@@ -152,7 +152,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         if not gids:
             raise RuntimeError("No host group starting with " + ", ".join(prefixes))
         hosts = rpc(cl, url, "host.get", {"output": ["hostid", "host", "name", "status", "maintenance_status"], "groupids": gids,
-                                          "selectHostGroups": ["groupid", "name"], "selectInterfaces": ["type", "available"]}, token)
+                                          "selectHostGroups": ["groupid", "name"], "selectInterfaces": ["type", "available", "ip"]}, token)
         probs = rpc(cl, url, "problem.get", {"output": ["eventid", "name", "severity", "clock", "objectid", "suppressed"], "groupids": gids}, token)
         trig_host: dict[str, set] = {}
         tids = sorted({p["objectid"] for p in probs})
@@ -190,7 +190,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
             st, since, prob = "up", None, None
         zone, sub, dcode = parse_name(h["name"] or h["host"])
         rows.append({"hostid": h["hostid"], "host": h["host"][:255], "name": (h["name"] or h["host"])[:255], "kind": kind, "code": code, "zone": zone[:40], "subzone": sub[:80], "dev_code": dcode[:20],
-                     "group_name": (gnames[0] if gnames else "")[:255], "groups": gnames, "status": st, "down_since": since, "problem": prob, "updated_at": now})
+                     "ip": next((i.get("ip") for i in ifaces if i.get("ip")), "")[:45], "group_name": (gnames[0] if gnames else "")[:255], "groups": gnames, "status": st, "down_since": since, "problem": prob, "updated_at": now})
     for part in _chunks(rows, 500):
         st_ = insert(ZbxHost).values(part)
         db.execute(st_.on_conflict_do_update(index_elements=["hostid"], set_={k: st_.excluded[k] for k in part[0] if k != "hostid"}))

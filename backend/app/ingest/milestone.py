@@ -76,17 +76,22 @@ def _ts(s, tz: float = 7):
         return None
 
 
-def servers(c: dict) -> list[tuple[str, str]]:
-    """Daftar server Milestone dari config: baris 'Nama|alamat' (atau alamat saja); bila kosong dipakai base_url sebagai satu server."""
+def servers_all(c: dict) -> list[tuple[str, str, bool]]:
+    """Milestone servers from config: lines 'Name|address' or 'Name|address|off' (paused), or an address alone. Falls back to base_url as a single server."""
     out = []
     for ln in c.get("servers") or []:
-        nm, sep, url = str(ln).partition("|")
-        nm, url = (nm.strip(), url.strip()) if sep else ("", nm.strip())
+        parts = [p.strip() for p in str(ln).split("|")]
+        nm, url, flag = ("", parts[0], "") if len(parts) == 1 else (parts[0], parts[1], parts[2] if len(parts) > 2 else "")
         if url:
-            out.append(((nm or re.sub(r"^https?://", "", url).strip("/"))[:80], url))
+            out.append(((nm or re.sub(r"^https?://", "", url).strip("/"))[:80], url, flag.lower() != "off"))
     if not out and c.get("base_url"):
-        out.append(("HO", c["base_url"]))
+        out.append(("HO", c["base_url"], True))
     return out
+
+
+def servers(c: dict) -> list[tuple[str, str]]:
+    """Active servers only (name, address)."""
+    return [(n, u) for n, u, on in servers_all(c) if on]
 
 
 def fetch_server(cl: httpx.Client, url: str, user: str, pw: str, name: str, tz: float):
@@ -141,6 +146,10 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         db.commit()
         total += len(crow)
         parts.append(f"{name}: {len(crow)} kamera, {len(hrow)} hardware")
+    names = [n for n, _ in srv]
+    for model in (CctvHardware, CctvCamera):                       # servers that were removed or paused no longer count
+        db.query(model).filter(model.server.notin_(names)).delete(synchronize_session=False)
+    db.commit()
     if fails and not parts:
         raise RuntimeError("All servers failed. " + "; ".join(fails))
     return total, "; ".join(parts) + (" | FAILED " + "; ".join(fails) if fails else "")

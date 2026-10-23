@@ -11,6 +11,12 @@ async function intLoad(name, path) {
 }
 const intLoading = () => `<div class="empty sm">Memuat…</div>`;
 const intOpt = (arr, cur) => arr.map(([v, l]) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(l)}</option>`).join("");
+const msRow = x => `<div class="msrow"><input data-ms="name" type="text" placeholder="Name, e.g. Belawan" value="${esc(x.name || "")}" aria-label="Server name"><input data-ms="url" type="text" placeholder="https://10.181.3.1" value="${esc(x.url || "")}" aria-label="Server address" autocomplete="off">
+  <label class="chk"><input data-ms="on" type="checkbox" ${x.enabled !== false ? "checked" : ""}> Active</label>
+  <span class="sub">${x.cameras != null ? fmt(x.cameras) + " cameras · " + fmt(x.hardware || 0) + " hardware · synced " + esc(intDt(x.updated)) : "not synced yet"}</span>
+  <span class="acts"><button type="button" class="btn ghost sm" data-int="mstest" data-w>Test</button><button type="button" class="btn ghost sm" data-int="msdel">Remove</button></span></div>`;
+const msServers = s => `<div class="fld wide msrv"><label>Servers <span class="sub">The same Basic user account (below) is used on every server. Paused servers are skipped and their cameras leave the dashboard.</span></label>
+  <div class="msrows" id="msRows">${(s.servers || []).map(msRow).join("") || msRow({})}</div><div class="acts"><button type="button" class="btn ghost sm" data-int="msadd">+ Add server</button></div></div>`;
 const intField = (id, label, inp, wide) => `<div class="fld ${wide ? "wide" : ""}"><label for="${id}">${esc(label)}</label>${inp}</div>`;
 
 function vIntegrations() {
@@ -25,11 +31,12 @@ function vIntegrations() {
         ${intField(f + "_iv", "Interval (minutes)", `<input id="${f}_iv" data-f="interval_min" type="number" min="1" max="1440" value="${esc(s.interval_min)}">`)}
         ${intField(f + "_tls", "Verify TLS", `<select id="${f}_tls" data-f="verify_tls">${intOpt([["true", "Yes"], ["false", "No (internal certificate)"]], String(s.verify_tls))}</select>`)}
         ${intField(f + "_url", "Base URL", `<input id="${f}_url" data-f="base_url" type="text" autocomplete="off" placeholder="e.g. 10.181.1.224 or https://host/zabbix" value="${esc(s.base_url)}">`, true)}
-        ${(s.extra || []).map(e => intField(f + "_x_" + e.key, e.label, `<textarea id="${f}_x_${e.key}" data-xlist="${esc(e.key)}" rows="3" spellcheck="false">${esc((e.value || []).join("\n"))}</textarea>`, true)).join("")}
+        ${s.key === "milestone" ? msServers(s) : ""}
+        ${(s.extra || []).filter(e => !(s.key === "milestone" && e.key === "servers")).map(e => intField(f + "_x_" + e.key, e.label, `<textarea id="${f}_x_${e.key}" data-xlist="${esc(e.key)}" rows="3" spellcheck="false">${esc((e.value || []).join("\n"))}</textarea>`, true)).join("")}
         ${creds}
         <div class="acts wide"><button class="btn" type="submit" data-w>Save</button><button class="btn ghost" type="button" data-int="test" data-key="${esc(s.key)}" data-w>Test connection</button><button class="btn ghost" type="button" data-int="sync" data-key="${esc(s.key)}" data-w>Sync now</button></div></form>`
       : `<p class="sub">This source has no API. Data comes in through RAW upload in Report → Data.</p>`;
-    return `<article class="icard"><header><b>${esc(s.label)}</b><span class="tag ${s.enabled ? "on" : ""}">${s.enabled ? "Active" : "Inactive"}</span><span class="tag">${s.mode === "api" ? "API" : "Impor"}</span></header>
+    return `<article class="icard ${s.key === "milestone" ? "wide" : ""}"><header><b>${esc(s.label)}</b><span class="tag ${s.enabled ? "on" : ""}">${s.enabled ? "Active" : "Inactive"}</span><span class="tag">${s.mode === "api" ? "API" : "Impor"}</span></header>
       <span class="sub">${esc(s.tip || "")}</span>
       ${s.stats ? `<span class="sub">Devices: <b>${s.stats.total}</b> · up ${s.stats.up} · down <b class="${s.stats.down ? "errtx" : ""}">${s.stats.down}</b> · maintenance ${s.stats.maintenance} · disabled ${s.stats.disabled}</span>` : ""}
       <span class="sub">Last successful sync: ${esc(intDt(s.last_ok_at))}${s.last_error ? ` · <b class="errtx">error: ${esc(String(s.last_error).slice(0, 120))}</b>` : ""}</span>${body}</article>`;
@@ -91,6 +98,7 @@ async function intSaveIntegration(f) {
   const k = f.dataset.intForm, v = intForm(f), secrets = {}, lists = {};
   f.querySelectorAll("[data-secret]").forEach(el => { if (el.value.trim()) secrets[el.dataset.secret] = el.value; });
   f.querySelectorAll("[data-xlist]").forEach(el => { lists[el.dataset.xlist] = el.value.split("\n"); });
+  if (f.querySelector(".msrow")) lists.servers = [...f.querySelectorAll(".msrow")].map(r => { const g = k => r.querySelector(`[data-ms="${k}"]`); return g("url").value.trim() ? [g("name").value.trim().replace(/[|]/g, " "), g("url").value.trim(), g("on").checked ? "" : "off"].join("|").replace(/[|]$/, "") : ""; }).filter(Boolean);
   await send("/api/admin/integrations/" + k, {mode: v.mode, enabled: v.enabled === "true", interval_min: +v.interval_min || 60, base_url: v.base_url, verify_tls: v.verify_tls === "true", secrets, config_lists: lists}, "PUT");
 }
 const intForm = f => Object.fromEntries([...f.querySelectorAll("[data-f]")].map(el => [el.dataset.f, intVal(el)]));
@@ -100,6 +108,10 @@ document.addEventListener("click", async e => {
   const b = e.target.closest("[data-int]"); if (!b) return;
   const a = b.dataset.int, id = b.dataset.id, key = b.dataset.key;
   try {
+    if (a === "msadd") { $("msRows").insertAdjacentHTML("beforeend", msRow({})); return; }
+    if (a === "msdel") { b.closest(".msrow").remove(); return; }
+    if (a === "mstest") { const nm = b.closest(".msrow").querySelector('[data-ms="name"]').value.trim(); b.disabled = true; b.textContent = "Testing…"; await intSaveIntegration(b.closest("form"));
+      const r = await send("/api/admin/integrations/milestone/test?server=" + encodeURIComponent(nm), {}).catch(er => ({ok: false, msg: er.message})); INT.integrations = null; INT.msg = {ok: r.ok, t: r.msg || "Failed"}; render(false); return; }
     if (a === "test" || a === "sync") { const fm = b.closest("form"); if (fm) { b.disabled = true; b.textContent = "Menyimpan…"; await intSaveIntegration(fm); } }
     if (a === "test") { b.disabled = true; b.textContent = "Testing…"; const r = await send("/api/admin/integrations/" + key + "/test", {}).catch(er => ({ok: false, msg: er.message})); INT.msg = {ok: r.ok, t: r.msg || "Failed"}; render(false); }
     else if (a === "sync") { b.disabled = true; b.textContent = "Syncing…"; const r = await send("/api/ingest/sync/" + key, {}).catch(er => ({ok: false, msg: er.message})); INT.integrations = null; INT.msg = {ok: r.ok !== false, t: r.ok === false ? r.msg : "Sync finished: " + (r.rows ?? 0) + " rows"}; render(false); }

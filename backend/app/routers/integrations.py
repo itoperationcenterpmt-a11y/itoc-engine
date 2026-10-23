@@ -11,7 +11,7 @@ from .. import mailer, notify, vault
 from ..db import get_db
 from ..netguard import check_url
 from ..ingest import zabbix, ruckus, panorama_api, trendmicro, milestone
-from ..models import ApiKey, DataSource, Role, User, Webhook, ZbxHost
+from ..models import ApiKey, CctvCamera, CctvHardware, DataSource, Role, User, Webhook, ZbxHost
 from ..security import rate_limit, require_admin, require_admin_area
 from ..store import audit, bump_config
 
@@ -47,6 +47,14 @@ def _zbx_stats(db: Session):
     return {"total": sum(rows.values()), **{k: rows.get(k, 0) for k in ("up", "down", "maintenance", "disabled")}}
 
 
+def _milestone_servers(db: Session, c: dict) -> list[dict]:
+    """Configured Milestone servers with what was last synced for each."""
+    from sqlalchemy import func
+    cams = {k: (n, u) for k, n, u in db.query(CctvCamera.server, func.count(), func.max(CctvCamera.fetched_at)).group_by(CctvCamera.server)}
+    hws = dict(db.query(CctvHardware.server, func.count()).group_by(CctvHardware.server).all())
+    return [{"name": n, "url": u, "enabled": on, "cameras": cams.get(n, (None, None))[0], "hardware": hws.get(n), "updated": cams[n][1].isoformat() if n in cams and cams[n][1] else None} for n, u, on in milestone.servers_all(c)]
+
+
 @router.get("/integrations")
 def integrations(db: Session = Depends(get_db)):
     rows = []
@@ -56,7 +64,8 @@ def integrations(db: Session = Depends(get_db)):
                      "last_ok_at": s.last_ok_at.isoformat() if s.last_ok_at else None, "last_error": s.last_error,
                      "api_capable": s.key in CREDS, "creds": _cred_state(db, s),
                      "extra": [{"key": k, "label": lb, "value": (s.config or {}).get(k) or []} for k, lb in EXTRA.get(s.key, [])],
-                     "stats": _zbx_stats(db) if s.key == "zabbix" else None})
+                     "stats": _zbx_stats(db) if s.key == "zabbix" else None,
+                     "servers": _milestone_servers(db, s.config or {}) if s.key == "milestone" else None})
     return {"rows": rows}
 
 
@@ -100,7 +109,7 @@ def integration_set(key: str, body: IntegrationIn, db: Session = Depends(get_db)
             if key == "milestone" and k == "servers":
                 for ln in cfg[k]:
                     try:
-                        check_url(ln.partition("|")[2].strip() or ln, "Alamat server Milestone")
+                        check_url((ln.split("|") + [""])[1].strip() if "|" in ln else ln.strip(), "Milestone server address")
                     except ValueError as e:
                         raise HTTPException(422, str(e))
     s.config = cfg
@@ -118,7 +127,7 @@ def integration_set(key: str, body: IntegrationIn, db: Session = Depends(get_db)
 
 
 @router.post("/integrations/{key}/test", dependencies=[Depends(rate_limit("itest", 12, 60))])
-def integration_test(key: str, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+def integration_test(key: str, server: str = "", db: Session = Depends(get_db), user: User = Depends(require_admin)):
     s = db.get(DataSource, key)
     if not s or key not in CREDS:
         raise HTTPException(404, "This source has no API connection")
@@ -199,7 +208,9 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
             if not u or not pw:
                 raise HTTPException(422, "Milestone username/password is not filled in")
             out, good = [], 0
-            for nm, url in milestone.servers(c):
+            for nm, url, _on in milestone.servers_all(c):
+                if server and nm != server:
+                    continue
                 try:
                     with httpx.Client(timeout=30, verify=c.get("verify_tls", False), follow_redirects=False) as cl:
                         tk = milestone.login(cl, url, u, pw)

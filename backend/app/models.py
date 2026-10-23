@@ -379,6 +379,7 @@ class ZbxHost(Base):
     zone: Mapped[str] = mapped_column(String(40), default="")          # dari nama host: Entitas-Cabang-Zona-SubZona-KodePerangkat-Urut
     subzone: Mapped[str] = mapped_column(String(80), default="")
     dev_code: Mapped[str] = mapped_column(String(20), default="")
+    ip: Mapped[str] = mapped_column(String(45), default="", server_default="", index=True)   # first interface address (used to match Milestone cameras)
     groups: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     status: Mapped[str] = mapped_column(String(20), default="up")      # up | down | maintenance | disabled
     down_since: Mapped[datetime | None] = mapped_column(DateTime)
