@@ -13,6 +13,7 @@ const intLoading = () => `<div class="empty sm">Memuat…</div>`;
 const intOpt = (arr, cur) => arr.map(([v, l]) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(l)}</option>`).join("");
 const msRow = x => `<div class="msrow"><input data-ms="name" type="text" placeholder="Name, e.g. Belawan" value="${esc(x.name || "")}" aria-label="Server name"><input data-ms="url" type="text" placeholder="https://10.181.3.1" value="${esc(x.url || "")}" aria-label="Server address" autocomplete="off">
   <label class="chk"><input data-ms="on" type="checkbox" ${x.enabled !== false ? "checked" : ""}> Active</label>
+  <input data-ms="lic" type="number" min="0" max="100000" placeholder="Licences" value="${x.license != null ? esc(x.license) : ""}" aria-label="Licensed devices" title="Licensed devices on this server (optional)">
   <span class="sub">${x.cameras != null ? fmt(x.cameras) + " cameras · " + fmt(x.hardware || 0) + " hardware · synced " + esc(intDt(x.updated)) : "not synced yet"}</span>
   <span class="acts"><button type="button" class="btn ghost sm" data-int="mstest" data-w>Test</button><button type="button" class="btn ghost sm" data-int="msdel">Remove</button></span></div>`;
 const msServers = s => `<div class="fld wide msrv"><label>Servers <span class="sub">The same Basic user account (below) is used on every server. Paused servers are skipped and their cameras leave the dashboard.</span></label>
@@ -101,7 +102,7 @@ async function intSaveIntegration(f) {
   const k = f.dataset.intForm, v = intForm(f), secrets = {}, lists = {};
   f.querySelectorAll("[data-secret]").forEach(el => { if (el.value.trim()) secrets[el.dataset.secret] = el.value; });
   f.querySelectorAll("[data-xlist]").forEach(el => { lists[el.dataset.xlist] = el.value.split("\n"); });
-  if (f.querySelector(".msrow")) lists.servers = [...f.querySelectorAll(".msrow")].map(r => { const g = k => r.querySelector(`[data-ms="${k}"]`); return g("url").value.trim() ? [g("name").value.trim().replace(/[|]/g, " "), g("url").value.trim(), g("on").checked ? "" : "off"].join("|").replace(/[|]$/, "") : ""; }).filter(Boolean);
+  if (f.querySelector(".msrow")) lists.servers = [...f.querySelectorAll(".msrow")].map(r => { const g = k => r.querySelector(`[data-ms="${k}"]`); return g("url").value.trim() ? [g("name").value.trim().replace(/[|]/g, " "), g("url").value.trim(), [g("on").checked ? "" : "off", +g("lic").value > 0 ? "lic=" + Math.floor(+g("lic").value) : ""].filter(Boolean).join(",")].join("|").replace(/[|]$/, "") : ""; }).filter(Boolean);
   await send("/api/admin/integrations/" + k, {mode: v.mode, enabled: v.enabled === "true", interval_min: +v.interval_min || 60, base_url: v.base_url, verify_tls: v.verify_tls === "true", secrets, config_lists: lists}, "PUT");
 }
 const intForm = f => Object.fromEntries([...f.querySelectorAll("[data-f]")].map(el => [el.dataset.f, intVal(el)]));

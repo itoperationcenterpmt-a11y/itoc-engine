@@ -52,7 +52,8 @@ def _milestone_servers(db: Session, c: dict) -> list[dict]:
     from sqlalchemy import func
     cams = {k: (n, u) for k, n, u in db.query(CctvCamera.server, func.count(), func.max(CctvCamera.fetched_at)).group_by(CctvCamera.server)}
     hws = dict(db.query(CctvHardware.server, func.count()).group_by(CctvHardware.server).all())
-    return [{"name": n, "url": u, "enabled": on, "cameras": cams.get(n, (None, None))[0], "hardware": hws.get(n), "updated": cams[n][1].isoformat() if n in cams and cams[n][1] else None} for n, u, on in milestone.servers_all(c)]
+    lic = milestone.server_licenses(c)
+    return [{"name": n, "url": u, "enabled": on, "license": lic.get(n), "cameras": cams.get(n, (None, None))[0], "hardware": hws.get(n), "updated": cams[n][1].isoformat() if n in cams and cams[n][1] else None} for n, u, on in milestone.servers_all(c)]
 
 
 @router.get("/integrations")

@@ -85,9 +85,21 @@ def servers_all(c: dict) -> list[tuple[str, str, bool]]:
         parts = [p.strip() for p in str(ln).split("|")]
         nm, url, flag = ("", parts[0], "") if len(parts) == 1 else (parts[0], parts[1], parts[2] if len(parts) > 2 else "")
         if url:
-            out.append(((nm or re.sub(r"^https?://", "", url).strip("/"))[:80], url, flag.lower() != "off"))
+            out.append(((nm or re.sub(r"^https?://", "", url).strip("/"))[:80], url, "off" not in [f.strip().lower() for f in flag.split(",")]))
     if not out and c.get("base_url"):
         out.append(("HO", c["base_url"], True))
+    return out
+
+
+def server_licenses(c: dict) -> dict[str, int]:
+    """Licensed device count per server, from the optional 'lic=N' flag on a server line ('Name|address|lic=100' or 'Name|address|off,lic=100')."""
+    out = {}
+    for ln in c.get("servers") or []:
+        parts = [p.strip() for p in str(ln).split("|")]
+        if len(parts) > 2:
+            m = re.search(r"lic=(\d+)", parts[2], re.I)
+            if m:
+                out[parts[0][:80]] = int(m.group(1))
     return out
 
 
