@@ -39,8 +39,8 @@ const panel = (cls, title, sub, body, extra) => `<section class="panel ${cls}"><
 const info = t => `<button type="button" class="ib" data-tip="${esc(t)}" aria-label="Formula: ${esc(t)}">i</button>`;
 function delta(cur, prev, o = {}) {
   if (!S.cmp || cur == null || prev == null || isNaN(cur) || isNaN(prev)) return "";
-  const d = cur - prev; if (Math.abs(d) < 1e-9) return `<span class="dl flat">= sama</span>`;
-  const good = o.up === undefined ? null : (d > 0) === o.up, txt = o.pct ? fx(Math.abs(d) * 100, 1) + " poin" : prev ? fx(Math.abs(d / prev) * 100, 0) + "%" : fmt(Math.abs(d));
+  const d = cur - prev; if (Math.abs(d) < 1e-9) return `<span class="dl flat">= same</span>`;
+  const good = o.up === undefined ? null : (d > 0) === o.up, txt = o.pct ? fx(Math.abs(d) * 100, 1) + " pts" : prev ? fx(Math.abs(d / prev) * 100, 0) + "%" : fmt(Math.abs(d));
   return `<span class="dl ${good == null ? "flat" : good ? "good" : "bad"}">${d > 0 ? "▲" : "▼"} ${txt}</span>`;
 }
 const kpi = (l, v, d, o = {}) => `<div class="kpi ${o.cls || ""}"><span class="lbl">${l}${o.tip ? info(o.tip) : ""}</span><span class="v">${v}</span><span class="d">${o.dl || ""}${d || ""}</span></div>`;
@@ -49,7 +49,7 @@ function tbl(heads, rows, o = {}) {
   const isN = heads.map((h, i) => rows.some(r => typeof r[i] === "number") || (o.r || []).includes(i));
   const cell = c => c == null ? "–" : typeof c === "number" ? (Number.isInteger(c) ? fmt(c) : fx(c, 2)) : c.h != null ? c.h : esc(c);
   const auto = rows.length > (o.max || 12) && o.tall !== false;      // long tables scroll inside their own box instead of stretching the page
-  return `<div class="scroll ${o.tall || auto ? "tall" : ""}"><table><thead><tr>${heads.map((h, i) => `<th class="${isN[i] ? "r" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>` + rows.map(r => `<tr>${r.map((c, i) => `<td class="${isN[i] ? "r num" : "t"}">${cell(c)}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>` + (auto ? `<div class="sub tcount">${fmt(rows.length)} rows · scroll inside the table to see more</div>` : "");
+  return `<div class="scroll ${o.tall || auto ? "tall" : ""}"><table><thead><tr>${heads.map((h, i) => `<th class="${isN[i] ? "r" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>` + rows.map(r => `<tr>${r.map((c, i) => typeof c === "string" && !isN[i] && c.length > 48 ? `<td class="t cut" title="${esc(c)}">${esc(c)}</td>` : `<td class="${isN[i] ? "r num" : "t"}">${cell(c)}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>` + (auto ? `<div class="sub tcount">${fmt(rows.length)} rows · scroll inside the table to see more</div>` : "");
 }
 const dayB = arr => arr.map(x => ({label: dmon(x.date), full: dlong(x.date)}));
 const stPill = s => ({h: s === NST.ok ? pill("good", s) : s === NST.bad ? pill("crit", s) : pill("idle", s)});

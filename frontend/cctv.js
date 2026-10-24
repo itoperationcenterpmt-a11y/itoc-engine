@@ -31,7 +31,7 @@ function vCctv() {
     + `<p class="sub msnote">Status dots come from Zabbix: ${msDot("up")} online ${msDot("down")} offline ${msDot("")} not in Zabbix · last sync ${C.updated ? dtime(C.updated) : "-"}</p>`;
   const P = cctvPanels(C);
   const rows = C.list.map(x => [x.server, x.name, x.hw, x.ip || "-", {h: msType(x.type)}, x.ch == null ? "-" : x.ch, {h: x.enabled ? pill("good", "Active") : pill("idle", "Inactive")}, {h: msDot(x.zbx)}, x.zprob ? x.zprob + (x.zsince ? " · since " + dtime(x.zsince) : "") : "–", {h: x.rec ? pill("good", "Yes") : pill("idle", "No")}, x.fps || "-", x.mod ? dtime(x.mod) : "-"]);
-  return (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
+  return insArea("cctv") + (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
     P.srv() + P.hw() + P.rec() +
     panel("c12", "Device List", fmt(C.total) + " cameras" + (C.pa.total ? " · " + fmt(C.pa.total) + " public announcers" : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Search server, name, hardware, or IP" aria-label="Search devices"></div><div id="dlist">${tbl(["Server", "Name", "Hardware", "IP", "Type", "Ch", "Status", "Zabbix", "Zabbix problem", "Recording Centrally", "FPS", "Changed"], rows, {tall: true, empty: "No devices yet."})}</div>`));
 }

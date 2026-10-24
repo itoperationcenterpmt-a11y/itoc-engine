@@ -21,7 +21,8 @@ function vzSpark(vals, color = VZC.s1) {
   const line = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
   return `<svg class="vz-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Trend"><path d="${line} L${W - P} ${H} L${P} ${H} Z" fill="${color}" opacity=".14"/><path d="${line}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${pts[pts.length - 1][0].toFixed(1)}" cy="${pts[pts.length - 1][1].toFixed(1)}" r="2.6" fill="${color}"/></svg>`;
 }
-const vzSparkCard = (size, title, value, sub, vals, color, badWhenUp) => panel(size, title, "", `<div class="vz-card"><div class="vz-val">${value}</div><div class="vz-sub">${sub}</div>${vzSpark(vals, color)}${vzDeltaHtml(vzDelta(vals), badWhenUp)}</div>`);
+const vzSparkCard = (size, title, value, sub, vals, color, badWhenUp, note) => panel(size, title, "", `<div class="vz-card"><div class="vz-val">${value}</div><div class="vz-sub">${sub}</div>${vzSpark(vals, color)}${note ? `<span class="vz-d">${note}</span>` : vzDeltaHtml(vzDelta(vals), badWhenUp)}</div>`);
+const vzPal = [VZC.s1, VZC.s2, VZC.good, VZC.warn, VZC.sev, VZC.low];
 
 /* Half-circle gauge. pct and target are fractions; lo..hi is the scale shown (availability sits near 100%, so a zoomed scale is more useful). */
 function vzGauge(pct, o = {}) {
@@ -95,6 +96,18 @@ const VIZ_WIDGETS = [
     html: () => { const z = V.cctv.zbx; return panel("c4", "Camera status (Zabbix)", "", vzDonut([{k: "Online", v: z.up + z.other, c: VZC.good}, {k: "Offline", v: z.down, c: VZC.crit}, {k: "No status", v: z.none, c: VZC.low}], {sub: "cameras", label: "Camera status"})); }},
   {key: "viz-donut-xdr", grp: "Visual", mod: "xdr", need: "xdr", title: "XDR alerts by severity", desc: "Share of XDR alerts per severity", size: "c4",
     html: () => panel("c4", "XDR alerts by severity", "", vzDonut((V.xdr.bySev || []).map(x => ({k: (XSEV[x.k] || [x.k])[0], v: x.n, c: {critical: VZC.crit, high: VZC.sev, medium: VZC.warn, low: VZC.low}[x.k] || VZC.low})), {sub: "alerts", label: "XDR severity"}))},
+  {key: "viz-donut-tickets", grp: "Visual", mod: "servicedesk", need: "tk", title: "Ticket status", desc: "Closed against still open", size: "c4",
+    html: () => panel("c4", "Ticket status", "", vzDonut([{k: "Closed", v: V.tk.n - V.tk.open, c: VZC.good}, {k: "Still open", v: V.tk.open, c: VZC.warn}], {center: pc(V.tk.doneRate, 0), sub: "closed", label: "Ticket status"}))},
+  {key: "viz-gauge-ap", grp: "Visual", mod: "wifi", need: "wifi", title: "Access Points online gauge", desc: "Access Points online out of all", size: "c3",
+    html: () => vzGaugeCard("c3", "Access Points online", V.wifi.apTotal ? V.wifi.apOnline / V.wifi.apTotal : null, {lo: 0.8, hi: 1, target: 0.95, label: "Access Points online", sub: fmt(V.wifi.apTotal - V.wifi.apOnline) + " offline", note: "Marker = 95%"})},
+  {key: "viz-donut-band", grp: "Visual", mod: "wifi", need: "wifi", title: "WiFi clients by band", desc: "Share of active clients per radio band", size: "c4",
+    html: () => panel("c4", "WiFi clients by band", "", vzDonut((V.wifi.byBand || []).map((x, i) => ({k: x.k, v: x.n, c: vzPal[i % vzPal.length]})), {sub: "clients", label: "Clients by band"}))},
+  {key: "viz-spark-wifi", grp: "Visual", mod: "wifi", need: "wifi", title: "WiFi clients · 24 hours", desc: "Active clients over the last 24 hours", size: "c3",
+    html: () => vzSparkCard("c3", "WiFi clients · 24 hours", fmt(V.wifi.total), fmt(V.wifi.apOnline) + " Access Points online", (V.wifi.trend || []).map(x => x.c), VZC.good, false, "hourly, last 24 hours")},
+  {key: "viz-donut-ndr-action", grp: "Visual", mod: "soc", need: "soc", title: "NDR events by firewall action", desc: "Share of threat events per firewall action", size: "c4",
+    html: () => panel("c4", "NDR events by firewall action", ctxTxt(APPLY.soc), vzDonut((V.soc.action || []).slice(0, 6).map((x, i) => ({k: x.k, v: x.n, c: vzPal[i % vzPal.length]})), {sub: "events", label: "Firewall action"}))},
+  {key: "viz-donut-kinds", grp: "Visual", mod: "devices", need: "dev", title: "Devices by category", desc: "Share of monitored devices per Zabbix category", size: "c4",
+    html: () => panel("c4", "Devices by category", "", vzDonut((V.dev.byKind || []).map((x, i) => ({k: x.k, v: x.total, c: vzPal[i % vzPal.length]})), {sub: "devices", label: "Devices by category"}))},
   {key: "viz-licence", grp: "Visual", mod: "cctv", need: "cctv", title: "Milestone licences", desc: "Licences in use per Milestone server (set the total in Integrations)", size: "c4",
     html: () => { const rows = (V.cctv.servers || []).filter(s => s.licTotal != null); return panel("c4", "Milestone licences", "", rows.length ? `<div class="vz-meters">${rows.map(s => { const p = s.licTotal ? s.licUsed / s.licTotal : 0, tone = p > 1 ? "crit" : p >= 0.9 ? "warn" : "good"; return `<div class="vz-m"><span>${esc(s.name)}</span><div class="vz-mb"><i class="${tone}" style="width:${Math.min(100, p * 100).toFixed(1)}%"></i></div><b>${fmt(s.licUsed)}/${fmt(s.licTotal)}</b></div>`; }).join("")}</div>` : `<div class="empty sm">No licence totals set. Add them per server in Admin → Integrations → Milestone.</div>`); }},
   {key: "viz-heat-tickets", grp: "Visual", mod: "servicedesk", need: "viz", title: "Ticket load · weekday × hour", desc: "When tickets arrive (heatmap)", size: "c8",

@@ -75,6 +75,8 @@ def parse_name(name: str) -> tuple[str, str, str]:
     """Entitas-Cabang-Zona-SubZona-KodePerangkat-Urut, mis. PMT-MDN-LT5-RSVR-NGWF-001 -> (LT5, RSVR, NGWF). Sub zona dan nomor urut boleh tidak ada;
     nama yang tidak berawalan PMT- tidak diuraikan (kode kosong = tidak terklasifikasi)."""
     t = name.strip().split("-")
+    if t[0].upper() == "ISP" and len(t) >= 3:                      # ISP-<Provider>-<Branch>, e.g. ISP-LINTASARTA-GRK: zone = provider, sub zone = branch, device code = ISP
+        return t[1].upper(), "-".join(t[2:]).upper(), "ISP"
     if len(t) < 4 or t[0].upper() != "PMT":
         return "", "", ""
     body = t[1:-1] if t[-1].isdigit() else t[1:]
@@ -189,6 +191,8 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
         else:
             st, since, prob = "up", None, None
         zone, sub, dcode = parse_name(h["name"] or h["host"])
+        if dcode == "ISP" and sub:                                  # the location of an ISP link is the branch in its name, not the generic NETWORK-ISP group
+            code = sub.split("-")[0].split(".")[-1][:40]
         rows.append({"hostid": h["hostid"], "host": h["host"][:255], "name": (h["name"] or h["host"])[:255], "kind": kind, "code": code, "zone": zone[:40], "subzone": sub[:80], "dev_code": dcode[:20],
                      "ip": next((i.get("ip") for i in ifaces if i.get("ip")), "")[:45], "group_name": (gnames[0] if gnames else "")[:255], "groups": gnames, "status": st, "down_since": since, "problem": prob, "updated_at": now})
     for part in _chunks(rows, 500):

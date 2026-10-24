@@ -17,6 +17,11 @@ WD = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunda
 CLOSED = ("closed", "resolved", "cancelled", "canceled")
 
 
+def holding(cfg) -> tuple:
+    """Statuses whose SLA clock is paused (On hold). An open ticket in one of them is not counted as late, old, or about to breach."""
+    return tuple(s.lower() for s in (cfg.p("sd.onhold_statuses", ["Onhold", "On Hold"]) or [])) if cfg.p("sd.onhold_pauses_sla", True) else ()
+
+
 def robust(base: list[float], x: float):
     """(median, deviation, z). Deviation = MAD x 1.4826, or the standard deviation when MAD is 0. None when there is too little comparison data."""
     if len(base) < MIN_BASE:
@@ -149,7 +154,7 @@ def d_ticket_trends(db: Session, cfg: Config) -> list[dict]:
 def d_sla_risk(db: Session, cfg: Config) -> list[dict]:
     """Open tickets that will pass their SLA target within 2 hours, and the count already past it."""
     now, out, soon, over = cfg.now(), [], [], 0
-    rows = db.execute(select(M.Ticket.id, M.Ticket.site, M.Ticket.sla_name, M.Ticket.created_at, M.Ticket.onhold_h).where(M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED))).all()
+    rows = db.execute(select(M.Ticket.id, M.Ticket.site, M.Ticket.sla_name, M.Ticket.created_at, M.Ticket.onhold_h).where(M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED + holding(cfg)))).all()
     for tid, site, sn, cre, hold in rows:
         tgt = cfg.sla.get(sn)
         if not tgt:
@@ -296,6 +301,89 @@ def d_xdr(db: Session, cfg: Config) -> list[dict]:
     return out
 
 
+def d_xdr_tickets(db: Session, cfg: Config) -> list[dict]:
+    """Open critical or high XDR alerts: how many have a related ticket, and which tickets belong to the busiest detection model."""
+    from .calc import xdr_tickets
+    now = cfg.now()
+    rows = db.scalars(select(M.XdrAlert).where(M.XdrAlert.severity.in_(["critical", "high"]), func.lower(func.coalesce(M.XdrAlert.status, "")) != "closed",
+                                               func.lower(func.coalesce(M.XdrAlert.investigation_status, "")) != "closed", M.XdrAlert.created_at >= now - timedelta(days=30))).all()
+    if not rows:
+        return []
+    ref = xdr_tickets.refs(db, rows)
+    out, bare = [], [r for r in rows if not ref.get(r.id)]
+    if len(bare) >= 3:
+        hosts = sorted({e.get("name") for r in bare for e in (r.entities or []) if e.get("type") == "host" and e.get("name")})[:5]
+        out.append(_ins("xdr_noticket", "security", "crit" if len(bare) >= 10 else "warn", f"{len(bare)} of {len(rows)} open critical or high XDR alerts have no ticket",
+                        "No ManageEngine ticket mentions the affected host in the 30 days after the alert. Open a ticket so the response is tracked." + (f" Hosts: {', '.join(hosts)}." if hosts else ""), "xdr",
+                        {"open_alerts": len(rows), "without_ticket": len(bare), "with_ticket": len(rows) - len(bare)}))
+    by: dict = {}
+    for r in rows:
+        by.setdefault(r.model or "-", []).append(r)
+    model, grp = max(by.items(), key=lambda x: len(x[1]))
+    if len(grp) >= 5:
+        tk = sorted({t["id"] for r in grp for t in ref.get(r.id, [])})[:6]
+        out.append(_ins(f"xdr_model:{model}", "security", "warn", f"Detection model \"{model}\" triggered {len(grp)} open alerts",
+                        "The same model keeps firing across hosts. Check whether it is one campaign or a rule that needs tuning." + (f" Related tickets: {', '.join(tk)}." if tk else " No related ticket found."), "xdr",
+                        {"alerts": len(grp), "hosts": len({e.get("name") for r in grp for e in (r.entities or []) if e.get("type") == "host"}), "tickets": tk or "none"}))
+    return out
+
+
+def d_ndr_mix(db: Session, cfg: Config) -> list[dict]:
+    """Share of critical and high events and categories that are new this week."""
+    today = cfg.now().date()
+    rows = db.execute(text("SELECT DISTINCT ON (day) day, threats FROM soc_day WHERE day >= :a AND day < :b ORDER BY day, batch_id DESC"), {"a": today - timedelta(days=35), "b": today}).all()
+    if len(rows) < 8:
+        return []
+    cat = lambda t: {k.split("|")[2] if len(k.split("|")) > 2 else "-": v for k, v in (t or {}).items()}
+    old: set = set()
+    new: dict = {}
+    cut = today - timedelta(days=7)
+    for d, t in rows:
+        for c, v in cat(t).items():
+            if d < cut:
+                old.add(c)
+            else:
+                new[c] = new.get(c, 0) + v
+    fresh = sorted(((c, v) for c, v in new.items() if c not in old and c != "-" and v >= 10), key=lambda x: -x[1])[:3]
+    if not fresh:
+        return []
+    return [_ins("ndr_newcat:" + fresh[0][0], "security", "info", f"New NDR threat category: {fresh[0][0]}", f"{fmt(fresh[0][1])} events this week from a category not seen in the previous weeks." + (f" Also new: {', '.join(c for c, _ in fresh[1:])}." if len(fresh) > 1 else ""), "soc",
+                 {"events": fresh[0][1], "new_categories": len(fresh)})]
+
+
+def d_wifi_zones(db: Session, cfg: Config) -> list[dict]:
+    """Offline Access Points concentrated in one zone, and Access Points offline for a long time."""
+    rows = db.execute(select(M.WifiAp.zone, func.count(), func.count().filter(~func.lower(func.coalesce(M.WifiAp.status, "")).startswith("online")))
+                      .group_by(M.WifiAp.zone)).all()
+    out = []
+    for z, tot, off in sorted(rows, key=lambda x: -(x[2] or 0))[:2]:
+        if off and off >= 3 and off / tot >= 0.3:
+            out.append(_ins(f"wifi_zone:{z}", "wifi", "warn", f"{off} of {tot} Access Points in zone {z or '-'} are offline", "Offline Access Points are concentrated in one zone, which usually points to a switch, PoE, or power problem there.", "wifi", {"offline": off, "total": tot}, z))
+    return out
+
+
+def d_milestone(db: Session, cfg: Config) -> list[dict]:
+    """Milestone servers that fail to sync, and cameras that are offline in one server or hardware model."""
+    out = []
+    src = db.get(M.DataSource, "milestone")
+    errs = ((src.cursor or {}).get("server_errors") or {}) if src else {}
+    if errs:
+        names = sorted(errs)[:4]
+        out.append(_ins("ms_sync", "cctv", "warn", f"{len(errs)} Milestone server(s) failed to sync", f"{', '.join(names)}. Cameras from these servers are not updated. Check the server address, credentials, and the API Gateway.", "integrations", {"servers": len(errs)}))
+    down = {ip for (ip,) in db.execute(select(M.ZbxHost.ip).where(M.ZbxHost.status == "down", M.ZbxHost.ip.isnot(None)))}
+    by: dict = {}
+    for srv, ip, en in db.execute(select(M.CctvCamera.server, M.CctvCamera.ip, M.CctvCamera.enabled)):
+        if en is False:
+            continue
+        x = by.setdefault(srv or "-", [0, 0])
+        x[0] += 1
+        x[1] += 1 if ip and ip in down else 0
+    for srv, (tot, off) in sorted(by.items(), key=lambda x: -x[1][1])[:2]:
+        if off >= 5 and off / max(tot, 1) >= 0.15:
+            out.append(_ins(f"ms_off:{srv}", "cctv", "warn" if off / tot < 0.4 else "crit", f"{off} of {tot} cameras on {srv} are offline", "A high offline share on one server usually means a recorder, switch, or uplink problem rather than single cameras.", "cctv", {"offline": off, "total": tot}, srv))
+    return out
+
+
 # ---------------- detectors: devices and WiFi ----------------
 def d_devices(db: Session, cfg: Config) -> list[dict]:
     """Devices down now against the last 7 days (per kind), and long-running down devices."""
@@ -425,7 +513,7 @@ def d_data_quality(db: Session, cfg: Config) -> list[dict]:
     return out
 
 
-DETECTORS = [d_tickets, d_ticket_sites, d_ticket_trends, d_sla_risk, d_links, d_availability, d_capacity, d_ndr, d_xdr, d_devices, d_flapping_devices, d_incidents, d_wifi, d_site_multi, d_data_quality]
+DETECTORS = [d_tickets, d_ticket_sites, d_ticket_trends, d_sla_risk, d_links, d_availability, d_capacity, d_ndr, d_xdr, d_xdr_tickets, d_ndr_mix, d_devices, d_flapping_devices, d_incidents, d_wifi, d_wifi_zones, d_milestone, d_site_multi, d_data_quality]
 
 
 # ---------------- rankings, health, summary (computed on request) ----------------
@@ -470,7 +558,7 @@ def site_health(db: Session, cfg: Config) -> list[dict]:
             tot[s] = tot.get(s, 0) + 1
             dn[s] = dn.get(s, 0) + (1 if status == "down" else 0)
     over: dict = {}
-    for site, sn, cre, hold in db.execute(select(M.Ticket.site, M.Ticket.sla_name, M.Ticket.created_at, M.Ticket.onhold_h).where(M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED))):
+    for site, sn, cre, hold in db.execute(select(M.Ticket.site, M.Ticket.sla_name, M.Ticket.created_at, M.Ticket.onhold_h).where(M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED + holding(cfg)))):
         t = cfg.sla.get(sn)
         if t and (now - cre).total_seconds() / 3600 - (hold or 0) > t:
             over[site] = over.get(site, 0) + 1

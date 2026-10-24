@@ -100,6 +100,8 @@ def _open_tickets(db, cfg, site, limit=None, older_than_days=None):
         q = q.where(_tsite(db, site))
     if older_than_days is not None:
         q = q.where(M.Ticket.created_at < cfg.now() - timedelta(days=older_than_days))
+        if cfg.p("sd.onhold_pauses_sla", True):                      # an On hold ticket is waiting on someone else, so it is not "old" in the SLA sense
+            q = q.where(func.lower(func.coalesce(M.Ticket.status, "")).not_in([x.lower() for x in (cfg.p("sd.onhold_statuses", ["Onhold", "On Hold"]) or [])]))
     q = q.order_by(M.Ticket.created_at.desc() if limit else M.Ticket.created_at)
     if limit:
         q = q.limit(limit)

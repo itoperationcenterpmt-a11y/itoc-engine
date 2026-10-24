@@ -1,12 +1,12 @@
 /* Insights (under Report): automatic findings, rankings, location health, shift summary, and history. Calculated from stored data, no AI. */
 "use strict";
 const INS_SEV = {crit: ["crit", "Critical"], warn: ["warn", "Warning"], info: ["idle", "Info"]};
-const INS_KIND = {tickets: "Tickets", links: "Links", capacity: "Capacity", security: "Security", devices: "Devices", wifi: "WiFi", correlation: "Cross-source", data: "Data quality"};
+const INS_KIND = {tickets: "Tickets", links: "Links", capacity: "Capacity", security: "Security", devices: "Devices", wifi: "WiFi", cctv: "Milestone", correlation: "Cross-source", data: "Data quality"};
 const INS_M = {value: "Value", normal: "Normal", z: "z-score", count: "Count", links: "Links", longest_downtime_min: "Longest downtime (min)", window_days: "Window (days)", days_to_target: "Days to target", days_to_90pct: "Days to 90%",
-  oldest_days: "Oldest (days)", alerts_7_days: "Alerts (7 days)", events_7_days: "Events (7 days)", offline: "Offline", total: "Total", now: "Now", slope_per_day: "Slope per day", target: "Target", devices: "Devices", signals: "Signals",
+  oldest_days: "Oldest (days)", open_alerts: "Open alerts", without_ticket: "Without ticket", with_ticket: "With ticket", alerts: "Alerts", hosts: "Hosts", tickets: "Tickets", events: "Events", new_categories: "New categories", servers: "Servers", alerts_7_days: "Alerts (7 days)", events_7_days: "Events (7 days)", offline: "Offline", total: "Total", now: "Now", slope_per_day: "Slope per day", target: "Target", devices: "Devices", signals: "Signals",
   peak_pct: "Peak (%)", capacity_mbps: "Capacity (Mbps)", already_past_sla: "Already past SLA", last_7_days: "Last 7 days", previous_7_days: "Previous 7 days", missing_days: "Missing days", readings: "Readings", expected: "Expected",
   sources: "Sources", codes: "Codes", empty: "Empty", weekly_median_hours: "Weekly median (h)", weekly_sla: "Weekly SLA"};
-const insVal = v => Array.isArray(v) ? v.join(" → ") : typeof v === "number" ? (Number.isInteger(v) ? fmt(v) : fx(v, Math.abs(v) < 1 ? 4 : 1)) : v;
+const insVal = v => Array.isArray(v) ? v.join(", ") : typeof v === "number" ? (Number.isInteger(v) ? fmt(v) : fx(v, Math.abs(v) < 1 ? 4 : 1)) : v;
 const insMetric = m => Object.entries(m || {}).map(([k, v]) => `<span class="mchip"><i>${esc(INS_M[k] || k.replace(/_/g, " "))}</i>${esc(insVal(v))}</span>`).join("");
 const insTab = t => t && MODS[t] ? `<button type="button" class="btn ghost sm" data-go="${esc(t)}">Open ${esc(MODS[t].label)}</button>` : "";
 function insCard(r, o = {}) {
@@ -18,16 +18,18 @@ function insCard(r, o = {}) {
     <span class="sub">${r.site ? esc(r.site) + " · " : ""}${esc(INS_KIND[r.kind] || r.kind)} · first seen ${esc(dtime(r.first))} · last ${esc(dtime(r.last))}${r.ackBy ? " · by " + esc(r.ackBy) : ""}${r.reason ? " · reason: " + esc(r.reason) : ""}${r.until && r.status === "dismissed" ? " · hidden until " + esc(dtime(r.until)) : ""}</span>
     ${dis ? `<div class="insdis"><select id="insDays" aria-label="Hide for"><option value="7">Hide for 7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="90">90 days</option></select><input id="insWhy" type="text" placeholder="Reason (optional)" maxlength="200"><button type="button" class="btn sm" data-ins-dis-ok="${r.id}">Confirm</button><button type="button" class="btn ghost sm" data-ins-dis-x>Cancel</button></div>` : `<div class="acts">${acts}</div>`}</article>`;
 }
-function insightPanel(I, n = 5, size = "c12", kinds = null) {
-  const all = kinds ? I.open.filter(r => kinds.includes(r.kind)) : I.open, rows = all.slice(0, n);
+function insightPanel(I, n = 5, size = "c12", kinds = null, only = "") {
+  const all = kinds ? I.open.filter(r => kinds.includes(r.kind) && (!only || r.tab === only)) : I.open, rows = all.slice(0, n);
   return panel(size, "Insights", all.length + " active findings · calculated automatically from stored data", rows.length ? `<ul class="att">${rows.map(r => `<li class="${r.sev === "crit" ? "crit" : r.sev === "warn" ? "warn" : ""}"><span><b>${esc(r.title)}</b> ${esc(r.detail)}</span>${go("insight", "View")}</li>`).join("")}</ul>${all.length > n ? go("insight", "All insights") : ""}` : `<div class="empty sm">No active findings.</div>`);
 }
 /* Insights for one area, shown on its own page (Ticketing, Network, Cyber Security, Devices, ...). Hidden when the area has no active findings. */
-const INS_AREA = {servicedesk: ["tickets"], network: ["links", "capacity", "wifi", "correlation"], noc: ["links", "capacity", "correlation"], wifi: ["wifi"], cyber: ["security"], soc: ["security"], xdr: ["security"],
+const INS_AREA = {servicedesk: ["tickets"], network: ["links", "capacity", "wifi", "correlation"], noc: ["links", "capacity", "correlation"], wifi: ["wifi"], cyber: ["security"], soc: ["security"], xdr: ["security"], cctv: ["cctv"],
   devices: ["devices"], devnet: ["devices"], devcctv: ["devices"], devops: ["devices"]};
+const INS_ONLY = {soc: "soc", xdr: "xdr"};                                  /* NDR and XDR share the Security kind: each page shows its own findings */
+const INS_ALWAYS = ["xdr", "soc", "wifi", "cctv"];                      /* pages where the panel stays visible even with no findings */
 function insArea(tab = S.tab) {
   const I = V.insight, kinds = INS_AREA[tab];
-  return I && kinds && I.open.some(r => kinds.includes(r.kind)) ? `<div class="grid">${insightPanel(I, 4, "c12", kinds)}</div>` : "";
+  return I && kinds && (INS_ALWAYS.includes(tab) || I.open.some(r => kinds.includes(r.kind) && (!INS_ONLY[tab] || r.tab === INS_ONLY[tab]))) ? `<div class="grid">${insightPanel(I, 4, "c12", kinds, INS_ONLY[tab])}</div>` : "";
 }
 async function insSum() {
   const sc = S.sumScope || "24h", q = "scope=" + sc + (S.sumDay && sc !== "24h" ? "&day=" + S.sumDay : "");

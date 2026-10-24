@@ -4,6 +4,7 @@ from sqlalchemy import func
 from ..models import DataSource, XdrAlert
 from ..store import Config
 from ..timeutil import ms
+from . import xdr_tickets
 
 SEV = ["critical", "high", "medium", "low"]
 RANK = {s: i for i, s in enumerate(SEV)}
@@ -36,6 +37,11 @@ def build(db, cfg: Config, a, b, severity: str = "") -> dict:
     last = db.query(func.max(XdrAlert.fetched_at)).scalar()
     every = (src.interval_min if src else 15) or 15
     now = cfg.now()
+    backlog = db.query(XdrAlert).filter(XdrAlert.status.isnot(None)).all()
+    bl = [r for r in backlog if _open(r) and r.severity in ("critical", "high")]
+    pool = {r.id: r for r in rows[:300]}
+    pool.update({r.id: r for r in bl})
+    tref = xdr_tickets.refs(db, list(pool.values()))                      # tickets that mention the alert's hosts
     daily, d = {}, a
     while d <= b:
         daily[d] = {x: 0 for x in SEV}
@@ -54,7 +60,8 @@ def build(db, cfg: Config, a, b, severity: str = "") -> dict:
             tgt = hosts if e.get("type") == "host" else accts if e.get("type") == "account" else None
             if tgt is None or not e.get("name"):
                 continue
-            x = tgt.setdefault(e["name"], {"k": e["name"], "n": 0, "sev": "low", "ips": [], "open": 0, "last": None})
+            x = tgt.setdefault(e["name"], {"k": e["name"], "n": 0, "sev": "low", "ips": [], "open": 0, "last": None, "tk": []})
+            x["tk"] = sorted(set(x["tk"]) | {t["id"] for t in tref.get(r.id, [])})[:4]
             x["n"] += 1
             x["open"] += 1 if _open(r) else 0
             if RANK.get(r.severity, 9) < RANK.get(x["sev"], 9):
@@ -73,8 +80,6 @@ def build(db, cfg: Config, a, b, severity: str = "") -> dict:
             if r.model and r.model not in x["models"]:
                 x["models"].append(r.model)
     scores = [r.score for r in rows if r.score is not None]
-    backlog = db.query(XdrAlert).filter(XdrAlert.status.isnot(None)).all()
-    bl = [r for r in backlog if _open(r) and r.severity in ("critical", "high")]
     ages = [("< 1 day", 0, 1), ("1 to 3 days", 1, 3), ("3 to 7 days", 3, 7), ("> 7 days", 7, 1e9)]
     aging = [{"k": lb, "n": sum(1 for r in backlog if _open(r) and lo <= (now - r.created_at).total_seconds() / 86400 < hi)} for lb, lo, hi in ages]
     srt = lambda dct, key: sorted(dct.values(), key=key)
@@ -82,13 +87,13 @@ def build(db, cfg: Config, a, b, severity: str = "") -> dict:
             "bySev": [{"k": s, "n": sum(1 for r in rows if r.severity == s)} for s in SEV], "byStatus": _top([r.investigation_status or r.status for r in rows]),
             "byResult": _top([r.investigation_result for r in rows], 6), "byModel": _top([r.model for r in rows], 10), "byProvider": _top([r.provider for r in rows], 6), "impact": imp,
             "hosts": srt(hosts, lambda x: (RANK.get(x["sev"], 9), -x["n"]))[:12], "accounts": srt(accts, lambda x: (RANK.get(x["sev"], 9), -x["n"]))[:12],
-            "nHosts": len(hosts), "nAccounts": len(accts), "nIncidents": len(incs),
+            "ticketed": sum(1 for r in bl if tref.get(r.id)), "noTicket": sum(1 for r in bl if not tref.get(r.id)), "nHosts": len(hosts), "nAccounts": len(accts), "nIncidents": len(incs),
             "techniques": [{"id": t, "name": MITRE.get(t) or MITRE.get(t.split(".")[0]) or "", "n": n} for t, n in sorted(techs.items(), key=lambda x: -x[1])[:12]],
             "incidents": [{"id": x["id"], "n": x["n"], "sev": x["sev"], "open": x["open"], "first": ms(x["first"]), "last": ms(x["last"]), "models": x["models"][:3]}
                           for x in sorted(incs.values(), key=lambda x: (RANK.get(x["sev"], 9), -x["n"]))[:12]],
             "aging": aging, "daily": [{"date": k.isoformat(), **v} for k, v in daily.items()],
             "list": [{"id": r.id, "model": r.model, "description": r.description, "severity": r.severity, "score": r.score, "status": r.investigation_status or r.status, "result": r.investigation_result,
-                      "provider": r.provider, "incident": r.incident_id, "created": ms(r.created_at), "updated": ms(r.updated_at), "link": r.link, "open": _open(r), "impact": r.impact or {},
+                      "provider": r.provider, "incident": r.incident_id, "created": ms(r.created_at), "updated": ms(r.updated_at), "link": r.link, "tickets": tref.get(r.id, []), "open": _open(r), "impact": r.impact or {},
                       "entities": [{"t": e.get("type"), "n": e.get("name")} for e in (r.entities or [])[:4]], "techniques": (r.techniques or [])[:4], "rules": (r.rules or [])[:2]} for r in rows[:300]],
             "listN": len(rows), "updated": ms(last + (now - datetime.utcnow())) if last else None,
             "stale": bool(last) and (datetime.utcnow() - last).total_seconds() > every * 60 * 3,

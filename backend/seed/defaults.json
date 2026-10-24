@@ -16,6 +16,8 @@
  {"key": "net.same_labels", "label": "Dual-link comparison labels", "group": "noc", "editor": "json", "value": {"single": "Single link only", "nocmp": "Not comparable", "nodown": "No downtime", "yes": "Yes", "no": "No"}, "sort": 9},
  {"key": "net.util_labels", "label": "Utilization status labels", "group": "noc", "editor": "json", "value": {"peak": "High peak", "avg": "High average", "ok": "OK"}, "sort": 9},
 
+ {"key": "sd.onhold_statuses", "label": "Ticket statuses that pause the SLA clock (one per line)", "group": "servicedesk", "editor": "list", "value": ["Onhold", "On Hold"], "sort": 16},
+ {"key": "sd.onhold_pauses_sla", "label": "On-hold tickets are not counted as late or old (1 = yes, 0 = no)", "group": "servicedesk", "editor": "number", "ui": {"min": 0, "max": 1, "step": 1}, "value": 1, "sort": 17},
  {"key": "sd.open_alert_days", "label": "Open tickets are considered old after (days)", "group": "servicedesk", "editor": "number", "ui": {"min": 1, "max": 30, "step": 1}, "value": 3, "sort": 1},
  {"key": "sd.sla_warn", "label": "Mark % within SLA target below this value", "group": "servicedesk", "editor": "percent", "ui": {"min": 0.5, "max": 1, "step": 0.01}, "value": 0.85, "sort": 2},
  {"key": "sd.unassigned", "label": "Values meaning 'not filled in' in ManageEngine", "group": "servicedesk", "editor": "text", "value": "Not Assigned", "sort": 3},
