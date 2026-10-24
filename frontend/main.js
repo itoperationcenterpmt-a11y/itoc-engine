@@ -243,6 +243,7 @@ document.addEventListener("click", async e => {
     else if (d.closeSheet !== undefined) { openSheet(false); }
     else if (d.tab) { openSheet(false); set({tab: d.tab, hoForm: false, closing: null}); window.scrollTo({top: 0}); }
     else if (d.go) { set({tab: d.go}); window.scrollTo({top: 0}); }
+    else if (d.sm !== undefined) { const cur = S.schedM || nowShift().today.slice(0, 7); set({schedM: d.sm === "0" ? "" : addDays(cur + "-" + (+d.sm > 0 ? "28" : "01"), +d.sm > 0 ? 5 : -1).slice(0, 7)}); }
     else if (b.closest("#fKind")) set({kind: d.k, grp: ""});
     else if (b.closest("#fStat")) set({dstat: d.st});
     else if (d.p) { setPreset(d.p); render(true); }

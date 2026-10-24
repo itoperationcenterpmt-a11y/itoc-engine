@@ -63,6 +63,7 @@ const ICO = {
   wifi: '<path d="M5 12.55a11 11 0 0 1 14 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/>',
   cctv: '<path d="M3 8l11-4 2 5-11 4z"/><path d="M9 14l-1 5M5 19h6M16 8l5 1.5"/>',
   xdr: '<circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="2"/>',
+  server: '<rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01M12 7h5M12 17h5"/>',
   camera: '<path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/>',
   shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.3c1.9.8 3 2.6 3 5.7"/>',
@@ -344,6 +345,11 @@ const initials = n => String(n).replace(/[^A-Za-z ]/g, "").split(" ").filter(Boo
 const telHref = p => "tel:" + String(p).replace(/[^+\d]/g, "");
 const pav = (n, sm) => `<span class="pav ${sm ? "sm" : ""}" style="--h:${avHue(n)}">${esc(initials(n))}</span>`;
 const pcard = p => `<article class="pcard" data-q="${esc(((p.name || "") + " " + (p.job || "") + " " + (p.branch || "")).toLowerCase())}">${pav(p.name)}<div class="pb"><b>${esc(p.name)}</b><span class="sub">${esc((p.job || "").replace(/^ITOC /, ""))}${p.branch ? " · " + esc(p.branch) : ""}</span></div>${p.phone ? `<a class="pph" href="${esc(telHref(p.phone))}">${esc(p.phone)}</a>` : ""}</article>`;
+/* When an off team starts again: "Off · back Mon 26 Oct · Pagi" */
+function backOn(g, now) {
+  for (let d = addDays(now.date, 1), i = 0; i < 14; d = addDays(d, 1), i++) { const c = codeOf(g, d); if (c !== OFF) return `Off · back ${HR[new Date(dayMs(d)).getUTCDay()].slice(0, 3)} ${dmon(d)} · ${esc(SN[c + 1])}`; }
+  return "Off";
+}
 function vJadwal() {
   /* Personnel menu (no filters). Sub-menu = parameter "personel" (Admin → Operations → Targets & Parameters): each group has kind shift | office | branch. */
   const now = nowShift(), gs = GROUPS, G = gs.find(g => g.key === S.pers) || gs[0];
@@ -352,15 +358,15 @@ function vJadwal() {
   const group = CFG.people.filter(p => p.unit === G.unit), person = p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc((p.job || "").replace(/^ITOC /, ""))}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`;
   let body = "";
   if (G.kind === "shift") {
-    const first = now.today.slice(0, 8) + "01", mEnd = iso(Date.UTC(+now.today.slice(0, 4), +now.today.slice(5, 7), 0)), days = [];
+    const ym = S.schedM || now.today.slice(0, 7), first = ym + "-01", mEnd = iso(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7), 0)), days = [];
     for (let d = first; d <= mEnd; d = addDays(d, 1)) days.push(d);
     const head = `<div class="h"></div>` + days.map(d => `<div class="h ${d === now.date ? "today" : ""}">${new Date(dayMs(d)).getUTCDate()}<br>${HR[new Date(dayMs(d)).getUTCDay()]}</div>`).join("");
     const rows = TEAMS.map(g => `<div class="tn">Team ${g}</div>` + days.map(d => { const c = codeOf(g, d), k = CODES[c]; return `<div class="c ${k} ${d === now.date && c === now.shift - 1 ? "today" : ""}" data-tip="${esc("Team " + g + " · " + dlong(d) + "\n" + (k === OFFC ? "Off" : "Shift " + SN[c + 1] + " " + shiftHours(c + 1)))}">${k}</div>`; }).join("")).join("");
     body = `<div class="grid">${panel("c12", "Lead & Supervisor", "", `<div class="pcards">${group.filter(p => !p.team_code).map(pcard).join("") || `<div class="sub">No data yet.</div>`}</div>`)}
     ${panel("c4", "On Duty", dlong(now.date) + " · " + now.clock + " WIB", onDuty(now))}
-    ${panel("c8", "Shift Schedule " + esc(G.label), rangeMonth(now.today) + " · pola " + esc((CFG.rotation || {}).pattern || ""), `<div class="scroll"><div class="sched" style="grid-template-columns:72px repeat(${days.length},minmax(30px,1fr))">${head}${rows}</div></div>
-      <div class="legend">${[...CFG.shifts.map(x => [x.code, x.name + " " + shiftHours(x.no)]), [OFFC, "Off"]].map(([k, l]) => `<span><b class="sw ${k}"></b>${l}</span>`).join("")}</div>`)}
-    ${TEAMS.map(g => { const c = codeOf(g, now.date); return panel("c3 shcard " + (c === OFF ? "sh-off" : "sh" + c), "Team " + g, c === OFF ? `<span class="shb"><i></i>Off</span>` : `<span class="shb"><i></i>${esc(SN[c + 1])}</span>`, `<ul class="plist">${crew(g).map(person).join("")}</ul>`); }).join("")}
+    ${panel("c8", "Shift Schedule " + esc(G.label), "", `<div class="scroll"><div class="sched" style="grid-template-columns:72px repeat(${days.length},minmax(30px,1fr))">${head}${rows}</div></div>
+      <div class="legend">${[...CFG.shifts.map(x => [x.code, x.name + " " + shiftHours(x.no)]), [OFFC, "Off"]].map(([k, l]) => `<span><b class="sw ${k}"></b>${l}</span>`).join("")}</div>`, `<span class="acts monthnav"><button type="button" class="btn ghost sm" data-sm="-1" aria-label="Previous month">‹</button><b class="num">${rangeMonth(first)}</b><button type="button" class="btn ghost sm" data-sm="1" aria-label="Next month">›</button>${ym !== now.today.slice(0, 7) ? `<button type="button" class="btn ghost sm" data-sm="0">Today</button>` : ""}</span>`)}
+    ${TEAMS.map(g => { const c = codeOf(g, now.date); return panel("c3 shcard " + (c === OFF ? "sh-off" : "sh" + c), "Team " + g, c === OFF ? `<span class="shb"><i></i>${backOn(g, now)}</span>` : `<span class="shb"><i></i>${esc(SN[c + 1])}</span>`, `<ul class="plist">${crew(g).map(person).join("")}</ul>`); }).join("")}
     </div>`;
   } else if (G.kind === "office") {
     const dow = new Date(dayMs(now.today)).getUTCDay(), open = (G.days || []).includes(dow) && now.clock >= G.start && now.clock < G.end;
