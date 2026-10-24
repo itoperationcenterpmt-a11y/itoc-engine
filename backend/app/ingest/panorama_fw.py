@@ -12,19 +12,24 @@ SEV = ("critical", "high", "medium", "low", "informational")
 
 def day_rows(cl: httpx.Client, base: str, key: str, d: date, end: datetime | None = None) -> list[SocFwDay]:
     rng = (d.strftime("%Y/%m/%d 00:00:00"), (end or datetime.combine(d, datetime.max.time())).strftime("%Y/%m/%d %H:%M:%S"))
-    th = PA.run_dynamic(cl, base, key, "threat", ["device_name", "severity", "action"], ["repeatcnt"], "", "", 5000, rng=rng)
-    tr = PA.run_dynamic(cl, base, key, "trsum", ["device_name"], ["bytes", "sessions"], "", "", 500, rng=rng)
+    th = PA.run_dynamic(cl, base, key, "threat", ["device_name", "severity", "action", "threat-type", "thr_category"], ["repeatcnt"], "", "", 10000, rng=rng)
+    tr = PA.run_dynamic(cl, base, key, "trsum", ["device_name", "app"], ["bytes", "sessions"], "", "", 10000, rng=rng)
+    new = lambda: {"sev": {}, "act": {}, "typ": {}, "cat": {}, "app": {}, "b": 0, "s": 0}
     by: dict = {}
     for r in th:
-        x = by.setdefault(r.get("device_name") or "-", {"sev": {}, "act": {}, "b": 0, "s": 0})
+        x = by.setdefault(r.get("device_name") or "-", new())
         n = int(float(r.get("repeatcnt") or 0))
-        x["sev"][r.get("severity") or "-"] = x["sev"].get(r.get("severity") or "-", 0) + n
-        x["act"][r.get("action") or "-"] = x["act"].get(r.get("action") or "-", 0) + n
+        for k, f in (("sev", "severity"), ("act", "action"), ("typ", "threat-type"), ("cat", "thr_category")):
+            v = r.get(f) or "-"
+            x[k][v] = x[k].get(v, 0) + n
     for r in tr:
-        x = by.setdefault(r.get("device_name") or "-", {"sev": {}, "act": {}, "b": 0, "s": 0})
-        x["b"] += int(float(r.get("bytes") or 0))
+        x = by.setdefault(r.get("device_name") or "-", new())
+        b = int(float(r.get("bytes") or 0))
+        x["b"] += b
         x["s"] += int(float(r.get("sessions") or 0))
-    return [SocFwDay(day=d, fw=fw, sev=x["sev"], act=x["act"], bytes=x["b"], sessions=x["s"]) for fw, x in by.items()]
+        a = r.get("app") or "-"
+        x["app"][a] = x["app"].get(a, 0) + b
+    return [SocFwDay(day=d, fw=fw, sev=x["sev"], act=x["act"], typ=x["typ"], cat=x["cat"], app=dict(sorted(x["app"].items(), key=lambda kv: -kv[1])[:40]), bytes=x["b"], sessions=x["s"]) for fw, x in by.items()]
 
 
 def sync(db: Session, cl: httpx.Client, c: dict, key: str, cur: dict, now: datetime, lower: date, notes: list) -> int:

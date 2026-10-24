@@ -67,11 +67,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 .brand h1 .b2{display:block;white-space:nowrap;font-weight:600;font-size:calc(13px*var(--fs));opacity:.88;letter-spacing:.01em}
 .brand h1 small{display:block;font-family:var(--f-body);font-weight:400;font-size:calc(11px*var(--fs));color:var(--side-ink);opacity:.7;letter-spacing:0}
 .tabs{display:flex;flex-direction:column;gap:1px;overflow-y:auto;flex:1;min-height:0;scrollbar-width:thin}
-.tabs button{display:flex;align-items:center;gap:11px;background:none;border:0;border-radius:9px;padding:7px 11px;cursor:pointer;color:var(--side-ink);font-weight:500;font-size:calc(13.5px*var(--fs));text-align:left;transition:background .15s,color .15s}
-.tabs button svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
-.tabs button:hover{background:rgba(255,255,255,.06);color:#fff}
-.tabs button[aria-selected="true"]{background:var(--side-act);color:#fff;box-shadow:inset 3px 0 0 #6da7ec}
-.tabs button[aria-selected="true"] svg{stroke:#8dbcf4;opacity:1}
+.tabs :is(button,a){display:flex;align-items:center;gap:11px;background:none;border:0;border-radius:9px;padding:7px 11px;cursor:pointer;color:var(--side-ink);font-weight:500;font-size:calc(13.5px*var(--fs));text-align:left;transition:background .15s,color .15s}
+.tabs :is(button,a) svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+.tabs :is(button,a):hover{background:rgba(255,255,255,.06);color:#fff}
+.tabs :is(button,a)[aria-selected="true"]{background:var(--side-act);color:#fff;box-shadow:inset 3px 0 0 #6da7ec}
+.tabs :is(button,a)[aria-selected="true"] svg{stroke:#8dbcf4;opacity:1}
 .tb{font-size:calc(10px*var(--fs));padding:0 6px;border-radius:8px;margin-left:auto;font-weight:600}
 .tb.warn{background:rgba(232,160,0,.22);color:#f2b84b}
 .side-foot{border-top:1px solid var(--side-line);padding-top:8px;display:flex;flex-direction:column;gap:8px}
@@ -88,9 +88,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 @media (min-width:901px){
 .shell.rail{grid-template-columns:78px minmax(0,1fr)}
 .shell.rail .side{padding:12px 6px;align-items:center}
-.shell.rail .brand h1,.shell.rail .tabs button span,.shell.rail .who-t,.shell.rail .tb,.shell.rail #duty span{display:none}
+.shell.rail .brand h1,.shell.rail .tabs :is(button,a) span,.shell.rail .who-t,.shell.rail .tb,.shell.rail #duty span{display:none}
 .shell.rail .brand{justify-content:center;padding:0}.shell.rail .brand .g2{width:46px;height:46px;object-fit:cover;object-position:left center}
-.shell.rail .tabs button{justify-content:center;padding:11px}.shell.rail .tabs button svg{width:21px;height:21px}.shell.rail #duty{padding:8px;justify-content:center}
+.shell.rail .tabs :is(button,a){justify-content:center;padding:11px}.shell.rail .tabs :is(button,a) svg{width:21px;height:21px}.shell.rail #duty{padding:8px;justify-content:center}
 .shell.rail .side-foot{align-items:center}.shell.rail .who{flex-direction:column}.shell.rail .side-act{flex-direction:column}
 }
 .main{min-width:0}
@@ -101,9 +101,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sheet-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.sheet-h b{font-family:var(--f-display);font-size:calc(17px*var(--fs))}
 .sheet-h .iconbtn,.sheet-f .iconbtn{background:var(--sunken);color:var(--ink2);border-color:var(--line)}
 .sheet-g{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.sheet-g button{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px;border:1px solid var(--line);background:var(--bg);border-radius:14px;color:var(--ink);font-weight:600;font-size:calc(12.5px*var(--fs));cursor:pointer;text-align:center;position:relative;touch-action:manipulation}
-.sheet-g button svg{width:26px;height:26px;fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.sheet-g button[aria-selected="true"]{background:var(--wash);border-color:var(--accent);color:var(--accent)}
+.sheet-g :is(button,a){display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px;border:1px solid var(--line);background:var(--bg);border-radius:14px;color:var(--ink);font-weight:600;font-size:calc(12.5px*var(--fs));cursor:pointer;text-align:center;position:relative;touch-action:manipulation}
+.sheet-g :is(button,a) svg{width:26px;height:26px;fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.sheet-g :is(button,a)[aria-selected="true"]{background:var(--wash);border-color:var(--accent);color:var(--accent)}
 .sheet-f{display:flex;gap:10px;margin-top:14px}.sheet-f .iconbtn{flex:1;padding:10px}
 .mtop{display:none}
 .wrap{max-width:calc(1320px*var(--fs));margin:0 auto;padding:22px 24px 56px}
@@ -117,16 +117,16 @@ button,input,select,textarea{font:inherit;color:inherit}
   .tabs{flex-direction:row;gap:2px;width:auto}
   .tabs::-webkit-scrollbar{display:none}
   .tabs{overflow:visible;flex:1;min-width:0}
-  .tabs button:nth-child(n+5){display:none}
-  .tabs button,.more{flex:1 1 0;min-width:0;flex-direction:column;gap:3px;padding:7px 4px;font-size:calc(10.5px*var(--fs));align-items:center;text-align:center;border-radius:12px;touch-action:manipulation}
-  .tabs button span:not(.tb),.more span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tabs :is(button,a):nth-child(n+5){display:none}
+  .tabs :is(button,a),.more{flex:1 1 0;min-width:0;flex-direction:column;gap:3px;padding:7px 4px;font-size:calc(10.5px*var(--fs));align-items:center;text-align:center;border-radius:12px;touch-action:manipulation}
+  .tabs :is(button,a) span:not(.tb),.more span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .more{display:flex;background:none;border:0;color:var(--side-ink);cursor:pointer;font-weight:500;flex:0 0 20%;position:relative}
   .more svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   .more.on{background:var(--side-act);color:#fff}
-  .tabs button[aria-selected="true"]{box-shadow:none}
-  .tabs button svg{width:21px;height:21px}
+  .tabs :is(button,a)[aria-selected="true"]{box-shadow:none}
+  .tabs :is(button,a) svg{width:21px;height:21px}
   .tabs .tb{position:absolute;margin:0;transform:translate(14px,-4px);font-size:calc(9px*var(--fs));padding:0 4px}
-  .tabs button{position:relative}
+  .tabs :is(button,a){position:relative}
   .mtop{display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:5;background:var(--grad);color:#fff;padding:12px 16px}
   .mtop .brand{padding:0}.mtop .brand .mk{width:36px;height:36px;border-radius:10px}.mtop .brand .mk img{width:29px;height:29px}
   .mtop .brand h1{font-size:calc(12.5px*var(--fs));line-height:1.15;color:#fff}.mtop .brand h1 .b2{font-size:calc(11px*var(--fs))}.mtop .brand h1 small{display:none}.mtop .brand{min-width:0}.mtop .brand h1{min-width:0}
@@ -200,7 +200,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .dl{font-family:var(--f-mono);font-size:calc(11.5px*var(--fs));font-weight:500}
 .dl.good{color:var(--good-text)} .dl.bad{color:var(--crit-text)} .dl.flat{color:var(--muted)}
 .ib{width:15px;height:15px;border-radius:50%;border:1px solid var(--axis);background:none;color:var(--muted);font:600 9.5px/1 var(--f-body);padding:0;cursor:help;text-transform:none}
-.lnk{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-weight:500;font-size:calc(13px*var(--fs));align-self:flex-start}
+a.lnk,.tabs a,.sheet-g a,.subtabs a{text-decoration:none}.tabs a,.sheet-g a,.subtabs a{color:inherit}.lnk{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-weight:500;font-size:calc(13px*var(--fs));align-self:flex-start}
 .lnk:hover{text-decoration:underline}
 
 .empty{display:flex;flex-direction:column;gap:4px;align-items:center;text-align:center;padding:28px 12px;color:var(--muted);font-size:calc(13px*var(--fs))}
@@ -345,8 +345,8 @@ textarea{min-height:76px;resize:vertical}
 .uploads{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 .drop input[type=file]{max-width:100%;font-size:calc(13px*var(--fs))}
 .subtabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:-4px 0 4px}
-.subtabs button{background:none;border:0;border-bottom:2px solid transparent;padding:6px 10px;cursor:pointer;color:var(--ink2);font-weight:500}
-.subtabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.subtabs :is(button,a){background:none;border:0;border-bottom:2px solid transparent;padding:6px 10px;cursor:pointer;color:var(--ink2);font-weight:500}
+.subtabs :is(button,a)[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
 #tip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--bg);font-size:calc(12px*var(--fs));padding:6px 9px;border-radius:5px;max-width:280px;white-space:pre-line}
 a{color:var(--accent)}a:hover{color:var(--ink)}
 #view.loading{opacity:.55;transition:opacity .15s}
@@ -355,8 +355,8 @@ textarea.jsed{font:12px/1.45 var(--f-mono);min-height:120px;width:100%}
 .loginbox{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:30px 28px;width:min(400px,100%);display:flex;flex-direction:column;gap:14px;box-shadow:0 30px 60px -20px rgba(0,0,0,.6)}
 .loginbox .brand{padding:0;margin-bottom:4px}.loginbox .brand h1{color:var(--ink);font-size:calc(17px*var(--fs))}.loginfoot{text-align:center;color:var(--muted);font-size:calc(12px*var(--fs));margin-top:2px}
 .itcare .sub{margin-bottom:2px}
-.subtabs{gap:6px;border-bottom:0;margin:0 0 8px}.subtabs button{border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:calc(13px*var(--fs));background:var(--surface)}
-.subtabs button[aria-selected="true"]{background:var(--wash);border-color:var(--accent);color:var(--accent);font-weight:600}
+.subtabs{gap:6px;border-bottom:0;margin:0 0 8px}.subtabs :is(button,a){border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:calc(13px*var(--fs));background:var(--surface)}
+.subtabs :is(button,a)[aria-selected="true"]{background:var(--wash);border-color:var(--accent);color:var(--accent);font-weight:600}
 .mbar{margin-bottom:10px}.mtools{display:flex;gap:8px;align-items:center}.msearch{width:200px;padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
 .mpick{display:flex;gap:6px;flex-wrap:wrap}.mpick button{border:1px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:999px;padding:5px 12px;font-size:calc(12.5px*var(--fs));cursor:pointer}
 .mpick button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}

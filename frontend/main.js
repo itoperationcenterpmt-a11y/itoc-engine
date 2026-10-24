@@ -222,7 +222,8 @@ const pkOf = row => S.mdata.pk.map(k => row[k]).join("");
 
 /* ---------- event ---------- */
 document.addEventListener("click", async e => {
-  const b = e.target.closest("button"); if (!b || b.disabled) return;
+  const b = e.target.closest("button, a[data-tab], a[data-go]"); if (!b || b.disabled) return;
+  if (b.tagName === "A") { if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button) return; e.preventDefault(); }       // menu entries are real links: right-click and Ctrl-click open a new tab
   const d = b.dataset;
   try {
     if (b.id === "layBtn") set({layEdit: !S.layEdit, layRole: "", layProfile: curProfile()});

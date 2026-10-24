@@ -53,7 +53,7 @@ function tbl(heads, rows, o = {}) {
 }
 const dayB = arr => arr.map(x => ({label: dmon(x.date), full: dlong(x.date)}));
 const stPill = s => ({h: s === NST.ok ? pill("good", s) : s === NST.bad ? pill("crit", s) : pill("idle", s)});
-const go = (tab, t) => `<button type="button" class="lnk" data-go="${tab}">${t || "View details"} →</button>`;
+const go = (tab, t) => `<a class="lnk" href="#${tab}" data-go="${tab}">${t || "View details"} →</a>`;
 
 /* ---------- header, nav, filter ---------- */
 const ICO = {
@@ -77,7 +77,7 @@ const icon = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICO[(MODS[k] ||
 const SUBSUM = {network: "Summary", cyber: "Summary", devices: "Summary"};
 function subnav(parent) {
   const items = TABS.filter(t => t[0] === parent || (MODS[t[0]] || {}).parent === parent);
-  return items.length < 2 ? "" : `<div class="subtabs">${items.map(([k, l]) => `<button type="button" data-tab="${k}" aria-selected="${k === S.tab}">${esc(k === parent && SUBSUM[parent] ? SUBSUM[parent] : l)}</button>`).join("")}</div>`;
+  return items.length < 2 ? "" : `<div class="subtabs">${items.map(([k, l]) => `<a href="#${k}" data-tab="${k}" aria-selected="${k === S.tab}">${esc(k === parent && SUBSUM[parent] ? SUBSUM[parent] : l)}</a>`).join("")}</div>`;
 }
 /* Running shift clock: called on render and every second so it never freezes. */
 function renderDuty() {
@@ -91,8 +91,8 @@ function renderDuty() {
   $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]} · ${hh}.${mm}`;
 }function renderShell() {
   const NAVT = TABS.filter(t => topOf(t[0]) === t[0]), curTop = topOf(S.tab);
-  $("tabs").innerHTML = NAVT.map(([k, l, bd]) => `<button role="tab" data-tab="${k}" title="${esc(l)}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></button>`).join("");
-  $("sheetGrid").innerHTML = NAVT.map(([k, l, bd]) => `<button type="button" data-tab="${k}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></button>`).join("");
+  $("tabs").innerHTML = NAVT.map(([k, l, bd]) => `<a role="tab" href="#${k}" data-tab="${k}" title="${esc(l)}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></a>`).join("");
+  $("sheetGrid").innerHTML = NAVT.map(([k, l, bd]) => `<a href="#${k}" data-tab="${k}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></a>`).join("");
   $("moreBtn").classList.toggle("on", NAVT.findIndex(t => t[0] === curTop) > 3);
   const cur = TABS.find(t => t[0] === S.tab), par = (MODS[S.tab] || {}).parent, grp = SUBSUM[S.tab] ? S.tab : (SUBSUM[par] ? par : "");
   $("ptitle").textContent = !cur ? "" : grp ? MODS[grp].label + " · " + (S.tab === grp ? SUBSUM[grp] : cur[1]) : cur[1];
@@ -291,8 +291,19 @@ function socFwVal(F, R) {
 function vSocSite() {
   const F = V.socfw, P = socFw(F), T = F.total, B = F.days.map(x => ({label: dmon(x.date), full: dlong(x.date)})), ch = [{name: "Critical", c: "--crit", v: F.days.map(x => x.critical)}, {name: "High", c: "--serious", v: F.days.map(x => x.high)}, {name: "Other", c: "--ss", v: F.days.map(x => x.other)}];
   if (!F.nFw) return `<div class="grid"><section class="panel c12">${empty("No firewall data for " + esc(S.site) + " in this period. A location needs a firewall matched to it (Firewalls table on the all-locations view).")}</section></div>`;
-  return (F.from > S.from ? `<p class="sub msnote">Per-firewall data starts on ${dfull(F.from)}; earlier days of this period are not included.</p>` : "") + `<div class="kpis k6">${kpi("Events", fmt(T.events), fmt(F.nFw) + " firewall" + (F.nFw > 1 ? "s" : ""))}${kpi("Critical + High", fmt(T.ch), fmt(T.crit) + " critical", {cls: T.crit ? "warnv" : ""})}${kpi("Blocked", T.events ? pc(T.blocked / T.events) : "-", fmt(T.blocked) + " events")}${kpi("Traffic", fwB(T.bytes), "")}${kpi("Sessions", fmt(T.sessions), "")}</div>
-  <div class="grid">${socFwVal(F, null)}${panel("c12", "Events per Day", S.site, legend(ch) + bars(B, ch, {stack: true, label: "Events per day"}))}${P.table()}</div>`;
+  const hb = (rows, f = fmt) => rows.length ? hbars(rows.map(x => [x.k, x.n, 0, f(x.n)])) : `<div class="empty sm">No detail for this period yet. It is filled in on every Panorama sync.</div>`;
+  const SC = {critical: VZC.crit, high: VZC.sev, medium: VZC.warn, low: VZC.low, informational: VZC.good}, sevName = k => k.charAt(0).toUpperCase() + k.slice(1);
+  const dayG = F.days.map(x => x.bytes / 1e9), tcat = F.cat[0];
+  return (F.from > S.from ? `<p class="sub msnote">Per-firewall data starts on ${dfull(F.from)}; earlier days of this period are not included.</p>` : "") + `<div class="kpis k6">${kpi("Events", fmt(T.events), fmt(F.nFw) + " firewall" + (F.nFw > 1 ? "s" : ""))}${kpi("Critical + High", fmt(T.ch), fmt(T.crit) + " critical", {cls: T.crit ? "warnv" : ""})}${kpi("Blocked", T.events ? pc(T.blocked / T.events) : "-", fmt(T.blocked) + " events")}${kpi("Traffic", fwB(T.bytes), fwB(T.bytes / Math.max(1, F.dayN)) + " per day")}${kpi("Sessions", fmt(T.sessions), "")}${kpi("Top Category", tcat ? esc(tcat.k) : "-", tcat ? fmt(tcat.n) + " events" : "")}</div>
+  <div class="grid">${panel("c8", "Events per Day", S.site, legend(ch) + bars(B, ch, {stack: true, label: "Events per day"}))}
+  ${panel("c4", "Severity", "", vzDonut(F.sev.map(x => ({k: sevName(x.k), v: x.n, c: SC[x.k] || VZC.low})), {center: fmt(T.events), sub: "events", label: "Severity"}))}
+  ${panel("c8", "Traffic per Day (GB)", fwB(T.bytes), bars(B, [{name: "Traffic", c: "--s1", v: dayG}], {dec: 1, unit: " GB", label: "Traffic per day"}))}
+  ${panel("c4", "Firewall Action", "", hb(F.act))}
+  ${panel("c6", "Threat Categories", "", hb(F.cat))}
+  ${panel("c6", "Threat Types", "", hb(F.typ))}
+  ${panel("c6", "Top Applications by Volume", "", hb(F.app, fwB))}
+  ${panel("c6", "Blocked per Day", "events not just alerted", bars(B, [{name: "Blocked", c: "--good", v: F.days.map(x => x.blocked)}], {label: "Blocked per day"}))}
+  ${P.table()}${socFwVal(F, null)}</div>`;
 }
 function vSoc() {
   if (S.site && V.socfw) return insArea("soc") + vSocSite();

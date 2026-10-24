@@ -235,7 +235,16 @@ def _soc_site(db, cfg, f):
     s["kpis"] = [_kpi("Threat events", T["events"], "n", fmt_n(F["nFw"]) + " firewall" + ("s" if F["nFw"] > 1 else "")), _kpi("Critical + High", T["ch"], "n", fmt_n(T["crit"]) + " critical"),
                  _kpi("Blocked", T["blocked"] / T["events"] if T["events"] else None, "p1", "actions other than alert"), _kpi("Traffic (TB)", T["bytes"] / 1e12, "f2", ""), _kpi("Sessions", T["sessions"], "n", "")]
     d = F["days"]
-    s["charts"] = [_daily("Threat events by severity", [x["date"] for x in d], [{"name": n, "values": [x[k] for x in d]} for n, k in (("Critical", "critical"), ("High", "high"), ("Other", "other"))], "stack")]
+    s["kpis"].append(_kpi("Top threat category", F["cat"][0]["k"] if F["cat"] else None, "t", fmt_n(F["cat"][0]["n"]) + " events" if F["cat"] else ""))
+    s["charts"] = [_daily("Threat events by severity", [x["date"] for x in d], [{"name": n, "values": [x[k] for x in d]} for n, k in (("Critical", "critical"), ("High", "high"), ("Other", "other"))], "stack"),
+                   _chart("Events per severity", [x["k"] for x in F["sev"]], [{"name": "Events", "values": [x["n"] for x in F["sev"]]}], "donut"),
+                   _top("Firewall actions", [(x["k"], x["n"]) for x in F["act"]], "Events"),
+                   _daily("Blocked events", [x["date"] for x in d], [{"name": "Blocked", "values": [x["blocked"] for x in d]}]),
+                   _daily("Traffic (GB)", [x["date"] for x in d], [{"name": "GB", "values": [round(x["bytes"] / 1e9, 2) for x in d]}]),
+                   _top("Top threat categories", [(x["k"], x["n"]) for x in F["cat"]], "Events"),
+                   _top("Top threat types", [(x["k"], x["n"]) for x in F["typ"]], "Events"),
+                   _top("Top applications by volume (GB)", [(x["k"], round(x["n"] / 1e9, 1)) for x in F["app"]], "GB")]
+    s["charts"] = [c for c in s["charts"] if c]
     s["tables"].append(_table("Firewalls", ["Firewall", "Events", "Critical", "High", "Blocked", "Traffic (GB)", "Sessions"], ["t", "n", "n", "n", "n", "f1", "n"],
                               [[x["fw"], x["events"], x["crit"], x["high"], x["blocked"], x["bytes"] / 1e9, x["sessions"]] for x in F["fw"]]))
     if F["from"] and F["from"] > f.d_from.isoformat():

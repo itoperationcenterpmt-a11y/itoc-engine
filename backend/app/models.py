@@ -604,6 +604,9 @@ class SocFwDay(Base):
     fw: Mapped[str] = mapped_column(String(120), primary_key=True)
     sev: Mapped[dict] = mapped_column(JSONB, default=dict)     # severity -> events
     act: Mapped[dict] = mapped_column(JSONB, default=dict)     # action -> events
+    typ: Mapped[dict] = mapped_column(JSONB, default=dict)     # threat type -> events
+    cat: Mapped[dict] = mapped_column(JSONB, default=dict)     # threat category -> events
+    app: Mapped[dict] = mapped_column(JSONB, default=dict)     # application -> bytes (top 40)
     bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     sessions: Mapped[int] = mapped_column(BigInteger, default=0)
 
