@@ -20,9 +20,19 @@ def device_names(db: Session, site: str) -> list[str]:
     return sorted(n for n in names if n)
 
 
+def shared_isp(db: Session, site: str) -> list[str]:
+    """Locations that use the same ISP links (parameter net.shared_isp, e.g. Head Office and Belawan): choosing one shows the links of all. Tickets and WiFi are not affected."""
+    from ..models import Parameter
+    p = db.get(Parameter, "net.shared_isp")
+    for g in (p.value if p else [["Head Office", "Branch Belawan"]]) or []:
+        if site in g:
+            return list(g)
+    return [site]
+
+
 def site_cond(db: Session, site: str):
     """Sensor milik lokasi: device PRTG cocok dengan nama/alias lokasi, ATAU kode di awal nama sensor ("MDN - Astinet" -> "mdn") ada di alias lokasi. Tidak peka huruf besar/kecil."""
-    names = device_names(db, site)
+    names = sorted({n for x in shared_isp(db, site) for n in device_names(db, x)})
     code = func.regexp_replace(func.lower(PrtgSensor.name), r"^\s*([a-z0-9]+).*$", r"\1")
     return or_(func.lower(PrtgSensor.device).in_(names), code.in_(names))
 
