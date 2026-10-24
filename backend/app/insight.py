@@ -284,6 +284,39 @@ def d_ndr(db: Session, cfg: Config) -> list[dict]:
     return []
 
 
+def d_ndr_traffic(db: Session, cfg: Config) -> list[dict]:
+    """Traffic through a firewall yesterday against its previous 28 days (unusually high or a sudden stop), with the top source IPs of that day."""
+    from .calc.soc_fw import site_map, short
+    day = cfg.now().date() - timedelta(days=1)
+    rows = db.execute(select(M.SocFwDay.fw, M.SocFwDay.day, M.SocFwDay.bytes, M.SocFwDay.src).where(M.SocFwDay.day >= day - timedelta(days=28), M.SocFwDay.day <= day)).all()
+    by: dict = {}
+    for fw, d, b, src in rows:
+        by.setdefault(fw, {})[d] = (b, src)
+    smap = site_map(db, list(by))
+    out = []
+    for fw, days in by.items():
+        if day not in days:
+            continue
+        base = [b for d, (b, _) in days.items() if d < day and b > 0]
+        if len(base) < 7:
+            continue
+        cur = days[day][0]
+        r = robust(base, cur)
+        if not r:
+            continue
+        name, med = smap.get(fw) or fw, r[0]
+        if r[2] >= ZCUT and cur >= 2 * med and cur - med >= 50e9:
+            top = sorted((days[day][1] or {}).items(), key=lambda kv: -kv[1])[:3]
+            out.append(_ins(f"ndr_traffic:{fw}:{day:%Y%m%d}", "security", "warn", f"Traffic through {short(name)} firewall was {fmt(cur / med, 1)}x higher than usual on {day:%d/%m}",
+                            f"{fmt(cur / 1e9)} GB, normally about {fmt(med / 1e9)} GB per day." + (" Top sources: " + ", ".join(f"{ip} ({fmt(b / 1e9)} GB)" for ip, b in top) + "." if top else ""), "soc",
+                            {"gb": round(cur / 1e9, 1), "normal_gb": round(med / 1e9, 1), "z": round(r[2], 1)}, name))
+        elif r[2] <= -ZCUT and med >= 20e9 and cur <= 0.3 * med:
+            out.append(_ins(f"ndr_traffic_low:{fw}:{day:%Y%m%d}", "security", "info", f"Traffic through {short(name)} firewall dropped sharply on {day:%d/%m}",
+                            f"{fmt(cur / 1e9)} GB, normally about {fmt(med / 1e9)} GB per day. Check the link, or whether the firewall stopped sending logs to Panorama.", "soc",
+                            {"gb": round(cur / 1e9, 1), "normal_gb": round(med / 1e9, 1), "z": round(r[2], 1)}, name))
+    return sorted(out, key=lambda i: -i["metric"]["gb"])[:5]
+
+
 def d_xdr(db: Session, cfg: Config) -> list[dict]:
     out, now = [], cfg.now()
     old = db.execute(select(func.count(), func.min(M.XdrAlert.created_at)).where(M.XdrAlert.severity.in_(["critical", "high"]), func.lower(func.coalesce(M.XdrAlert.status, "")) != "closed",
@@ -513,7 +546,7 @@ def d_data_quality(db: Session, cfg: Config) -> list[dict]:
     return out
 
 
-DETECTORS = [d_tickets, d_ticket_sites, d_ticket_trends, d_sla_risk, d_links, d_availability, d_capacity, d_ndr, d_xdr, d_xdr_tickets, d_ndr_mix, d_devices, d_flapping_devices, d_incidents, d_wifi, d_wifi_zones, d_milestone, d_site_multi, d_data_quality]
+DETECTORS = [d_tickets, d_ticket_sites, d_ticket_trends, d_sla_risk, d_links, d_availability, d_capacity, d_ndr, d_ndr_traffic, d_xdr, d_xdr_tickets, d_ndr_mix, d_devices, d_flapping_devices, d_incidents, d_wifi, d_wifi_zones, d_milestone, d_site_multi, d_data_quality]
 
 
 # ---------------- rankings, health, summary (computed on request) ----------------

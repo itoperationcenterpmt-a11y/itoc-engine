@@ -302,6 +302,7 @@ function vSocSite() {
   ${panel("c6", "Threat Categories", "", hb(F.cat))}
   ${panel("c6", "Threat Types", "", hb(F.typ))}
   ${panel("c6", "Top Applications by Volume", "", hb(F.app, fwB))}
+  ${panel("c6", "Top Sources by Traffic", "source IP, bytes sent through the firewall", hb(F.src, fwB))}
   ${panel("c6", "Blocked per Day", "events not just alerted", bars(B, [{name: "Blocked", c: "--good", v: F.days.map(x => x.blocked)}], {label: "Blocked per day"}))}
   ${P.table()}${socFwVal(F, null)}</div>`;
 }
@@ -326,7 +327,7 @@ function vSoc() {
   const sd = {type: ["Threat type", R.type], action: ["Firewall action", R.action], cat: ["Threat category", R.cat], dir: ["Threat direction", R.dir]}, cur = sd[S.sdim];
   const tabs = bt ? bt.tables : [], tb = tabs.find(t => t.id === S.stop) || tabs[0], part = okD.length < chk.length ? ` · from ${okD.length}/${chk.length} days` : "";
   const FW = V.socfw && V.socfw.nFw ? socFw(V.socfw) : null;
-  return head + insArea("soc") + `<div class="grid">${val}${unkP}</div>${FW ? `<div class="grid">${socFwVal(V.socfw, R)}${FW.sites()}${FW.traffic()}${FW.table()}</div>` : ""}
+  return head + insArea("soc") + `<div class="grid">${val}${unkP}</div>${FW ? `<div class="grid">${socFwVal(V.socfw, R)}${FW.sites()}${FW.traffic()}${panel("c6", "Top Sources by Traffic", "source IP, all locations", V.socfw.src.length ? hbars(V.socfw.src.map(x => [x.k, x.n, 0, fwB(x.n)])) : `<div class="empty sm">No detail for this period yet. It is filled in on every Panorama sync.</div>`)}${FW.table()}</div>` : ""}
   <div class="kpis k6">${kpi("Total Events", fmt(R.total), "average " + fmt(R.total / okD.length) + " per validated day" + part, {tip: RUMUS.socTot})}${kpi("Critical + High", fmt(R.ch), fmt(R.crit) + " critical")}${kpi("Critical + High Blocked", pc(R.chBlkPct), "", {tip: RUMUS.socCH, dl: Rp && Rp.ch ? delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : ""})}${kpi("Alert Only", fmt(R.chAlert), "", {cls: R.chAlert ? "warnv" : ""})}${kpi("Internal Source", pc(R.internalPct), bt && bt.K ? fmt(bt.K.hosts) + " internal hosts (table " + dmon(bt.from) + "–" + dmon(bt.to) + ")" : "host table not available", {tip: RUMUS.socInt})}${kpi("URL Blocked", fmt(R.urlBlk), "of " + fmt(R.url) + " URL events")}</div>
   <div class="grid">${panel("c6", "Critical and High per Day", "", legend(ch) + bars(B, ch, {stack: true, label: "Critical and high"}))}
   ${panel("c6", "Medium, Low, Informational per Day", "", legend(ml) + bars(B, ml, {stack: true, label: "Medium low informational"}))}

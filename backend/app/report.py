@@ -243,7 +243,8 @@ def _soc_site(db, cfg, f):
                    _daily("Traffic (GB)", [x["date"] for x in d], [{"name": "GB", "values": [round(x["bytes"] / 1e9, 2) for x in d]}]),
                    _top("Top threat categories", [(x["k"], x["n"]) for x in F["cat"]], "Events"),
                    _top("Top threat types", [(x["k"], x["n"]) for x in F["typ"]], "Events"),
-                   _top("Top applications by volume (GB)", [(x["k"], round(x["n"] / 1e9, 1)) for x in F["app"]], "GB")]
+                   _top("Top applications by volume (GB)", [(x["k"], round(x["n"] / 1e9, 1)) for x in F["app"]], "GB"),
+                   _top("Top source IPs by traffic (GB)", [(x["k"], round(x["n"] / 1e9, 1)) for x in F["src"]], "GB")]
     s["charts"] = [c for c in s["charts"] if c]
     s["tables"].append(_table("Firewalls", ["Firewall", "Events", "Critical", "High", "Blocked", "Traffic (GB)", "Sessions"], ["t", "n", "n", "n", "n", "f1", "n"],
                               [[x["fw"], x["events"], x["crit"], x["high"], x["blocked"], x["bytes"] / 1e9, x["sessions"]] for x in F["fw"]]))

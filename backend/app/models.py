@@ -607,6 +607,7 @@ class SocFwDay(Base):
     typ: Mapped[dict] = mapped_column(JSONB, default=dict)     # threat type -> events
     cat: Mapped[dict] = mapped_column(JSONB, default=dict)     # threat category -> events
     app: Mapped[dict] = mapped_column(JSONB, default=dict)     # application -> bytes (top 40)
+    src: Mapped[dict] = mapped_column(JSONB, default=dict)     # source IP -> bytes (top 25)
     bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     sessions: Mapped[int] = mapped_column(BigInteger, default=0)
 

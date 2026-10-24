@@ -68,13 +68,13 @@ def build(db, cfg, a, b, site: str = "") -> dict:
     want = canon(cfg, site) if site else ""
     fw: dict = {}
     daily: dict = {}
-    agg = {"cat": {}, "typ": {}, "app": {}, "sev": {}, "act": {}}
+    agg = {"cat": {}, "typ": {}, "app": {}, "sev": {}, "act": {}, "src": {}}
     for r in rows:
         st = smap.get(r.fw)
         if want and st != want:
             continue
         x = fw.setdefault(r.fw, {"fw": r.fw, "site": st, "events": 0, "crit": 0, "high": 0, "med": 0, "low": 0, "blocked": 0, "bytes": 0, "sessions": 0, "days": set(), "tfrom": None})
-        for k, src in (("cat", r.cat), ("typ", r.typ), ("app", r.app)):
+        for k, src in (("cat", r.cat), ("typ", r.typ), ("app", r.app), ("src", r.src)):
             for kk, vv in (src or {}).items():
                 agg[k][kk] = agg[k].get(kk, 0) + vv
         for kk, vv in r.sev.items():
@@ -116,5 +116,5 @@ def build(db, cfg, a, b, site: str = "") -> dict:
     top = lambda d, n=10: [{"k": k, "n": v} for k, v in sorted(d.items(), key=lambda kv: -kv[1])[:n] if k not in ("-", "")]
     return {"from": first.isoformat() if first else None, "to": last.isoformat() if last else None, "site": site, "nFw": len(fw), "days": days,
             "total": {"events": tot("events"), "ch": tot("crit") + tot("high"), "crit": tot("crit"), "blocked": tot("blocked"), "bytes": tot("bytes"), "sessions": tot("sessions")},
-            "span": (b - a).days + 1, "cat": top(agg["cat"]), "typ": top(agg["typ"]), "app": top(agg["app"]), "sev": top(agg["sev"], 6), "act": top(agg["act"], 8), "dayN": len({r.day for r in rows}), "fw": sorted(({**x, "days": len(x["days"]), "tfrom": x["tfrom"].isoformat() if x["tfrom"] else None} for x in fw.values()), key=lambda x: -(x["crit"] * 1000 + x["high"] * 10 + x["events"] / 1e6)),
+            "span": (b - a).days + 1, "cat": top(agg["cat"]), "typ": top(agg["typ"]), "app": top(agg["app"]), "src": top(agg["src"], 15), "sev": top(agg["sev"], 6), "act": top(agg["act"], 8), "dayN": len({r.day for r in rows}), "fw": sorted(({**x, "days": len(x["days"]), "tfrom": x["tfrom"].isoformat() if x["tfrom"] else None} for x in fw.values()), key=lambda x: -(x["crit"] * 1000 + x["high"] * 10 + x["events"] / 1e6)),
             "bySite": sorted(by_site.values(), key=lambda s: -s["ch"]), "unmapped": sorted(fw_ for fw_, s in smap.items() if not s)}

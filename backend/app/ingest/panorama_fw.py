@@ -2,12 +2,22 @@
 The location of each firewall is looked up in calc/soc_fw.py (name match with an admin override)."""
 from datetime import date, datetime, timedelta
 import httpx
-from sqlalchemy import select
+from sqlalchemy import Text, cast, select
 from sqlalchemy.orm import Session
 from ..models import SocFwDay
 from . import panorama_api as PA
 
 SEV = ("critical", "high", "medium", "low", "informational")
+
+
+def src_rows(cl: httpx.Client, base: str, key: str, d: date, end: datetime | None = None) -> dict:
+    """Top source IPs by bytes per firewall for one day: {firewall: {ip: bytes}}."""
+    rng = (d.strftime("%Y/%m/%d 00:00:00"), (end or datetime.combine(d, datetime.max.time())).strftime("%Y/%m/%d %H:%M:%S"))
+    out: dict = {}
+    for r in PA.run_dynamic(cl, base, key, "trsum", ["device_name", "src"], ["bytes"], "", "", 10000, rng=rng):
+        x = out.setdefault(r.get("device_name") or "-", {})
+        x[r.get("src") or "-"] = x.get(r.get("src") or "-", 0) + int(float(r.get("bytes") or 0))
+    return {fw: dict(sorted(x.items(), key=lambda kv: -kv[1])[:25]) for fw, x in out.items()}
 
 
 def day_rows(cl: httpx.Client, base: str, key: str, d: date, end: datetime | None = None) -> list[SocFwDay]:
@@ -29,7 +39,8 @@ def day_rows(cl: httpx.Client, base: str, key: str, d: date, end: datetime | Non
         x["s"] += int(float(r.get("sessions") or 0))
         a = r.get("app") or "-"
         x["app"][a] = x["app"].get(a, 0) + b
-    return [SocFwDay(day=d, fw=fw, sev=x["sev"], act=x["act"], typ=x["typ"], cat=x["cat"], app=dict(sorted(x["app"].items(), key=lambda kv: -kv[1])[:40]), bytes=x["b"], sessions=x["s"]) for fw, x in by.items()]
+    src = src_rows(cl, base, key, d, end)
+    return [SocFwDay(day=d, fw=fw, src=src.get(fw, {}), sev=x["sev"], act=x["act"], typ=x["typ"], cat=x["cat"], app=dict(sorted(x["app"].items(), key=lambda kv: -kv[1])[:40]), bytes=x["b"], sessions=x["s"]) for fw, x in by.items()]
 
 
 def sync(db: Session, cl: httpx.Client, c: dict, key: str, cur: dict, now: datetime, lower: date, notes: list) -> int:
@@ -59,4 +70,18 @@ def sync(db: Session, cl: httpx.Client, c: dict, key: str, cur: dict, now: datet
             notes.append(f"firewall data {d.isoformat()} failed: {str(e)[:100]}")
             break
     cur["fw_tried"] = sorted(tried)[-800:]
+    stried = set(cur.get("fw_src_tried", []))                              # days stored before source IPs were collected: fill only that part
+    old = [d for (d,) in db.execute(select(SocFwDay.day).where(cast(SocFwDay.src, Text) == "{}", SocFwDay.bytes > 0, SocFwDay.day < today).distinct().order_by(SocFwDay.day.desc()))]
+    for d in [x for x in old if x.isoformat() not in stried][:int(c.get("max_fw_days_per_run", 8))]:
+        try:
+            src = src_rows(cl, base, key, d)
+            for r in db.scalars(select(SocFwDay).where(SocFwDay.day == d)):
+                r.src = src.get(r.fw, {})
+            db.flush()
+            stried.add(d.isoformat())
+            n += 1
+        except (RuntimeError, httpx.HTTPError) as e:
+            notes.append(f"source IPs {d.isoformat()} failed: {str(e)[:100]}")
+            break
+    cur["fw_src_tried"] = sorted(stried)[-800:]
     return n
