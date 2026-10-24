@@ -172,7 +172,7 @@ def integration_test(key: str, server: str = "", db: Session = Depends(get_db), 
             u, pw = vault.cred(db, "pano.user", c.get("user_env", "PANO_USER")), vault.cred(db, "pano.pass", c.get("pass_env", "PANO_PASS"))
             if not u or not pw:
                 raise HTTPException(422, "Panorama API username/password is not filled in")
-            names = c.get("test_reports") or list(((c.get("excel") or {}).get("reports") or {}).values())[:3]
+            names = c.get("test_reports") or []                     # saved custom reports are no longer needed: the sync uses dynamic reports (all managed firewalls)
             out = []
             with httpx.Client(timeout=40, verify=c.get("verify_tls", False)) as cl:
                 k = panorama_api.keygen(cl, c["base_url"], u, pw)
@@ -182,6 +182,11 @@ def integration_test(key: str, server: str = "", db: Session = Depends(get_db), 
                     out.append(f"Log threat: OK ({len(lr)} baris contoh, kolom: {', '.join(lc[:8]) or '-'}).")
                 except RuntimeError as e:
                     out.append(f"Log threat: gagal ({e}).")
+                try:
+                    rows = panorama_api.run_dynamic(cl, c["base_url"], k, "threat", ["device_name"], ["repeatcnt"], "last-calendar-day", "", 100, wait_s=60)
+                    out.append(f"Dynamic report (what the sync uses): OK, {len(rows)} firewalls reported threat events yesterday.")
+                except RuntimeError as e:
+                    out.append(f"Dynamic report: failed ({str(e)[:140]}). The API account needs the Reports and Log permissions.")
                 for name in names:
                     try:
                         cols, rows = panorama_api.run_report(cl, c["base_url"], k, name, wait_s=60)
