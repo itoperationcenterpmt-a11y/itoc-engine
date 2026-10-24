@@ -34,8 +34,9 @@ def build(db, cfg, server: str = "", hw_name: str = "", state: str = "", kind: s
     zhosts = db.query(ZbxHost).all()
     by_ip, by_name = {h.ip: h for h in zhosts if h.ip}, {norm(h.name): h for h in zhosts}
     zrow = {}
-    for c in all_cams:                                                  # online status comes from Zabbix: by IP first, then by name
-        zrow[c.id] = by_ip.get(c.ip or "") or by_name.get(norm(c.name))
+    hw_ip = {h.id: h.host for h in all_hws if h.host and re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", h.host)}
+    for c in all_cams:                                                  # online status comes from Zabbix: by the hardware's address first (the device that really answers, even after a replacement), then the IP in the name, then the name
+        zrow[c.id] = by_ip.get(hw_ip.get(c.hardware_id, "")) or by_ip.get(c.ip or "") or by_name.get(norm(c.name))
     z = lambda c: zrow[c.id].status if zrow.get(c.id) else ""
     typ = {c.id: kind_of(c) for c in all_cams}
     okf = {"": lambda c: True, "rec": lambda c: c.recording, "norec": lambda c: c.enabled and not c.recording, "off": lambda c: not c.enabled, "up": lambda c: z(c) == "up",
@@ -93,6 +94,6 @@ def build(db, cfg, server: str = "", hw_name: str = "", state: str = "", kind: s
             "srv": srv, "serverErrors": ((src.cursor or {}).get("server_errors") or {}) if src else {}, "opts": opts, "zbx": {"matched": sum(1 for c in cam_only if z(c)), "up": sum(1 for c in cam_only if z(c) == "up"), "down": sum(1 for c in cam_only if z(c) == "down"),
                                   "other": sum(1 for c in cam_only if z(c) in ("maintenance", "disabled", "degraded")), "none": sum(1 for c in cam_only if not z(c))},
             "nHw": len(hws), "servers": [{**s, "updated": ms(s["updated"] + (now - datetime.utcnow())) if s["updated"] else None} for s in sv.values()], "hwOff": sum(1 for h in hws if not h.enabled), "hw": hw,
-            "list": [{"name": c.name, "server": c.server, "hw": c.hardware or "-", "ip": c.ip or "", "ch": c.channel, "enabled": c.enabled, "rec": c.recording, "fps": c.fps or "", "type": typ[c.id],
+            "list": [{"name": c.name, "server": c.server, "hw": c.hardware or "-", "ip": hw_ip.get(c.hardware_id) or c.ip or "", "ch": c.channel, "enabled": c.enabled, "rec": c.recording, "fps": c.fps or "", "type": typ[c.id],
                       "zbx": z(c), "zprob": (zrow[c.id].problem or "") if zrow.get(c.id) else "", "zsince": ms(zrow[c.id].down_since) if zrow.get(c.id) and zrow[c.id].down_since else None, "mod": ms(c.modified_at)} for c in cams],
             "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": bool(last) and (datetime.utcnow() - last).total_seconds() > every * 60 * 3}
