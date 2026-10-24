@@ -54,7 +54,7 @@ def build(db, cfg, a, b, site: str = "") -> dict:
         st = smap.get(r.fw)
         if site and st != site:
             continue
-        x = fw.setdefault(r.fw, {"fw": r.fw, "site": st, "events": 0, "crit": 0, "high": 0, "med": 0, "low": 0, "blocked": 0, "bytes": 0, "sessions": 0, "days": set()})
+        x = fw.setdefault(r.fw, {"fw": r.fw, "site": st, "events": 0, "crit": 0, "high": 0, "med": 0, "low": 0, "blocked": 0, "bytes": 0, "sessions": 0, "days": set(), "tfrom": None})
         n = sum(r.sev.values())
         x["events"] += n
         x["crit"] += r.sev.get("critical", 0)
@@ -65,6 +65,8 @@ def build(db, cfg, a, b, site: str = "") -> dict:
         x["bytes"] += r.bytes
         x["sessions"] += r.sessions
         x["days"].add(r.day)
+        if r.bytes and (x["tfrom"] is None or r.day < x["tfrom"]):
+            x["tfrom"] = r.day
         d = daily.setdefault(r.day, {"critical": 0, "high": 0, "other": 0})
         d["critical"] += r.sev.get("critical", 0)
         d["high"] += r.sev.get("high", 0)
@@ -84,5 +86,5 @@ def build(db, cfg, a, b, site: str = "") -> dict:
     tot = lambda k: sum(x[k] for x in fw.values())
     return {"from": first.isoformat() if first else None, "to": last.isoformat() if last else None, "site": site, "nFw": len(fw), "days": days,
             "total": {"events": tot("events"), "ch": tot("crit") + tot("high"), "crit": tot("crit"), "blocked": tot("blocked"), "bytes": tot("bytes"), "sessions": tot("sessions")},
-            "fw": sorted(({**x, "days": len(x["days"])} for x in fw.values()), key=lambda x: -(x["crit"] * 1000 + x["high"] * 10 + x["events"] / 1e6)),
+            "span": (b - a).days + 1, "dayN": len({r.day for r in rows}), "fw": sorted(({**x, "days": len(x["days"]), "tfrom": x["tfrom"].isoformat() if x["tfrom"] else None} for x in fw.values()), key=lambda x: -(x["crit"] * 1000 + x["high"] * 10 + x["events"] / 1e6)),
             "bySite": sorted(by_site.values(), key=lambda s: -s["ch"]), "unmapped": sorted(fw_ for fw_, s in smap.items() if not s)}

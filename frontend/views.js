@@ -279,11 +279,20 @@ function socFw(F) {
     table: () => panel("c12", "Firewalls", fmt(F.nFw) + " firewalls" + (F.from ? " · data from " + dmon(F.from) : "") + (F.unmapped.length ? " · " + F.unmapped.length + " not matched to a location" : ""), tbl(["Firewall", "Location", "Events", "Critical + High", "Blocked", "Traffic", "Sessions"], rows, {r: [2, 3, 4, 6], tall: true, empty: "No firewall data in this period yet. It is collected on every Panorama sync."})),
   };
 }
+function socFwVal(F, R) {
+  const cut = n => n.replace(/^SPMT-/, "").replace(/-(PA|FW)[-\d].*$/, ""), late = F.fw.filter(x => x.tfrom && x.tfrom > S.from), none = F.fw.filter(x => !x.tfrom);
+  const diff = R && !S.site && F.dayN === F.span && R.total ? Math.abs(F.total.events - R.total) / R.total : null;
+  const rows = [
+    [F.dayN === F.span ? "good" : "warn", `Days with firewall data: ${F.dayN} of ${F.span}`, F.dayN < F.span && F.from ? `Collected since ${dfull(F.from)}; older days are filled in on every Panorama sync.` : ""],
+    [late.length || none.length ? "warn" : "good", "Traffic data per firewall", late.length || none.length ? [...late.map(x => `${esc(cut(x.fw))} from ${dmon(x.tfrom)}`), ...none.map(x => `${esc(cut(x.fw))} none`)].join(", ") + ". Panorama has no traffic summary for these firewalls before that date." : "Every firewall has traffic for the whole period"],
+    ...(diff == null ? [] : [[diff < 0.05 ? "good" : "warn", "Firewall events against the all-location summary", `${fmt(F.total.events)} against ${fmt(R.total)} (${pc(diff, 1)} difference)`]])];
+  return panel("c12", "Firewall Data Validation", S.site || "all locations", `<ul class="checks">${rows.map(c => `<li>${pill(c[0], "")}<div><b>${c[1]}</b>${c[2] ? `<span>${c[2]}</span>` : ""}</div></li>`).join("")}</ul>`);
+}
 function vSocSite() {
   const F = V.socfw, P = socFw(F), T = F.total, B = F.days.map(x => ({label: dmon(x.date), full: dlong(x.date)})), ch = [{name: "Critical", c: "--crit", v: F.days.map(x => x.critical)}, {name: "High", c: "--serious", v: F.days.map(x => x.high)}, {name: "Other", c: "--ss", v: F.days.map(x => x.other)}];
   if (!F.nFw) return `<div class="grid"><section class="panel c12">${empty("No firewall data for " + esc(S.site) + " in this period. A location needs a firewall matched to it (Firewalls table on the all-locations view).")}</section></div>`;
   return (F.from > S.from ? `<p class="sub msnote">Per-firewall data starts on ${dfull(F.from)}; earlier days of this period are not included.</p>` : "") + `<div class="kpis k6">${kpi("Events", fmt(T.events), fmt(F.nFw) + " firewall" + (F.nFw > 1 ? "s" : ""))}${kpi("Critical + High", fmt(T.ch), fmt(T.crit) + " critical", {cls: T.crit ? "warnv" : ""})}${kpi("Blocked", T.events ? pc(T.blocked / T.events) : "-", fmt(T.blocked) + " events")}${kpi("Traffic", fwB(T.bytes), "")}${kpi("Sessions", fmt(T.sessions), "")}</div>
-  <div class="grid">${panel("c12", "Events per Day", S.site, legend(ch) + bars(B, ch, {stack: true, label: "Events per day"}))}${P.table()}</div>`;
+  <div class="grid">${socFwVal(F, null)}${panel("c12", "Events per Day", S.site, legend(ch) + bars(B, ch, {stack: true, label: "Events per day"}))}${P.table()}</div>`;
 }
 function vSoc() {
   if (S.site && V.socfw) return insArea("soc") + vSocSite();
@@ -306,7 +315,7 @@ function vSoc() {
   const sd = {type: ["Threat type", R.type], action: ["Firewall action", R.action], cat: ["Threat category", R.cat], dir: ["Threat direction", R.dir]}, cur = sd[S.sdim];
   const tabs = bt ? bt.tables : [], tb = tabs.find(t => t.id === S.stop) || tabs[0], part = okD.length < chk.length ? ` · from ${okD.length}/${chk.length} days` : "";
   const FW = V.socfw && V.socfw.nFw ? socFw(V.socfw) : null;
-  return head + insArea("soc") + `<div class="grid">${val}${unkP}</div>${FW ? `<div class="grid">${FW.sites()}${FW.traffic()}${FW.table()}</div>` : ""}
+  return head + insArea("soc") + `<div class="grid">${val}${unkP}</div>${FW ? `<div class="grid">${socFwVal(V.socfw, R)}${FW.sites()}${FW.traffic()}${FW.table()}</div>` : ""}
   <div class="kpis k6">${kpi("Total Events", fmt(R.total), "average " + fmt(R.total / okD.length) + " per validated day" + part, {tip: RUMUS.socTot})}${kpi("Critical + High", fmt(R.ch), fmt(R.crit) + " critical")}${kpi("Critical + High Blocked", pc(R.chBlkPct), "", {tip: RUMUS.socCH, dl: Rp && Rp.ch ? delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : ""})}${kpi("Alert Only", fmt(R.chAlert), "", {cls: R.chAlert ? "warnv" : ""})}${kpi("Internal Source", pc(R.internalPct), bt && bt.K ? fmt(bt.K.hosts) + " internal hosts (table " + dmon(bt.from) + "–" + dmon(bt.to) + ")" : "host table not available", {tip: RUMUS.socInt})}${kpi("URL Blocked", fmt(R.urlBlk), "of " + fmt(R.url) + " URL events")}</div>
   <div class="grid">${panel("c6", "Critical and High per Day", "", legend(ch) + bars(B, ch, {stack: true, label: "Critical and high"}))}
   ${panel("c6", "Medium, Low, Informational per Day", "", legend(ml) + bars(B, ml, {stack: true, label: "Medium low informational"}))}

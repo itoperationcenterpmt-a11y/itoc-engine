@@ -33,7 +33,7 @@ def sync(db: Session, cl: httpx.Client, c: dict, key: str, cur: dict, now: datet
     base = c["base_url"]
     have = {d for (d,) in db.execute(select(SocFwDay.day).distinct())}
     tried = set(cur.get("fw_tried", []))
-    lower = max(lower, today - timedelta(days=int(c.get("fw_days", 60))))
+    lower = max(lower, today - timedelta(days=int(c.get("fw_days", 210))))
     db.query(SocFwDay).filter(SocFwDay.day < lower).delete()
     pending, d = [], yesterday                                             # newest days first, so recent data is complete before the older history
     while d >= lower and len(pending) < int(c.get("max_fw_days_per_run", 8)):
