@@ -293,6 +293,7 @@ document.addEventListener("change", async e => {
   else if (t.dataset.laySize !== undefined) { const blk = t.closest(".wblock"); blk.className = blk.className.replace(SZ, "").trim() + " " + t.value; blk.dataset.size = t.value; }
   else if (t.id === "dim") set({dim: t.value});
   else if (t.id === "sdim") set({sdim: t.value});
+  else if (t.dataset && t.dataset.fwmap) { api("/api/admin/fw-map", {method: "PUT", body: JSON.stringify({fw: t.dataset.fwmap, site: t.value})}).then(() => render(true)).catch(er => alert(er.message)); }
   else if (t.id === "stop") set({stop: t.value});
   else if (t.id === "sensor") set({sensor: t.value});
   else if (t.id === "mkey") set({mkey: t.value, mdata: null, medit: null});

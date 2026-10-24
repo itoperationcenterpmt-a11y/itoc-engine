@@ -9,7 +9,7 @@ Bentuk model (aman untuk JSON):
   kind angka: n = bulat, f0/f1/f2 = desimal, p0/p1/p2 = persen dari pecahan, t = teks."""
 from datetime import datetime, timedelta
 from . import views as VW
-from .calc import soc as SOC
+from .calc import soc as SOC, soc_fw as SOCFW
 from .security import can_see
 
 SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)")]
@@ -224,7 +224,28 @@ def _noc(db, cfg, f, preset="standar"):
     return s
 
 
+def _soc_site(db, cfg, f):
+    """NDR for one location: the firewalls that belong to it (Panorama device names), from the per-firewall data."""
+    F = SOCFW.build(db, cfg, f.d_from, f.d_to, f.site)
+    s = {"key": "soc", "title": "NDR (Palo Alto)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    if not F["nFw"]:
+        s["notes"].append(f"No firewall data for {f.site} in this period. The location needs a firewall matched to it, and per-firewall data is collected from the first Panorama sync after the update.")
+        return s
+    T = F["total"]
+    s["kpis"] = [_kpi("Threat events", T["events"], "n", fmt_n(F["nFw"]) + " firewall" + ("s" if F["nFw"] > 1 else "")), _kpi("Critical + High", T["ch"], "n", fmt_n(T["crit"]) + " critical"),
+                 _kpi("Blocked", T["blocked"] / T["events"] if T["events"] else None, "p1", "actions other than alert"), _kpi("Traffic (TB)", T["bytes"] / 1e12, "f2", ""), _kpi("Sessions", T["sessions"], "n", "")]
+    d = F["days"]
+    s["charts"] = [_daily("Threat events by severity", [x["date"] for x in d], [{"name": n, "values": [x[k] for x in d]} for n, k in (("Critical", "critical"), ("High", "high"), ("Other", "other"))], "stack")]
+    s["tables"].append(_table("Firewalls", ["Firewall", "Events", "Critical", "High", "Blocked", "Traffic (GB)", "Sessions"], ["t", "n", "n", "n", "n", "f1", "n"],
+                              [[x["fw"], x["events"], x["crit"], x["high"], x["blocked"], x["bytes"] / 1e9, x["sessions"]] for x in F["fw"]]))
+    if F["from"] and F["from"] > f.d_from.isoformat():
+        s["notes"].append(f"Per-firewall data starts on {F['from']}; earlier days of the period are not included.")
+    return s
+
+
 def _soc(db, cfg, f, preset="standar"):
+    if f.site:
+        return _soc_site(db, cfg, f)
     S = VW._soc(db, cfg, f.d_from, f.d_to)
     R = S["R"]
     s = {"key": "soc", "title": "NDR (Palo Alto)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
@@ -381,6 +402,8 @@ def _xdr(db, cfg, f, preset="standar"):
     from .calc import xdr as XDR
     X = XDR.build(db, cfg, f.d_from, f.d_to)
     s = {"key": "xdr", "title": "XDR (Trend Micro)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    if f.site:
+        s["notes"].append("XDR alerts are not split by location (Vision One reports the host, not the branch); the figures below cover all locations.")
     if not X["configured"] or not X["total"]:
         s["notes"].append("No XDR alerts in this period." + (" Last sync failed: " + X["error"] if X["error"] else ""))
         return s

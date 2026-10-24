@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from .. import vault
 from ..models import DataSource, SocBatch, SocDay
 from ..store import Config
-from . import panorama, panorama_api as PA
+from . import panorama, panorama_api as PA, panorama_fw as PF
 
 BLOCK_URL = "( action eq block-url ) or ( action eq block-continue ) or ( action eq block-override )"
 DENIED = "( action eq deny ) or ( action eq drop ) or ( action eq reset-both ) or ( action eq reset-client ) or ( action eq reset-server )"
@@ -125,7 +125,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     partial = bool(c.get("today_partial", True))
     if not pending and not top_jobs and not partial:
         return 0, "No new days and the Top report is still fresh"
-    notes, n_days, n_rows, n_top, n_part = [], 0, 0, 0, 0
+    notes, n_days, n_rows, n_top, n_part, n_fw = [], 0, 0, 0, 0, 0
     with httpx.Client(timeout=60, verify=c.get("verify_tls", False)) as cl:
         key = PA.keygen(cl, c["base_url"], user, pw)
         for d in pending:
@@ -157,6 +157,11 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
                     n_part = 1 if b is not None else 0
             except (RuntimeError, httpx.HTTPError) as e:
                 notes.append(f"today's data failed: {str(e)[:100]}")
+        try:
+            n_fw = PF.sync(db, cl, c, key, cur, now, lower, notes)
+        except (RuntimeError, httpx.HTTPError) as e:
+            n_fw = 0
+            notes.append(f"firewall data failed: {str(e)[:100]}")
         for label, d0, d1, kind in top_jobs[:int(c.get("max_top_per_run", 3))]:
             try:
                 rng = (d0.strftime("%Y/%m/%d 00:00:00"), d1.strftime("%Y/%m/%d 23:59:59"))
@@ -181,6 +186,6 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
                 continue                                              # batch Top lain tetap dicoba; yang gagal diulang pada sinkron berikutnya
     cur["tried"] = sorted(tried)[-800:]
     src.cursor = cur
-    if notes and not n_days and not n_top and not n_part:
+    if notes and not n_days and not n_top and not n_part and not n_fw:
         raise RuntimeError("; ".join(notes))
-    return n_rows, f"{n_days} hari ringkasan baru, {n_top} laporan Top diperbarui" + (", today's data updated" if n_part else "") + ("; " + "; ".join(notes) if notes else "")
+    return n_rows, f"{n_days} hari ringkasan baru, {n_top} laporan Top diperbarui" + (", today's data updated" if n_part else "") + (f", {n_fw} firewall days" if n_fw else "") + ("; " + "; ".join(notes) if notes else "")

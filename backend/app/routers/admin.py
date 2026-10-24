@@ -477,3 +477,26 @@ def profile_delete(key: str, db: Session = Depends(get_db), user: User = Depends
     db.commit()
     bump_config()
     return {"ok": True}
+
+
+# ---------------- firewall locations (NDR per location) ----------------
+class FwMapIn(BaseModel):
+    fw: str
+    site: str = ""          # empty = back to the automatic name match; "-" = no location
+
+
+@router.put("/fw-map")
+def fw_map(body: FwMapIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    from ..models import SocFwMap, Site
+    fw, site = body.fw.strip()[:120], body.site.strip()
+    if not fw:
+        raise HTTPException(422, "A firewall name is required")
+    if site not in ("", "-") and not db.query(Site).filter_by(name=site).first():
+        raise HTTPException(422, "Unknown location")
+    db.query(SocFwMap).filter_by(fw=fw).delete()
+    if site:
+        db.add(SocFwMap(fw=fw, site=None if site == "-" else site))
+    audit(db, user.username, f"Firewall {fw} location set to {site or 'automatic'}")
+    db.commit()
+    bump_data()
+    return {"ok": True}

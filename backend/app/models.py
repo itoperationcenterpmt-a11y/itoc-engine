@@ -595,3 +595,21 @@ class Insight(Base):
     suppress_until: Mapped[datetime | None] = mapped_column(DateTime)   # a dismissed finding stays hidden until then
     handover_id: Mapped[int | None] = mapped_column(Integer)            # handover created from this finding
     __table_args__ = (Index("ix_insight_key_open", "key", "status"),)
+
+
+class SocFwDay(Base):
+    """Palo Alto events per day and firewall (Panorama device name): severity and action counts, traffic."""
+    __tablename__ = "soc_fw_day"
+    day: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    fw: Mapped[str] = mapped_column(String(120), primary_key=True)
+    sev: Mapped[dict] = mapped_column(JSONB, default=dict)     # severity -> events
+    act: Mapped[dict] = mapped_column(JSONB, default=dict)     # action -> events
+    bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    sessions: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class SocFwMap(Base):
+    """Admin override: which location a firewall belongs to (the automatic name match is used when a firewall is not listed here)."""
+    __tablename__ = "soc_fw_map"
+    fw: Mapped[str] = mapped_column(String(120), primary_key=True)
+    site: Mapped[str | None] = mapped_column(String(120))
