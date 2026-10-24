@@ -65,7 +65,7 @@ def build(db, cfg, server: str = "", hw_name: str = "", state: str = "", kind: s
                    "cameras": x["n"], "camEnabled": x["en"], "rec": x["rec"], "zdown": x["zdown"], "zn": x["zn"]})
 
     sv: dict = {}
-    new_sv = lambda n: {"name": n, "cameras": 0, "pa": 0, "hw": 0, "enabled": 0, "rec": 0, "updated": None, "licUsed": 0, "licTotal": lic_total.get(n)}
+    new_sv = lambda n: {"name": n, "cameras": 0, "pa": 0, "hw": 0, "enabled": 0, "rec": 0, "up": 0, "down": 0, "updated": None, "licUsed": 0, "licTotal": lic_total.get(n)}
     for c in all_cams:                                                  # licences are always counted on the full server, regardless of the filters
         if not server or c.server == server:
             s = sv.setdefault(c.server, new_sv(c.server))
@@ -75,16 +75,22 @@ def build(db, cfg, server: str = "", hw_name: str = "", state: str = "", kind: s
         s["pa" if typ[c.id] == "pa" else "cameras"] += 1
         s["enabled"] += 1 if c.enabled else 0
         s["rec"] += 1 if c.recording else 0
+        if typ[c.id] != "pa":
+            s["up"] += 1 if z(c) in ("up", "maintenance", "disabled", "degraded") else 0
+            s["down"] += 1 if z(c) == "down" else 0
         s["updated"] = max(s["updated"] or c.fetched_at, c.fetched_at)
     for h in hws:
         sv.setdefault(h.server, new_sv(h.server))["hw"] += 1
     now = cfg.now()
+    live = [n for n, _, on in milestone.servers_all((src.config or {}) if src else {}) if on]
+    errs = ((src.cursor or {}).get("server_errors") or {}) if src else {}
+    srv = {"total": len(live), "failed": sorted(n for n in live if n in errs), "ok": len([n for n in live if n not in errs])}
     cam_only = [c for c in cams if typ[c.id] != "pa"]
     pa_only = [c for c in cams if typ[c.id] == "pa"]
     return {"configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled), "error": src.last_error if src else None,
             "total": len(cam_only), "ptz": sum(1 for c in cam_only if typ[c.id] == "ptz"), "fix": sum(1 for c in cam_only if typ[c.id] == "fix"), "camEnabled": sum(1 for c in cam_only if c.enabled), "recording": sum(1 for c in cam_only if c.recording), "noIp": sum(1 for c in cams if not c.ip),
             "pa": {"total": len(pa_only), "enabled": sum(1 for c in pa_only if c.enabled), "down": sum(1 for c in pa_only if z(c) == "down")},
-            "serverErrors": ((src.cursor or {}).get("server_errors") or {}) if src else {}, "opts": opts, "zbx": {"matched": sum(1 for c in cam_only if z(c)), "up": sum(1 for c in cam_only if z(c) == "up"), "down": sum(1 for c in cam_only if z(c) == "down"),
+            "srv": srv, "serverErrors": ((src.cursor or {}).get("server_errors") or {}) if src else {}, "opts": opts, "zbx": {"matched": sum(1 for c in cam_only if z(c)), "up": sum(1 for c in cam_only if z(c) == "up"), "down": sum(1 for c in cam_only if z(c) == "down"),
                                   "other": sum(1 for c in cam_only if z(c) in ("maintenance", "disabled", "degraded")), "none": sum(1 for c in cam_only if not z(c))},
             "nHw": len(hws), "servers": [{**s, "updated": ms(s["updated"] + (now - datetime.utcnow())) if s["updated"] else None} for s in sv.values()], "hwOff": sum(1 for h in hws if not h.enabled), "hw": hw,
             "list": [{"name": c.name, "server": c.server, "hw": c.hardware or "-", "ip": c.ip or "", "ch": c.channel, "enabled": c.enabled, "rec": c.recording, "fps": c.fps or "", "type": typ[c.id],
