@@ -3,7 +3,7 @@
 function vInternet() {
   const F = V.inet, grid = h => `<div class="grid">${h}</div>`;
   if (!F) return grid(`<section class="panel c12">${empty()}</section>`);
-  if (!F.nFw || !F.total.bytes) return grid(`<section class="panel c12">${empty("No Palo Alto traffic data for this period" + (S.site ? " and location" : "") + " yet. It is collected on every Panorama sync.")}</section>`);
+  if (!F.nFw || !F.total.bytes) return grid(`<section class="panel c12">${empty("No Palo Alto traffic data for this period" + (S.site ? " and location" : "") + " yet. It is collected on every Panorama sync.")}</section>` + socProgress(F));
   const T = F.total, B = F.days.map(x => ({label: dmon(x.date), full: dlong(x.date)})), busy = F.days.reduce((m, x) => x.bytes > m.bytes ? x : m, F.days[0]);
   const avg = F.dayN ? T.bytes * 8 / (F.dayN * 86400) / 1e6 : null;
   const hb = (rows, f = fmt) => rows.length ? hbars(rows.map(x => [x.k, x.n, 0, f(x.n)])) : `<div class="empty sm">No data for this period yet. It is filled in on every Panorama sync.</div>`;
@@ -18,5 +18,6 @@ function vInternet() {
     panel("c6", "Top Source Networks by Traffic", "internal, per /24 network", hb(F.src, fwB)) +
     panel("c6", "Top Source Networks by Web Requests", "internal, per /24 network", hb(F.webu)) +
     panel("c12", "Web Categories", "requests the URL filtering profile logs (alert or block)", hb(F.urlc)) +
+    socProgress(F) +
     (S.site ? "" : panel("c12", "Traffic per Location", "firewalls matched to each location", tbl(["Location", "Traffic", "Share", "Firewalls"], sites.map(s => [s.site, {h: `<span class="nw">${fwB(s.bytes)}</span>`}, pc(s.bytes / T.bytes, 1), s.fw]), {r: [1, 2, 3]}))));
 }

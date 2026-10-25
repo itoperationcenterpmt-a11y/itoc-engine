@@ -1,11 +1,29 @@
 """NDR per firewall and location, from soc_fw_day (Panorama device names). A firewall is matched to a location by name ('SPMT-TANJUNG-EMAS-PA440' -> Tanjung Emas) unless an admin override exists."""
 import re
-from datetime import timedelta
+from datetime import date, timedelta
 from difflib import SequenceMatcher
-from sqlalchemy import func, select
-from ..models import Site, SocFwDay, SocFwMap
+from sqlalchemy import Text, cast, func, select
+from ..models import DataSource, Site, SocFwDay, SocFwMap
 
 PASS = ("alert", "allow")        # actions that do not stop the traffic
+
+
+def progress(db, cfg) -> list:
+    """How much of the Palo Alto history that is collected in the background (a few days per sync) is in: [{label, done, total, pending, per}]."""
+    today = cfg.now().date()
+    yest = today - timedelta(days=1)
+    src = db.get(DataSource, "panorama")
+    c = (src.config or {}) if src else {}
+    lower = date.fromisoformat(c["backfill_from"]) if c.get("backfill_from") else yest - timedelta(days=int(c.get("backfill_days", 14)) - 1)
+    lower = max(lower, today - timedelta(days=int(c.get("fw_days", 210))))
+    rows = db.execute(select(SocFwDay.day, func.sum(SocFwDay.bytes), func.bool_or(cast(SocFwDay.src, Text) != "{}"), func.bool_or(cast(SocFwDay.urlc, Text) != "{}"), func.bool_or(cast(SocFwDay.acat, Text) != "{}"))
+                      .where(SocFwDay.day >= lower, SocFwDay.day <= yest).group_by(SocFwDay.day)).all()
+    traffic = [r for r in rows if r[1]]
+    det = [r for r in traffic if r[0] >= today - timedelta(days=int(c.get("fw_detail_days", 45)))]
+    item = lambda label, done, total, per: {"label": label, "done": done, "total": total, "pending": max(total - done, 0), "per": per}
+    return [item("Events, traffic and applications per firewall", len(rows), max((yest - lower).days + 1, 0), int(c.get("max_fw_days_per_run", 8))),
+            item("Source networks and web users", sum(1 for r in traffic if r[2]), len(traffic), int(c.get("max_fw_days_per_run", 8))),
+            item("Application and web categories", sum(1 for r in det if r[3] or r[4]), len(det), int(c.get("max_fw_detail_per_run", 3)))]
 
 
 def _k(s: str) -> str:
@@ -116,6 +134,6 @@ def build(db, cfg, a, b, site: str = "") -> dict:
     top = lambda d, n=10: [{"k": k, "n": v} for k, v in sorted(d.items(), key=lambda kv: -kv[1])[:n] if k not in ("-", "")]
     return {"from": first.isoformat() if first else None, "to": last.isoformat() if last else None, "site": site, "nFw": len(fw), "days": days,
             "total": {"events": tot("events"), "ch": tot("crit") + tot("high"), "crit": tot("crit"), "blocked": tot("blocked"), "bytes": tot("bytes"), "sessions": tot("sessions")},
-            "span": (b - a).days + 1, "cat": top(agg["cat"]), "typ": top(agg["typ"]), "app": top(agg["app"]), "src": top(agg["src"], 15), "acat": top(agg["acat"], 10), "urlc": top(agg["urlc"], 12), "webu": top(agg["webu"], 15), "webTotal": sum(agg["urlc"].values()),
+            "span": (b - a).days + 1, "cat": top(agg["cat"]), "typ": top(agg["typ"]), "app": top(agg["app"]), "src": top(agg["src"], 15), "acat": top(agg["acat"], 10), "urlc": top(agg["urlc"], 12), "webu": top(agg["webu"], 15), "webTotal": sum(agg["urlc"].values()), "progress": progress(db, cfg),
             "detailFrom": min((r.day.isoformat() for r in rows if r.urlc or r.acat), default=None), "sev": top(agg["sev"], 6), "act": top(agg["act"], 8), "dayN": len({r.day for r in rows}), "fw": sorted(({**x, "days": len(x["days"]), "tfrom": x["tfrom"].isoformat() if x["tfrom"] else None} for x in fw.values()), key=lambda x: -(x["crit"] * 1000 + x["high"] * 10 + x["events"] / 1e6)),
             "bySite": sorted(by_site.values(), key=lambda s: -s["ch"]), "unmapped": sorted(fw_ for fw_, s in smap.items() if not s)}

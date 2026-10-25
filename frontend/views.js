@@ -281,6 +281,12 @@ function socFw(F) {
     table: () => panel("c12", "Firewalls", fmt(F.nFw) + " firewalls" + (F.from ? " · data from " + dmon(F.from) : "") + (F.unmapped.length ? " · " + F.unmapped.length + " not matched to a location" : ""), tbl(["Firewall", "Location", "Events", "Critical + High", "Blocked", "Traffic", "Sessions"], rows, {r: [2, 3, 4, 6], tall: true, empty: "No firewall data in this period yet. It is collected on every Panorama sync."})),
   };
 }
+/* Progress of the Palo Alto history that is collected in the background, a few days per sync. */
+function socProgress(F) {
+  const P = (F && F.progress) || [];
+  if (!P.length) return "";
+  return panel("c12", "Data Collection", P.every(p => !p.pending) ? "complete" : "in progress", `<ul class="checks">${P.map(p => `<li>${pill(p.pending ? "warn" : "good", "")}<div><b>${esc(p.label)}</b><span>${fmt(p.done)} of ${fmt(p.total)} days${p.pending ? ` · ${fmt(p.pending)} still to collect, ${p.per} days per sync` : " · complete"}</span><span class="hbar"><i style="width:${Math.min(100, p.total ? p.done / p.total * 100 : 100)}%;background:var(--${p.pending ? "warn" : "good"})"></i></span></div></li>`).join("")}</ul>`);
+}
 function socFwVal(F, R) {
   const cut = n => n.replace(/^SPMT-/, "").replace(/-(PA|FW)[-\d].*$/, ""), late = F.fw.filter(x => x.tfrom && x.tfrom > S.from), none = F.fw.filter(x => !x.tfrom);
   const diff = R && !S.site && F.dayN === F.span && R.total ? Math.abs(F.total.events - R.total) / R.total : null;
@@ -288,7 +294,7 @@ function socFwVal(F, R) {
     [F.dayN === F.span ? "good" : "warn", `Days with firewall data: ${F.dayN} of ${F.span}`, F.dayN < F.span && F.from ? `Collected since ${dfull(F.from)}; older days are filled in on every Panorama sync.` : ""],
     [late.length || none.length ? "warn" : "good", "Traffic data per firewall", late.length || none.length ? [...late.map(x => `${esc(cut(x.fw))} from ${dmon(x.tfrom)}`), ...none.map(x => `${esc(cut(x.fw))} none`)].join(", ") + ". Panorama has no traffic summary for these firewalls before that date." : "Every firewall has traffic for the whole period"],
     ...(diff == null ? [] : [[diff < 0.05 ? "good" : "warn", "Firewall events against the all-location summary", `${fmt(F.total.events)} against ${fmt(R.total)} (${pc(diff, 1)} difference)`]])];
-  return panel("c12", "Firewall Data Validation", S.site || "all locations", `<ul class="checks">${rows.map(c => `<li>${pill(c[0], "")}<div><b>${c[1]}</b>${c[2] ? `<span>${c[2]}</span>` : ""}</div></li>`).join("")}</ul>`);
+  return panel("c12", "Firewall Data Validation", S.site || "all locations", `<ul class="checks">${rows.map(c => `<li>${pill(c[0], "")}<div><b>${c[1]}</b>${c[2] ? `<span>${c[2]}</span>` : ""}</div></li>`).join("")}</ul>`) + socProgress(F);
 }
 function vSocSite() {
   const F = V.socfw, P = socFw(F), T = F.total, B = F.days.map(x => ({label: dmon(x.date), full: dlong(x.date)})), ch = [{name: "Critical", c: "--crit", v: F.days.map(x => x.critical)}, {name: "High", c: "--serious", v: F.days.map(x => x.high)}, {name: "Other", c: "--ss", v: F.days.map(x => x.other)}];
