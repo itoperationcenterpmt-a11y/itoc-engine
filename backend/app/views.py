@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from . import models as M
 from .store import Config, cached
 from .timeutil import ms
-from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR, cctv as CCTV, soc_fw as SOCFW, insight as INSIGHT, viz as VIZ
+from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR, cctv as CCTV, soc_fw as SOCFW, sangfor as SANGFOR, insight as INSIGHT, viz as VIZ
 from .calc.common import iso
 from .security import can_see, locked_pages
 
@@ -126,6 +126,8 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
         S = _soc(db, cfg, a, b)
         V["soc"], V["soc_check"] = S["R"], S["chk"]
         V["soc_prev"] = _soc(db, cfg, pa, pb)["R"] if f.cmp else None
+    if tab == "sangfor" and ok("sangfor"):
+        V["sangfor"] = SANGFOR.build(db, cfg, st, f.grp)
     if tab == "soc" and ok("soc"):
         V["socfw"] = SOCFW.build(db, cfg, a, b, st)
     if tab == "ringkasan":

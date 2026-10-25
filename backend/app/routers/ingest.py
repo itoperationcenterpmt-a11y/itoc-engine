@@ -1,13 +1,14 @@
 import zipfile
 from io import BytesIO
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+import tarfile
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
-from ..models import User, SyncLog
+from ..models import User, SyncLog, Site, SangforBatch
 from ..security import require_upload, require_admin, current_user, rate_limit
 from ..store import load_config, audit, bump_data
-from ..ingest import panorama, manageengine, prtg_pdf
+from ..ingest import panorama, manageengine, prtg_pdf, sangfor
 from .. import jobs
 from ..calc.soc import batch_json
 
@@ -72,6 +73,65 @@ async def soc_upload(files: list[UploadFile] = File(...), user: User = Depends(r
     db.commit()
     bump_data()
     return batch_json(b)
+
+
+@router.post("/sangfor")
+async def sangfor_upload(site: str = Form(...), files: list[UploadFile] = File(...), user: User = Depends(require_upload("sangfor")), db: Session = Depends(get_db)):
+    """Sangfor IAG Report Center export of one site: the .xlsx reports, or a .zip / .tar.gz holding them. One upload = one period; the same site and period is replaced."""
+    cfg = load_config(db)
+    if not db.query(Site).filter_by(name=site, active=True).first():
+        raise HTTPException(422, "Choose the location of this Sangfor device")
+    cap, total, xs = settings().upload_max_mb * 1024 * 1024 * 5, 0, []
+    for f in files:
+        name = f.filename or "file"
+        low = name.lower()
+        data = await _read(f, (".xlsx", ".zip", ".tar.gz", ".tgz"))
+        try:
+            if low.endswith(".xlsx"):
+                xs.append((name, data))
+            elif low.endswith(".zip"):
+                with zipfile.ZipFile(BytesIO(data)) as z:
+                    for i in z.infolist():
+                        if i.filename.lower().endswith(".xlsx") and not i.is_dir() and i.file_size <= 20 * 1024 * 1024 and len(xs) < 60:
+                            xs.append((i.filename.split("/")[-1], z.read(i)))
+            else:
+                with tarfile.open(fileobj=BytesIO(data), mode="r:gz") as t:           # read in memory, never extracted to disk
+                    for m in t.getmembers():
+                        if m.isfile() and m.name.lower().endswith(".xlsx") and m.size <= 20 * 1024 * 1024 and len(xs) < 60:
+                            xs.append((m.name.split("/")[-1], t.extractfile(m).read()))
+        except (zipfile.BadZipFile, tarfile.TarError, EOFError):
+            raise HTTPException(422, f"{name} is not a valid archive")
+        total = sum(len(d) for _, d in xs)
+        if total > cap:
+            raise HTTPException(413, "Total file size is too large")
+    if not xs:
+        raise HTTPException(422, "No .xlsx report was found in these files")
+    try:
+        P = sangfor.parse(xs)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    db.query(SangforBatch).filter_by(site=site, date_from=P["from"], date_to=P["to"]).delete()
+    label = files[0].filename if len(files) == 1 else f"{len(files)} files"
+    b = SangforBatch(site=site, date_from=P["from"], date_to=P["to"], uploaded_by=user.full_name, uploaded_at=cfg.now(), file_name=(label or "")[:300], data=P["data"])
+    db.add(b)
+    db.flush()
+    db.add(SyncLog(source="Sangfor Report Center (upload)", at=cfg.now(), ok=True, rows=len(P["read"]), ms=0, message=f"{site} · {P['from']} – {P['to']} · {len(P['read'])} reports"))
+    audit(db, user.username, f"Uploaded Sangfor report for {site} ({P['from']} – {P['to']})")
+    db.commit()
+    bump_data()
+    return {"id": b.id, "site": site, "from": P["from"].isoformat(), "to": P["to"].isoformat(), "read": P["read"], "skipped": P["skipped"]}
+
+
+@router.delete("/sangfor/{bid}")
+def sangfor_delete(bid: int, user: User = Depends(require_upload("sangfor")), db: Session = Depends(get_db)):
+    b = db.get(SangforBatch, bid)
+    if not b:
+        raise HTTPException(404, "Unknown report")
+    audit(db, user.username, f"Deleted Sangfor report for {b.site} ({b.date_from} – {b.date_to})")
+    db.delete(b)
+    db.commit()
+    bump_data()
+    return {"ok": True}
 
 
 @router.post("/prtg")

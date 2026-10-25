@@ -1,7 +1,7 @@
 /* IT PMT Dashboard — render, event, Admin (parameter & master data generik), login. */
 "use strict";
 try { if (localStorage.getItem("itoc.rail")) { document.addEventListener("DOMContentLoaded", () => { const a = document.getElementById("app"); if (a) a.classList.add("rail"); const b = document.getElementById("railBtn"); if (b) b.textContent = "›"; }); } } catch (_) {}
-const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, devnet: vDevices, devcctv: vDevices, devops: vDevices, wifi: vWifi, xdr: vXdr, cctv: vCctv, insight: vInsight, network: vNetwork, cyber: vCyber, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
+const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, devnet: vDevices, devcctv: vDevices, devops: vDevices, wifi: vWifi, xdr: vXdr, cctv: vCctv, sangfor: vSangfor, insight: vInsight, network: vNetwork, cyber: vCyber, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
 const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype"];
@@ -297,6 +297,7 @@ document.addEventListener("click", async e => {
     else if (d.go) { set({tab: d.go}); window.scrollTo({top: 0}); }
     else if (b.id === "pwT") { const i = $("lP"), show = i.type === "password"; i.type = show ? "text" : "password"; b.setAttribute("aria-pressed", String(show)); b.setAttribute("aria-label", show ? "Hide password" : "Show password"); }
     else if (b.id === "tsX") { await send("/api/admin/turnstile", {site_key: $("tsK").value, clear_secret: true}, "PUT"); S.params = null; refresh({msg: "Secret removed."}, true); }
+    else if (d.sgdel) { if (confirm("Delete this uploaded report?")) { await send("/api/ingest/sangfor/" + d.sgdel, {}, "DELETE"); refresh({msg: ""}, true); } }
     else if (d.pgdel !== undefined) { b.closest(".pgrp").remove(); }
     else if (d.pgadd !== undefined) { const box = b.closest("[data-all]"), all = box.dataset.all.split("|").filter(Boolean); b.insertAdjacentHTML("beforebegin", `<div class="pgrp"><div class="pickbox">${pChips(all, [])}</div><button type="button" class="btn ghost sm" data-pgdel>Remove group</button></div>`); }
     else if (d.sm !== undefined) { const cur = S.schedM || nowShift().today.slice(0, 7); set({schedM: d.sm === "0" ? "" : addDays(cur + "-" + (+d.sm > 0 ? "28" : "01"), +d.sm > 0 ? 5 : -1).slice(0, 7)}); }
@@ -367,6 +368,12 @@ document.addEventListener("change", async e => {
     $("upmsg3").innerHTML = `<div class="msg">Reading ${t.files.length} PDF files, please wait…</div>`;
     try { const r = await send("/api/ingest/prtg", fd); refresh({msg: ""}); setTimeout(() => { const m = $("upmsg3"); if (m) m.innerHTML = `<div class="msg ok">${fmt(r.files)} PDFs read: ${fmt(r.rows)} sensor-day records, ${fmt(r.sensors)} sensors, ${r.days.length} days (${esc(r.days[0])} – ${esc(r.days[r.days.length - 1])}).${(r.notes || []).map(i => `<div class="sub">${esc(i)}</div>`).join("")}</div>`; }, 400); }
     catch (err) { $("upmsg3").innerHTML = `<div class="msg err">${esc(err.message)}</div>`; }
+  }
+  else if (t.id === "upsg" && t.files.length) {
+    const fd = new FormData(); fd.append("site", $("upsgSite").value); [...t.files].forEach(f => fd.append("files", f));
+    $("upsgmsg").innerHTML = `<div class="msg">Reading ${t.files.length} file${t.files.length > 1 ? "s" : ""}, please wait…</div>`;
+    try { const r = await send("/api/ingest/sangfor", fd); S.grp = ""; refresh({msg: ""}); setTimeout(() => { const m = $("upsgmsg"); if (m) m.innerHTML = `<div class="msg ok">${esc(r.site)}: ${r.read.length} reports read for ${esc(r.from)} – ${esc(r.to)}.${(r.skipped || []).map(i => `<div class="sub">${esc(i)}</div>`).join("")}</div>`; }, 500); }
+    catch (err) { $("upsgmsg").innerHTML = `<div class="msg err">${esc(err.message)}</div>`; }
   }
   else if (t.id === "upt" && t.files[0]) {
     const fd = new FormData(); fd.append("file", t.files[0]);

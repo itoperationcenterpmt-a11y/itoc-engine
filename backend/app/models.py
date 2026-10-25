@@ -614,6 +614,19 @@ class SocFwDay(Base):
     sessions: Mapped[int] = mapped_column(BigInteger, default=0)
 
 
+class SangforBatch(Base):
+    """Sangfor IAG Report Center export of one site and period (network figures only): bandwidth per application category, traffic ranking, users, daily trends."""
+    __tablename__ = "sangfor_batch"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site: Mapped[str] = mapped_column(String(120), index=True)
+    date_from: Mapped[date] = mapped_column(Date)
+    date_to: Mapped[date] = mapped_column(Date)
+    uploaded_by: Mapped[str] = mapped_column(String(60), default="")
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    file_name: Mapped[str] = mapped_column(String(300), default="")
+    data: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+
 class SocFwMap(Base):
     """Admin override: which location a firewall belongs to (the automatic name match is used when a firewall is not listed here)."""
     __tablename__ = "soc_fw_map"
