@@ -95,6 +95,8 @@ const widgetOk = w => !!V[w.need] && (w.need !== "dev" || V.dev.all.total > 0) &
 const widgetEl = w => { const t = document.createElement("div"); t.innerHTML = w.html(); return t.firstElementChild; };
 function widgetBlock(w) {
   const el = widgetEl(w), h2 = el.querySelector(":scope > header h2");
+  const ic = ICO[{servicedesk: "ticket", noc: "activity", soc: "shield", xdr: "xdr", devices: "server", cctv: "cctv", wifi: "wifi"}[w.mod]], hd = el.querySelector(":scope > header");
+  if (ic && hd && !hd.querySelector(".vz-ico")) hd.insertAdjacentHTML("beforeend", `<span class="vz-ico" aria-hidden="true"><svg viewBox="0 0 24 24">${ic}</svg></span>`);
   el.classList.add("wblock"); el.dataset.wkey = "w-" + w.key; el.dataset.added = "1"; el.dataset.dsize = w.size; el.dataset.dtitle = h2 ? h2.textContent : "";
   return {el, h2};
 }

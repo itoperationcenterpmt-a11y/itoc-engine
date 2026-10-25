@@ -270,7 +270,7 @@ document.addEventListener("click", async e => {
     else if (b.id === "fToggle") { const w = $("fwrap").classList.toggle("open"); b.setAttribute("aria-expanded", w); }
     else if (b.id === "railBtn") { const on = $("app").classList.toggle("rail"); b.textContent = on ? "›" : "‹"; try { localStorage.setItem("itoc.rail", on ? "1" : ""); } catch (_) {} }
     else if (b.id === "logout" || b.id === "logoutM" || b.id === "logoutS") logout();
-    else if (b.id === "theme" || b.id === "themeM" || b.id === "themeS" || b.id === "themeL") { const r = document.documentElement, dark = (r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark"; r.dataset.theme = dark ? "light" : "dark"; }
+    else if (b.id === "theme" || b.id === "themeM" || b.id === "themeS" || b.id === "themeL") { const r = document.documentElement, dark = (r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark"; r.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("itoc.theme", r.dataset.theme); } catch (_) {} }
   } catch (err) { if (err) alert(err.message); }
 });
 document.addEventListener("change", async e => {
@@ -376,7 +376,7 @@ function showLogin(msg, change) {
       <button class="btn" type="submit">Sign in</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`;
       $("login").innerHTML = `<div class="lg"><div class="lg-bg"></div><div class="lg-wrap">
     <section class="lg-card lg-info"><button type="button" class="lg-theme" id="themeL" aria-label="Ganti tema terang/gelap">◐</button>
-      ${LOGIN.eyebrow ? `<span class="lg-eyebrow">${esc(LOGIN.eyebrow)}</span>` : ""}<h2 class="brandName">${brandHtml()}</h2><span class="lg-prod">Dashboard</span>${LOGIN.tagline ? `<p>${esc(LOGIN.tagline)}</p>` : ""}
+      ${LOGIN.eyebrow ? `<span class="lg-eyebrow">${esc(LOGIN.eyebrow)}</span>` : ""}<h2 class="brandName">${brandHtml()}</h2><span class="lg-prod">Dashboard</span>${LOGIN.acronym.length ? `<ul class="lg-acr" aria-label="What TERA stands for">${LOGIN.acronym.map(([l, w]) => `<li><b>${esc(l)}</b>${esc(w)}</li>`).join("")}</ul>` : ""}${LOGIN.tagline ? `<p>${esc(LOGIN.tagline)}</p>` : ""}
       ${LOGIN.points.length ? `<ul class="lg-pts">${LOGIN.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>
     <section class="lg-card lg-form"><img class="lg-logo lg-l" src="assets/tera-lockup-col.png" alt="TERA, Divisi Teknologi Informasi, Pelindo Multi Terminal"><img class="lg-logo lg-d" src="assets/tera-lockup-rev.png" alt="">${form}<div class="loginfoot">${esc(footText())}</div></section></div></div>`;
   const first = $("login").querySelector("input"); if (first) first.focus();
@@ -386,8 +386,8 @@ const footText = () => FOOT.replace("{year}", new Date().getFullYear()) + (CFG &
 /* The name shown in the sidebar and login page is the first BSPLIT words ("Dashboard IT"); the full name is used in the tab title, reports, and email. */
 const brandHtml = () => { const w = BRAND.trim().split(/\s+/), n = Math.max(1, Math.min(typeof BSPLIT === "number" ? BSPLIT : 2, w.length)), t = w.slice(0, n).join(" "); return `<span class="b1">${/^tera$/i.test(t) ? `T<span class="e">E</span>RA` : esc(t)}</span>`; };
 function applyBrand() { document.title = BRAND; document.querySelectorAll(".brandName").forEach(e => e.innerHTML = brandHtml()); }
-let LOGIN = {tagline: "", points: [], place: "", eyebrow: ""};
-async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || ""}; } catch (_) {} applyBrand(); }
+let LOGIN = {tagline: "", points: [], place: "", eyebrow: "", acronym: []};
+async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || "", acronym: r.acronym || []}; } catch (_) {} applyBrand(); }
 async function boot() {
   await loadPublic();
   try { if ((await fetch("/api/auth/me", {credentials: "same-origin"})).status === 401) return showLogin(); } catch (_) { return showLogin(); }

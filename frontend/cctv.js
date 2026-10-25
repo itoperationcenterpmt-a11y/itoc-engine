@@ -2,7 +2,7 @@
 "use strict";
 const frac = (a, b) => a === b ? fmt(a) : fmt(a) + "/" + fmt(b);          /* whole number when complete, fraction when something is missing */
 const MS_T = {fix: "FIX", ptz: "PTZ", pa: "Public Announcer", mixed: "Mixed"};
-const msDot = (z, n) => { const [c, t, g] = z === "up" ? ["good", "Online", "●"] : z === "down" ? ["crit", "Offline", "●"] : z === "degraded" ? ["warn", "Online, interface issue", "●"] : z ? ["idle", z === "maintenance" ? "Maintenance" : "Disabled", "◐"] : ["idle", "Not in Zabbix", "○"]; return `<span class="ost ${c}" title="${t}">${g}</span>${n != null ? " " + n : ""}`; };
+const msDot = (z, n) => { const [c, t] = z === "up" ? ["good", "Online"] : z === "down" ? ["crit", "Offline"] : z === "degraded" ? ["warn", "Interface issue"] : z ? ["idle", z === "maintenance" ? "Maintenance" : "Disabled"] : ["idle", "No status"]; return pill(c, n != null ? n + " " + t.toLowerCase() : t); };
 const msType = t => t === "pa" ? pill("idle", MS_T.pa) : MS_T[t] || t;
 function cctvPanels(C) {
   const off = C.total - C.camEnabled, norec = C.camEnabled - C.recording;
@@ -28,7 +28,7 @@ function vCctv() {
   if (C.hwOff) warns.push(`<li class="warn"><span><b>${fmt(C.hwOff)} hardware disabled</b> in Milestone.</span></li>`);
   over.forEach(s => warns.push(`<li class="crit"><span><b>${esc(s.name)} uses ${fmt(s.licUsed)} licences</b>, more than the ${fmt(s.licTotal)} licensed.</span></li>`));
   const on = C.zbx.up + C.zbx.other, kp = `<div class="kpis k6">${kpi("Cameras", fmt(C.total), fmt(C.fix) + " FIX · " + fmt(C.ptz) + " PTZ")}${kpi("Online", frac(on, on + C.zbx.down), C.zbx.none ? fmt(C.zbx.none) + " not in Zabbix" : "")}${kpi("Offline", fmt(C.zbx.down), "", {cls: C.zbx.down ? "warnv" : ""})}${kpi("Enabled", frac(C.camEnabled, C.total), off ? fmt(off) + " disabled" : "", {cls: off ? "warnv" : ""})}${kpi("Recording Centrally", frac(C.recording, C.camEnabled), "optional")}${kpi("Public Announcers", fmt(C.pa.total), C.pa.total ? frac(C.pa.enabled, C.pa.total) + " enabled" : "")}</div>`
-    + `<p class="sub msnote">Status dots come from Zabbix: ${msDot("up")} online ${msDot("down")} offline ${msDot("")} not in Zabbix · last sync ${C.updated ? dtime(C.updated) : "-"}</p>`;
+    + `<p class="sub msnote">Status comes from Zabbix, matched by the hardware address first · last sync ${C.updated ? dtime(C.updated) : "-"}</p>`;
   const P = cctvPanels(C);
   const rows = C.list.map(x => [x.server, x.name, x.hw, x.ip || "-", {h: msType(x.type)}, x.ch == null ? "-" : x.ch, {h: x.enabled ? pill("good", "Active") : pill("idle", "Inactive")}, {h: msDot(x.zbx)}, x.zprob ? x.zprob + (x.zsince ? " · since " + dtime(x.zsince) : "") : "–", {h: x.rec ? pill("good", "Yes") : pill("idle", "No")}, x.fps || "-", x.mod ? dtime(x.mod) : "-"]);
   return insArea("cctv") + (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(

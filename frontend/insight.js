@@ -26,7 +26,7 @@ function insightPanel(I, n = 5, size = "c12", kinds = null, only = "") {
 const INS_AREA = {servicedesk: ["tickets"], network: ["links", "capacity", "wifi", "correlation"], noc: ["links", "capacity", "correlation"], wifi: ["wifi"], cyber: ["security"], soc: ["security"], xdr: ["security"], cctv: ["cctv"],
   devices: ["devices"], devnet: ["devices"], devcctv: ["devices"], devops: ["devices"]};
 const INS_ONLY = {soc: "soc", xdr: "xdr"};                                  /* NDR and XDR share the Security kind: each page shows its own findings */
-const INS_ALWAYS = ["xdr", "soc", "wifi", "cctv"];                      /* pages where the panel stays visible even with no findings */
+const INS_ALWAYS = ["xdr", "soc", "wifi", "cctv", "servicedesk", "network", "cyber", "devices"];                      /* pages where the panel stays visible even with no findings */
 function insArea(tab = S.tab) {
   const I = V.insight, kinds = INS_AREA[tab];
   return I && kinds && (INS_ALWAYS.includes(tab) || I.open.some(r => kinds.includes(r.kind) && (!INS_ONLY[tab] || r.tab === INS_ONLY[tab]))) ? `<div class="grid">${insightPanel(I, 4, "c12", kinds, INS_ONLY[tab])}</div>` : "";
