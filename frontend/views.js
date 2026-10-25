@@ -107,11 +107,9 @@ function renderDuty() {
   const kinds = new Map(Object.entries(KL)); ((V.dev && V.dev.byKind) || []).forEach(k => kinds.set(k.key, KL[k.key] || k.k));
   const gl = ((V.dev && V.dev.groups) || []).filter(g => !S.kind || g.kind === S.kind);
   const WF = S.tab === "wifi" && V.wifi ? V.wifi.opts : null;
-  [["gKind", "Band", "Category"], ["gGrp", "SSID", "Group"], ["gTyp", "Zone", "Type"]].forEach(([id, w, d]) => { $(id).querySelector(".k").textContent = S.tab === "wifi" ? w : S.tab === "xdr" && id === "gKind" ? "Severity" : S.tab === "cctv" ? {gGrp: "Server", gTyp: "Hardware", gKind: "Type"}[id] || d : S.tab === "sangfor" && id === "gGrp" ? "Report period" : d; });
-  const MS_ = S.tab === "cctv" && V.cctv ? V.cctv.opts : null, SG_ = S.tab === "sangfor" && V.sangfor ? V.sangfor.batches : null;
-  if (SG_) {
-    $("fGrp").innerHTML = `<option value="">Latest</option>` + SG_.map(b => `<option value="${b.id}" ${String(b.id) === String(S.grp) ? "selected" : ""}>${esc(dmon(b.from) + " – " + dfull(b.to) + " · " + b.site)}</option>`).join("");
-  } else if (MS_) {
+  [["gKind", "Band", "Category"], ["gGrp", "SSID", "Group"], ["gTyp", "Zone", "Type"]].forEach(([id, w, d]) => { $(id).querySelector(".k").textContent = S.tab === "wifi" ? w : S.tab === "xdr" && id === "gKind" ? "Severity" : S.tab === "cctv" ? {gGrp: "Server", gTyp: "Hardware", gKind: "Type"}[id] || d : d; });
+  const MS_ = S.tab === "cctv" && V.cctv ? V.cctv.opts : null;
+  if (MS_) {
     $("fKind").innerHTML = [["", "All"], ["fix", "FIX"], ["ptz", "PTZ"], ["pa", "Public Announcers"]].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
     $("fGrp").innerHTML = `<option value="">All servers</option>` + MS_.servers.map(z => `<option ${z === S.grp ? "selected" : ""}>${esc(z)}</option>`).join("");
     $("fTyp").innerHTML = `<option value="">All hardware</option>` + MS_.hardware.filter(h => !S.grp || h.server === S.grp).map(h => `<option ${h.name === S.dtype ? "selected" : ""}>${esc(h.name)}</option>`).join("");
@@ -412,9 +410,8 @@ function upCards() {
     ["tickets", "Ticketing · ManageEngine", "Ekspor ManageEngine .xls / .xlsx", "upt", ".xls,.xlsx", false, "Choose XLS / XLSX", "upmsg2"],
     ["prtg", "Networking · PRTG", "PRTG daily report PDF, multiple files or .zip", "upn", ".pdf,.zip", true, "Choose PDF / ZIP", "upmsg3"]
   ].filter(c => canUp(c[0]));
-  const sgSites = CFG.sites, sg = canUp("sangfor") ? `<div class="drop"><b>Network · Sangfor Internet Usage</b><span class="sub">Report Center export: .xlsx files, or the .zip / .tar.gz that holds them. One site and period per upload.</span><select id="upsgSite" aria-label="Location of the Sangfor device">${sgSites.map(s => `<option ${s === (S.site || sgSites[0]) ? "selected" : ""}>${esc(s)}</option>`).join("")}</select><label class="btn upbtn" for="upsg">Choose XLSX / ZIP / TAR.GZ</label><input type="file" id="upsg" accept=".xlsx,.zip,.gz,.tgz" multiple class="vh"><div id="upsgmsg"></div></div>` : "";
-  if (!C.length && !sg) return `<div class="empty sm">No upload permission.</div>`;
-  return `<div class="uploads">${sg}${C.map(([, ttl, hint, id, acc, multi, btn, msg]) => `<div class="drop"><b>${ttl}</b><span class="sub">${hint}</span><label class="btn upbtn" for="${id}">${btn}</label><input type="file" id="${id}" accept="${acc}" ${multi ? "multiple" : ""} class="vh"><div id="${msg}"></div></div>`).join("")}</div>`;
+  if (!C.length) return `<div class="empty sm">No upload permission.</div>`;
+  return `<div class="uploads">${C.map(([, ttl, hint, id, acc, multi, btn, msg]) => `<div class="drop"><b>${ttl}</b><span class="sub">${hint}</span><label class="btn upbtn" for="${id}">${btn}</label><input type="file" id="${id}" accept="${acc}" ${multi ? "multiple" : ""} class="vh"><div id="${msg}"></div></div>`).join("")}</div>`;
 }
 function vData() { return subnav("report") + vDataBody(); }
 function vDataBody() {

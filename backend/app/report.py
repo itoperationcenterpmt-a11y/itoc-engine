@@ -9,10 +9,10 @@ Bentuk model (aman untuk JSON):
   kind angka: n = bulat, f0/f1/f2 = desimal, p0/p1/p2 = persen dari pecahan, t = teks."""
 from datetime import datetime, timedelta
 from . import views as VW
-from .calc import soc as SOC, soc_fw as SOCFW, sangfor as SANGFOR
+from .calc import soc as SOC, soc_fw as SOCFW
 from .security import can_see
 
-SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)"), ("sangfor", "Internet Usage (Sangfor)")]
+SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)"), ("internet", "Internet Usage")]
 WEEKLY_AFTER = 31  # rentang harian lebih panjang dari ini diringkas per minggu (sama dengan dashboard Excel)
 _UK = {"type": "Threat type", "action": "Action", "severity": "Severity"}
 
@@ -434,35 +434,32 @@ def _xdr(db, cfg, f, preset="standar"):
         s["attention"].append(f"{X['backlogCH']} critical/high alerts still open")
     return s
 
-def _sangfor(db, cfg, f, preset="standar"):
-    """Internet usage of one site from the Sangfor Report Center export that covers the report period best (the period of the export is stated in the notes)."""
-    S = SANGFOR.build(db, cfg, f.site)
-    s = {"key": "sangfor", "title": "Internet Usage (Sangfor)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
-    cur = S["cur"]
-    if not cur:
-        s["notes"].append("No Sangfor Report Center export has been uploaded" + (f" for {f.site}" if f.site else "") + " yet." if not S["summary"] or f.site else "Choose a location: Sangfor data is kept per site.")
+def _internet(db, cfg, f, preset="standar"):
+    """Internet usage from Palo Alto (Panorama): traffic, applications, web categories, and top users per location, taken from the per-firewall daily data."""
+    F = SOCFW.build(db, cfg, f.d_from, f.d_to, f.site)
+    s = {"key": "internet", "title": "Internet Usage", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    if not F["nFw"] or not F["total"]["bytes"]:
+        s["notes"].append("No Palo Alto traffic data" + (f" for {f.site}" if f.site else "") + " in this period.")
         return s
-    b = cur["batch"]
-    cover = f"{b['from']} – {b['to']}"
-    s["notes"].append(f"Sangfor Report Center export of {b['site']} covering {cover}" + ("" if b["from"] <= f.d_from.isoformat() and b["to"] >= f.d_to.isoformat() else "; it does not cover the whole report period") + ".")
-    s["kpis"] = [_kpi("Total traffic (TB)", (cur["totalGb"] or 0) / 1000, "f1", cover), _kpi("Average bandwidth (Mb/s)", cur["avg"], "f1", "peak " + fmt_n(cur["max"]) + " Mb/s" if cur["max"] else ""),
-                 _kpi("Inbound share", cur["inPct"], "p1", "of all traffic"), _kpi("Users seen", cur["users"], "n", "distinct IP addresses"),
-                 _kpi("Rejected requests", cur["reject"], "n", "blocked by access rules"), _kpi("Top application category", cur["topCat"]["k"] if cur["topCat"] else None, "t", fmt_p((cur["topCat"]["pct"] or 0) / 100, 1) + " of traffic" if cur["topCat"] else "")]
-    s["charts"] = [c for c in (_top("Traffic by application category (GB)", [(x["k"], round(x["gb"], 1)) for x in cur["cats"]], "GB"),
-                               _chart("Inbound and outbound", [x["k"] for x in cur["dirs"]], [{"name": "GB", "values": [round(x["gb"], 1) for x in cur["dirs"]]}], "donut") if cur["dirs"] else None,
-                               _top("Top applications by traffic (GB)", [(x["k"], x["gb"]) for x in cur["apps"]], "GB"), _top("Top users by traffic (GB)", [(x["k"], x["gb"]) for x in cur["topUsers"]], "GB"),
-                               _top("Users per application category", [(x["k"], x["users"]) for x in cur["access"]], "Users"),
-                               _chart("Users sharing a connection per day", [_short(x[0]) for x in cur["sharing"]], [{"name": "Users", "values": [x[1] or 0 for x in cur["sharing"]]}]) if cur["sharing"] else None) if c]
-    s["tables"].append(_table("Traffic per application category", ["Category", "Traffic (GB)", "Share", "Top user", "Top application"], ["t", "f1", "p1", "t", "t"],
-                              [[x["k"], x["gb"], (x["pct"] or 0) / 100, x["topUser"], x["topApp"]] for x in cur["rankRows"]]))
-    if cur["webUsers"]:
-        s["tables"].append(_table("Users with the most web requests", ["User (IP)", "Requests", "Share"], ["t", "n", "p1"], [[x["k"], x["urls"], x["pct"]] for x in cur["webUsers"]]))
-    if cur["peakUsers"]:
-        s["tables"].append(_table("Heaviest users at peak bandwidth", ["User (IP)", "Peak (Mb/s)", "Share"], ["t", "f1", "p1"], [[x["k"], x["mbps"], (x["pct"] or 0) / 100] for x in cur["peakUsers"]]))
+    T, d = F["total"], F["days"]
+    busy = max(d, key=lambda x: x["bytes"])
+    secs = F["dayN"] * 86400
+    s["kpis"] = [_kpi("Total traffic (TB)", T["bytes"] / 1e12, "f2", fmt_n(F["nFw"]) + " firewall" + ("s" if F["nFw"] > 1 else "")), _kpi("Average bandwidth (Mb/s)", T["bytes"] * 8 / secs / 1e6 if secs else None, "f1", "over the days with data"),
+                 _kpi("Busiest day", busy["bytes"] / 1e9, "f1", _short(busy["date"]) + " (GB)"), _kpi("Sessions", T["sessions"], "n", ""), _kpi("Web requests", F["webTotal"] or None, "n", "all URL categories")]
+    s["charts"] = [c for c in (_daily("Traffic (GB)", [x["date"] for x in d], [{"name": "GB", "values": [round(x["bytes"] / 1e9, 1) for x in d]}]),
+                               None if f.site else _top("Traffic per location (GB)", [(x["site"], round(x["bytes"] / 1e9, 1)) for x in sorted(F["bySite"], key=lambda x: -x["bytes"])], "GB"),
+                               _top("Top applications by volume (GB)", [(x["k"], round(x["n"] / 1e9, 1)) for x in F["app"]], "GB"), _top("Traffic by application category (GB)", [(x["k"], round(x["n"] / 1e9, 1)) for x in F["acat"]], "GB"),
+                               _top("Top source networks by traffic (GB)", [(x["k"], round(x["n"] / 1e9, 1)) for x in F["src"]], "GB"), _top("Top source networks by web requests", [(x["k"], x["n"]) for x in F["webu"]], "Requests"),
+                               _top("Web categories logged (requests)", [(x["k"], x["n"]) for x in F["urlc"]], "Requests")) if c]
+    if not f.site:
+        s["tables"].append(_table("Traffic per location", ["Location", "Traffic (GB)", "Share", "Firewalls"], ["t", "f1", "p1", "n"], [[x["site"], x["bytes"] / 1e9, x["bytes"] / T["bytes"], x["fw"]] for x in sorted(F["bySite"], key=lambda x: -x["bytes"])]))
+    s["tables"].append(_table("Top source networks by traffic", ["Network (/24)", "Traffic (GB)"], ["t", "f1"], [[x["k"], x["n"] / 1e9] for x in F["src"]]))
+    if F["detailFrom"] and F["detailFrom"] > f.d_from.isoformat():
+        s["notes"].append(f"Application categories and web data are collected since {F['detailFrom']}; earlier days of the period are not included in them.")
     return s
 
 
-_BUILD = {"servicedesk": _servicedesk, "sangfor": _sangfor, "noc": _noc, "soc": _soc, "devices": _devices, "wifi": _wifi, "xdr": _xdr}
+_BUILD = {"servicedesk": _servicedesk, "internet": _internet, "noc": _noc, "soc": _soc, "devices": _devices, "wifi": _wifi, "xdr": _xdr}
 
 # Jenis laporan (bisa diubah di Admin → Operasional → Target dan Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
@@ -473,14 +470,14 @@ DEFAULT_KINDS = {
     "xdr": {"label": "XDR (Trend Micro)", "desc": "Vision One alerts: severity, detection models, status, backlog", "title": "IT Operation Center - XDR (Trend Micro) Report", "subtitle": "Vision One Workbench alerts", "prefix": "XDR", "sections": ["xdr"]},
     "devices": {"label": "Devices", "desc": "Zabbix device status: category, type, location, devices down", "title": "IT Operation Center - Devices Report", "subtitle": "Device status from Zabbix", "prefix": "Devices", "sections": ["devices"]},
     "wifi": {"label": "WiFi (Ruckus)", "desc": "Active clients, Access Points, usage per SSID and AP", "title": "IT Operation Center - WiFi (Ruckus) Report", "subtitle": "Clients and Access Points from Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
-    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links and Ruckus WiFi together", "title": "IT Operation Center - Network Report", "subtitle": "ISP links, WiFi, and internet usage", "prefix": "Network", "sections": ["noc", "wifi", "sangfor"]},
+    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links and Ruckus WiFi together", "title": "IT Operation Center - Network Report", "subtitle": "ISP links, WiFi, and internet usage", "prefix": "Network", "sections": ["noc", "wifi", "internet"]},
     "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Palo Alto NDR and Trend Micro XDR together", "title": "IT Operation Center - Cyber Security Report", "subtitle": "Palo Alto NDR and Trend Micro XDR", "prefix": "Cyber", "sections": ["soc", "xdr"]},
-    "sangfor": {"label": "Internet Usage (Sangfor)", "desc": "Bandwidth, applications, and users from the Sangfor IAG Report Center", "title": "IT Operation Center - Internet Usage Report", "subtitle": "Bandwidth, applications, and users per site", "prefix": "Internet Usage", "sections": ["sangfor"]},
+    "internet": {"label": "Internet Usage", "desc": "Traffic, applications, web categories, and top users per location (Palo Alto)", "title": "IT Operation Center - Internet Usage Report", "subtitle": "Traffic, applications, and users per location", "prefix": "Internet Usage", "sections": ["internet"]},
     "full": {"label": "Full", "desc": "Summary and details of all areas in one file", "title": "IT Operation Center - Full Report", "subtitle": "Summary and details of all areas", "prefix": "", "sections": None},
 }
 
 
-_ORDER = ["summary", "network", "cyber", "servicedesk", "noc", "wifi", "sangfor", "soc", "xdr", "devices", "full"]
+_ORDER = ["summary", "network", "cyber", "servicedesk", "noc", "wifi", "internet", "soc", "xdr", "devices", "full"]
 DEFAULT_KINDS = {k: DEFAULT_KINDS[k] for k in _ORDER}
 
 
