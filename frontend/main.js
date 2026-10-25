@@ -36,7 +36,7 @@ async function downloadReport(kind, btn) {
   } finally { btn.innerHTML = old; btn.disabled = false; }
 }
 /* Page layout (widgets): order, size, title, show/hide per role. Super Admin edits it with the Customize button; stored in the layout table. */
-const LAYOUT_PAGES = ["ringkasan", "servicedesk", "network", "noc", "wifi", "cyber", "soc", "xdr", "devices", "devnet", "devcctv", "devops", "cctv"], SIZES = [["c3", "S"], ["c4", "M"], ["c6", "L"], ["c8", "XL"], ["c12", "Full"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
+const LAYOUT_PAGES = ["ringkasan", "servicedesk", "network", "noc", "wifi", "cyber", "soc", "xdr", "devices", "devnet", "devcctv", "devops", "cctv", "internet"], SIZES = [["c3", "S"], ["c4", "M"], ["c6", "L"], ["c8", "XL"], ["c12", "Full"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
 const slug = s => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const nearest = c => { const n = +(String(c).slice(1)) || 12; return SIZES.reduce((a, s) => Math.abs(+s[0].slice(1) - n) < Math.abs(+a[0].slice(1) - n) ? s : a)[0]; };
 const curProfile = () => (CFG.me && CFG.me.profile) || "default";

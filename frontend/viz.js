@@ -74,6 +74,14 @@ const vzTop = items => items.length ? `<div class="vz-top">${items.map((x, i) =>
 
 const vzReady = key => w => !!V[w.need] && (key ? !!V[w.need][key] : true);
 const VIZ_WIDGETS = [
+  {key: "viz-spark-internet", grp: "Visual", mod: "internet", need: "inet", title: "Internet traffic · trend", desc: "Traffic through the Palo Alto firewalls per day, with a sparkline and 7-day change", size: "c3",
+    html: () => vzSparkCard("c3", "Internet traffic · trend", fwB(V.inet.total.bytes), fmt(V.inet.nFw) + " firewalls · " + (V.inet.dayN ? fwB(V.inet.total.bytes / V.inet.dayN) + " per day" : "no data yet"), V.inet.days.map(x => x.bytes / 1e9), VZC.s1, false)},
+  {key: "viz-donut-acat", grp: "Visual", mod: "internet", need: "inet", title: "Traffic by application category", desc: "Share of internet traffic per application category (Palo Alto)", size: "c4",
+    html: () => panel("c4", "Traffic by application category", "", V.inet.acat.length ? vzDonut(V.inet.acat.slice(0, 6).map((x, i) => ({k: x.k, v: Math.round(x.n / 1e9), c: vzPal[i % vzPal.length]})), {center: fwB(V.inet.acat.reduce((s, x) => s + x.n, 0)), sub: "GB per category", label: "Application categories"}) : `<div class="empty sm">No data in this period yet.</div>`)},
+  {key: "viz-internet-apps", grp: "Visual", mod: "internet", need: "inet", title: "Top applications by volume", desc: "The applications that use the most traffic (Palo Alto)", size: "c4",
+    html: () => panel("c4", "Top applications", "by volume", V.inet.app.length ? hbars(V.inet.app.slice(0, 8).map(x => [x.k, x.n, 0, fwB(x.n)])) : `<div class="empty sm">No data in this period yet.</div>`)},
+  {key: "viz-internet-sites", grp: "Visual", mod: "internet", need: "inet", title: "Internet traffic per location", desc: "Locations ranked by traffic through their firewalls", size: "c4",
+    html: () => panel("c4", "Traffic per location", "", V.inet.bySite.filter(s => s.bytes).length ? hbars(V.inet.bySite.filter(s => s.bytes).sort((a, b) => b.bytes - a.bytes).slice(0, 8).map(s => [s.site, s.bytes, 0, fwB(s.bytes)])) : `<div class="empty sm">No data in this period yet.</div>`)},
   {key: "viz-spark-tickets", grp: "Visual", mod: "servicedesk", need: "tk", title: "Tickets · trend", desc: "Tickets received with a sparkline and 7-day change", size: "c3",
     html: () => vzSparkCard("c3", "Tickets · trend", fmt(V.tk.n), fx(V.tk.perDay, 1) + " per day · " + fmt(V.tk.open) + " open", V.tk.daily.map(x => x.in), VZC.s1, false)},
   {key: "viz-spark-downtime", grp: "Visual", mod: "noc", need: "net", title: "Link downtime · trend", desc: "Total link downtime with a sparkline and 7-day change", size: "c3",

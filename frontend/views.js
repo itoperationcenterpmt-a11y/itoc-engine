@@ -141,7 +141,7 @@ function renderDuty() {
 
 /* ---------- Ringkasan ---------- */
 function vRingkasan() {
-  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total), Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)), Xd = V.xdr, hasX = !!(Xd && Xd.configured && (Xd.total || Xd.backlogCH)), Cc = V.cctv, hasC = !!(Cc && Cc.configured && Cc.total), In = V.insight, hasI = !!(In && In.open.length);
+  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total), Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)), Xd = V.xdr, hasX = !!(Xd && Xd.configured && (Xd.total || Xd.backlogCH)), Cc = V.cctv, hasC = !!(Cc && Cc.configured && Cc.total), In = V.insight, hasI = !!(In && In.open.length), Iu = V.inet, hasU = !!(Iu && Iu.nFw && Iu.total.bytes);
   const T = hasT ? tkR() : null, N = hasN ? netR() : null, R = hasS ? socR() : null, chk = hasS ? socCheck() : [], okDays = chk.filter(x => x.s === "ok" || x.s === "dup").length, now = nowShift();
   const P = S.cmp ? prevRange() : null, Tp = P && tkR(P), Np = P && netR(P), Rp = P && socR(P);
   const openOld = V.open_old || [], oldD = CFG.params["sd.open_alert_days"], badLinks = N ? N.rank.filter(s => s.status === NST.bad) : [], hoOpen = V.ho_open || [], hiCrit = hoOpen.filter(h => prTone(h.prio) === "crit").length;
@@ -169,6 +169,7 @@ function vRingkasan() {
   const tiles = [
     hasT ? tile("servicedesk", "Ticketing", openOld.length ? "crit" : "good", openOld.length ? pl(openOld.length, "old open ticket") : "Under control", fmt(T.n) + " tickets · " + fmt(T.open) + " open · SLA " + pc(T.slaPct)) : "",
     hasN || hasW ? tile("network", "Network", badLinks.length ? "crit" : (N && N.nodata) || apOff ? "warn" : "good", badLinks.length ? pl(badLinks.length, "link") + " below target" : apOff ? apOff + " APs offline" : "Stable", (N ? "Availability " + pc(N.avail, 2) : "") + (N && hasW ? " · " : "") + (hasW ? fmt(Wf.total) + " WiFi clients" : "")) : "",
+    hasU ? tile("internet", "Internet Usage", "good", fwB(Iu.total.bytes) + " in the period", (Iu.dayN ? fx(Iu.total.bytes * 8 / (Iu.dayN * 86400) / 1e6, 0) + " Mb/s average" : "") + (Iu.app[0] ? " · top: " + Iu.app[0].k : "")) : "",
     hasS || hasX ? tile("cyber", "Cyber Security", xCrit ? "crit" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "warn" : "good", xCrit ? xCrit + " critical XDR alerts" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "Needs follow-up" : "No issues", (R ? fmt(R.total) + " NDR events" : "") + (R && hasX ? " · " : "") + (hasX ? fmt(Xd.total) + " XDR alerts" : "")) : "",
     hasD ? tile("devices", "Devices", D.all.down ? "warn" : "good", D.all.down ? fmt(D.all.down) + " devices down" : "All online", "Availability " + (D.all.avail != null ? pc(D.all.avail, 1) : "-") + " · " + fmt(D.all.total) + " devices") : "",
     hasC ? tile("cctv", "Milestone", Cc.srv.failed.length ? "warn" : "good", Cc.srv.ok + " of " + Cc.srv.total + " servers syncing", fmt(Cc.zbx.up + Cc.zbx.other) + " cameras online" + (Cc.zbx.down ? " · " + fmt(Cc.zbx.down) + " offline" : "") + " · " + fmt(Cc.total) + " cameras") : "",

@@ -126,8 +126,9 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
         S = _soc(db, cfg, a, b)
         V["soc"], V["soc_check"] = S["R"], S["chk"]
         V["soc_prev"] = _soc(db, cfg, pa, pb)["R"] if f.cmp else None
-    if tab == "internet" and ok("internet"):
+    if tab in ("internet", "ringkasan", "network") and ok("internet"):
         V["inet"] = SOCFW.build(db, cfg, a, b, st)
+        V["inet_prev"] = SOCFW.build(db, cfg, pa, pb, st) if f.cmp and tab == "internet" else None
     if tab == "soc" and ok("soc"):
         V["socfw"] = SOCFW.build(db, cfg, a, b, st)
     if tab == "ringkasan":
