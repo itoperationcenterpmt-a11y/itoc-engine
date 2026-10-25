@@ -455,6 +455,8 @@ def _sangfor(db, cfg, f, preset="standar"):
                                _chart("Users sharing a connection per day", [_short(x[0]) for x in cur["sharing"]], [{"name": "Users", "values": [x[1] or 0 for x in cur["sharing"]]}]) if cur["sharing"] else None) if c]
     s["tables"].append(_table("Traffic per application category", ["Category", "Traffic (GB)", "Share", "Top user", "Top application"], ["t", "f1", "p1", "t", "t"],
                               [[x["k"], x["gb"], (x["pct"] or 0) / 100, x["topUser"], x["topApp"]] for x in cur["rankRows"]]))
+    if cur["webUsers"]:
+        s["tables"].append(_table("Users with the most web requests", ["User (IP)", "Requests", "Share"], ["t", "n", "p1"], [[x["k"], x["urls"], x["pct"]] for x in cur["webUsers"]]))
     if cur["peakUsers"]:
         s["tables"].append(_table("Heaviest users at peak bandwidth", ["User (IP)", "Peak (Mb/s)", "Share"], ["t", "f1", "p1"], [[x["k"], x["mbps"], (x["pct"] or 0) / 100] for x in cur["peakUsers"]]))
     return s

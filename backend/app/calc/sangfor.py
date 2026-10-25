@@ -34,8 +34,10 @@ def detail(b: SangforBatch) -> dict:
     mobile = d.get("mobile", [])
     bi = tot.get("bi") or sum(x.get("bi") or 0 for x in cats)
     inn = tot.get("in")
+    act = d.get("activity", [])
+    atot = next((x for x in act if x["k"] == "Total"), None)
     top = next((x for x in cats if x["k"] != "Others"), None)
-    return {"batch": batch_row(b), "topCat": {"k": top["k"], "pct": top.get("pct")} if top else None, "totalGb": bi, "avg": tot.get("avg"), "max": tot.get("max"), "inPct": (inn / bi) if inn and bi else None, "outGb": tot.get("out"), "inGb": inn, "users": total_users,
+    return {"batch": batch_row(b), "requests": atot["urls"] if atot else None, "webUsers": [{"k": x["k"], "urls": x.get("urls") or 0, "pct": ((x.get("urls") or 0) / atot["urls"]) if atot and atot.get("urls") else None} for x in act if x["k"] not in ("Others", "Total")][:10], "topCat": {"k": top["k"], "pct": top.get("pct")} if top else None, "totalGb": bi, "avg": tot.get("avg"), "max": tot.get("max"), "inPct": (inn / bi) if inn and bi else None, "outGb": tot.get("out"), "inGb": inn, "users": total_users,
             "reject": sum(x.get("reject") or 0 for x in d.get("reject", [])), "shareMax": max((x[1] or 0 for x in sharing), default=None), "mobileMax": max((x[1] or 0 for x in mobile), default=None),
             "cats": [{"k": x["k"], "gb": x.get("bi") or 0, "pct": x.get("pct")} for x in cats[:15]],
             "dirs": [{"k": x["k"], "gb": x.get("bi") or 0} for x in d.get("dir", []) if x["k"] in ("Outbound", "Inbound")],

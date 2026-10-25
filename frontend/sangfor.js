@@ -18,6 +18,7 @@ function vSangfor() {
     panel("c6", "Top Applications", "", bars_(cur.apps.map(x => [x.k, x.gb, 0, sgVol(x.gb)]))) +
     panel("c6", "Top Users by Traffic", "IP address", tbl(["User (IP)", "Traffic"], cur.topUsers.map(x => [x.k, {h: `<span class="nw">${sgVol(x.gb)}</span>`}]), {r: [1], empty: "No data in this export."})) +
     panel("c6", "Heaviest Users at Peak Bandwidth", "share of the peak", tbl(["User (IP)", "Peak", "Share"], cur.peakUsers.map(x => [x.k, x.mbps == null ? "–" : fx(x.mbps, 1) + " Mb/s", x.pct == null ? "–" : fx(x.pct, 1) + "%"]), {r: [1, 2], empty: "No data in this export."})) +
+    (cur.webUsers.length ? panel("c6", "Top Users by Web Requests", cur.requests != null ? fmt(cur.requests) + " requests in total" : "", tbl(["User (IP)", "Requests", "Share"], cur.webUsers.map(x => [x.k, x.urls, x.pct == null ? "–" : pc(x.pct, 1)]), {r: [1, 2]})) : "") +
     panel("c6", "Users per Application Category", "", bars_(cur.access.map(x => [x.k, x.users, 0, fmt(x.users)]))) +
     panel("c6", "Inbound and Outbound", "", cur.dirs.length ? vzDonut(cur.dirs.map(x => ({k: x.k, v: x.gb, c: x.k === "Inbound" ? VZC.s1 : VZC.warn})), {center: sgVol(T), sub: "total", label: "Direction"}) : `<div class="empty sm">No data in this export.</div>`) +
     (cur.sharing.length ? panel("c12", "Users Sharing a Connection per Day", "at least two endpoints behind one user", bars(dd, [{name: "Users", c: "--s1", v: cur.sharing.map(x => x[1] || 0)}], {label: "Users sharing a connection"})) : "") +

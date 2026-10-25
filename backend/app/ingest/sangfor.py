@@ -103,6 +103,8 @@ def parse(files: list[tuple[str, bytes]]) -> dict:
         elif title == "Application Traffic Ranking":
             data["rank"] = [{"k": str(d.get("App Category") or ""), "users": items(d.get("Username")), "apps": items(d.get("Application")), "out": gb(d.get("Outbound")), "in": gb(d.get("Inbound")),
                              "bi": gb(d.get("Bidirectional")), "pct": pct(d.get("Bidirectional Percent"))} for d in (dict(zip(head, r)) for r in rows)]
+        elif title == "Overall Activities":
+            data["activity"] = [{"k": str(d.get("Username") or ""), "urls": num(d.get("URL Requests")), "files": num(d.get("Outgoing Files")), "posts": num(d.get("Posts"))} for d in (dict(zip(head, r)) for r in rows)]
         elif title == "Application Access Ranking":
             data["access"] = [{"k": str(d.get("App Category") or ""), "users": num(d.get("Users")), "pct": pct(d.get("Percent"))} for d in (dict(zip(head, r)) for r in rows)]
         elif title == "Application Access Trend":
