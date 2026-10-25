@@ -113,11 +113,13 @@ def _kpi_strip(slide, y, groups, ncols, band=True):
         for k in kpis:
             x = X0 + col * cw
             val = fmt(k["value"], k["kind"])
-            _tb(slide, x, top, cw, 28, k["label"].upper(), 13 if len(k["label"]) > 22 else 15, True, GRAY)
-            _tb(slide, x, top + 28, cw, 40, val, 26 if len(val) <= 11 else 18 if len(val) <= 20 else 13, True, NAVY, anchor=MSO_ANCHOR.MIDDLE)
-            _tb(slide, x + 6, top + 70, cw - 12, 34, k["sub"], 12, False, GRAY)
+            lab = 15 if cw > 200 else 12 if cw > 140 else 10.5                       # label and value shrink with the column so neighbouring figures never overlap
+            vs = max(12, min(26, int(cw / (max(len(val), 1) * 0.64))))
+            _tb(slide, x, top, cw, 40, k["label"].upper(), lab, True, GRAY, anchor=MSO_ANCHOR.BOTTOM)
+            _tb(slide, x, top + 42, cw, 40, val, vs, True, NAVY, anchor=MSO_ANCHOR.MIDDLE)
+            _tb(slide, x + 4, top + 86, cw - 8, 34, k["sub"], 11 if cw < 140 else 12, False, GRAY)
             col += 1
-    h = 110 + (70 if band else 0)
+    h = 124 + (70 if band else 0)
     ln = slide.shapes.add_connector(1, Pt(X0), Pt(y + h), Pt(X0 + W0), Pt(y + h))
     ln.line.color.rgb = rgb(LINE)
     return y + h + 8

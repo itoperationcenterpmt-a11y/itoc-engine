@@ -438,16 +438,16 @@ _BUILD = {"servicedesk": _servicedesk, "noc": _noc, "soc": _soc, "devices": _dev
 
 # Jenis laporan (bisa diubah di Admin → Operasional → Target dan Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
-    "summary": {"label": "Summary", "desc": "Management summary: key figures and main charts of all areas", "title": "ITOC Report · Summary", "subtitle": "Management overview of all areas", "prefix": "Management", "sections": None, "summary": True},
-    "noc": {"label": "Links (PRTG)", "desc": "Availability, downtime, problem links, utilization", "title": "ITOC Report · Links (PRTG)", "subtitle": "Availability, downtime, and traffic of ISP links", "prefix": "Links", "sections": ["noc"]},
-    "soc": {"label": "NDR (Palo Alto)", "desc": "Threat events, severity, firewall actions, URLs", "title": "ITOC Report · NDR (Palo Alto)", "subtitle": "Threats, firewall actions, and high/critical triage", "prefix": "NDR", "sections": ["soc"]},
-    "servicedesk": {"label": "Ticketing", "desc": "Tickets received, SLA, categories, technician ranking, open tickets", "title": "ITOC Report · Ticketing", "subtitle": "ManageEngine service desk performance", "prefix": "Ticketing", "sections": ["servicedesk"]},
-    "xdr": {"label": "XDR (Trend Micro)", "desc": "Vision One alerts: severity, detection models, status, backlog", "title": "ITOC Report · XDR (Trend Micro)", "subtitle": "Vision One Workbench alerts", "prefix": "XDR", "sections": ["xdr"]},
-    "devices": {"label": "Devices", "desc": "Zabbix device status: category, type, location, devices down", "title": "ITOC Report · Devices", "subtitle": "Device status from Zabbix", "prefix": "Devices", "sections": ["devices"]},
-    "wifi": {"label": "WiFi (Ruckus)", "desc": "Active clients, Access Points, usage per SSID and AP", "title": "ITOC Report · WiFi (Ruckus)", "subtitle": "Clients and Access Points from Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
-    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links and Ruckus WiFi together", "title": "ITOC Report · Network", "subtitle": "ISP links and WiFi", "prefix": "Network", "sections": ["noc", "wifi"]},
-    "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Palo Alto NDR and Trend Micro XDR together", "title": "ITOC Report · Cyber Security", "subtitle": "Palo Alto NDR and Trend Micro XDR", "prefix": "Cyber", "sections": ["soc", "xdr"]},
-    "full": {"label": "Full", "desc": "Summary and details of all areas in one file", "title": "ITOC Report · Full", "subtitle": "Summary and details of all areas", "prefix": "", "sections": None},
+    "summary": {"label": "Summary", "desc": "Management summary: key figures and main charts of all areas", "title": "IT Operation Center - Summary", "subtitle": "Management overview of all areas", "prefix": "Management", "sections": None, "summary": True},
+    "noc": {"label": "Links (PRTG)", "desc": "Availability, downtime, problem links, utilization", "title": "IT Operation Center - Links (PRTG)", "subtitle": "Availability, downtime, and traffic of ISP links", "prefix": "Links", "sections": ["noc"]},
+    "soc": {"label": "NDR (Palo Alto)", "desc": "Threat events, severity, firewall actions, URLs", "title": "IT Operation Center - NDR (Palo Alto)", "subtitle": "Threats, firewall actions, and high/critical triage", "prefix": "NDR", "sections": ["soc"]},
+    "servicedesk": {"label": "Ticketing", "desc": "Tickets received, SLA, categories, technician ranking, open tickets", "title": "IT Operation Center - Ticketing", "subtitle": "ManageEngine service desk performance", "prefix": "Ticketing", "sections": ["servicedesk"]},
+    "xdr": {"label": "XDR (Trend Micro)", "desc": "Vision One alerts: severity, detection models, status, backlog", "title": "IT Operation Center - XDR (Trend Micro)", "subtitle": "Vision One Workbench alerts", "prefix": "XDR", "sections": ["xdr"]},
+    "devices": {"label": "Devices", "desc": "Zabbix device status: category, type, location, devices down", "title": "IT Operation Center - Devices", "subtitle": "Device status from Zabbix", "prefix": "Devices", "sections": ["devices"]},
+    "wifi": {"label": "WiFi (Ruckus)", "desc": "Active clients, Access Points, usage per SSID and AP", "title": "IT Operation Center - WiFi (Ruckus)", "subtitle": "Clients and Access Points from Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
+    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links and Ruckus WiFi together", "title": "IT Operation Center - Network", "subtitle": "ISP links and WiFi", "prefix": "Network", "sections": ["noc", "wifi"]},
+    "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Palo Alto NDR and Trend Micro XDR together", "title": "IT Operation Center - Cyber Security", "subtitle": "Palo Alto NDR and Trend Micro XDR", "prefix": "Cyber", "sections": ["soc", "xdr"]},
+    "full": {"label": "Full", "desc": "Summary and details of all areas in one file", "title": "IT Operation Center - Full", "subtitle": "Summary and details of all areas", "prefix": "", "sections": None},
 }
 
 
@@ -470,11 +470,13 @@ def _period(cfg, d1, d2):
     ml = cfg.p("ui.months_long") or cfg.p("ui.months")
     if d1.day == 1 and d1.year == d2.year and d1.month == d2.month and (d2 + timedelta(days=1)).month != d2.month:
         return f"{ml[d1.month - 1]} {d1.year}"
-    p = lambda d: f"{d.day} {cfg.p('ui.months')[d.month - 1]} {d.year}"
-    return p(d1) if d1 == d2 else p(d1) + " – " + p(d2)
+    p = lambda d, y=True: f"{d.day} {cfg.p('ui.months')[d.month - 1]}" + (f" {d.year}" if y else "")
+    if d1 == d2:
+        return p(d1)
+    return (p(d1, False) if d1.year == d2.year else p(d1)) + " – " + p(d2)
 
 
-LIMITS = {"ringkas": (4, 2, 1, 5), "standar": (8, 4, 2, 8)}      # key figures, charts, tables, rows per table; "lengkap" is not limited
+LIMITS = {"ringkas": (4, 2, 1, 5), "standar": (8, 4, 3, 10)}      # key figures, charts, tables, rows per table; "lengkap" is not limited
 
 
 def _compact(s, preset):
@@ -483,11 +485,16 @@ def _compact(s, preset):
         return
     k, c, t, r = lim
     s["kpis"], s["charts"] = s["kpis"][:k], s["charts"][:c]
-    out = []
+    out, used = [], 0
     for tb in s["tables"][:t]:
-        n = len(tb["rows"])
-        out.append({**tb, "rows": tb["rows"][:r], "title": f"{tb['title']} (top {r} of {n})"} if n > r else tb)
-    s["tables"] = out
+        keep = min(len(tb["rows"]), r)
+        if out and used + keep > 24:                                 # a page holds about 24 table rows besides the figures: stop before a table spills over
+            break
+        used += keep
+        out.append(tb)
+    if len(out) == 1 and preset == "standar":                          # a single table may use the free space
+        r = 15
+    s["tables"] = [{**tb, "rows": tb["rows"][:r], "title": f"{tb['title']} (top {r} of {len(tb['rows'])})"} if len(tb["rows"]) > r else tb for tb in out]
 
 
 def build(db, cfg, user, f, kind="full", preset="standar"):
@@ -496,7 +503,7 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     if kind.startswith("custom:"):                                  # custom: any combination of sections the role may see, e.g. custom:servicedesk,devices
         titles = dict(SECTIONS)
         keys = [x for x, _ in SECTIONS if x in kind[7:].split(",") and can_see(user, x)]
-        spec = {"key": "custom", "label": "Custom", "desc": "", "title": "ITOC Report · Custom", "subtitle": " + ".join(titles[x] for x in keys), "prefix": "", "sections": keys, "allowed": keys} if keys else None
+        spec = {"key": "custom", "label": "Custom", "desc": "", "title": "IT Operation Center - Custom", "subtitle": " + ".join(titles[x] for x in keys), "prefix": "", "sections": keys, "allowed": keys} if keys else None
     else:
         spec = ks.get(kind) or ks.get("full") or (next(iter(ks.values())) if ks else None)
     if spec is None:
