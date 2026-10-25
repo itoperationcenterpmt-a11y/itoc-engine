@@ -172,6 +172,38 @@ def master_delete(key: str, pk: str, db: Session = Depends(get_db), user: User =
 
 
 # ---------------- parameter ----------------
+class TurnstileIn(BaseModel):
+    site_key: str = ""
+    secret: str = ""            # empty = keep the stored secret
+    clear_secret: bool = False
+
+
+@router.get("/turnstile")
+def turnstile_get(db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    import os
+    from .. import vault
+    p = db.get(Parameter, "security.turnstile_site_key")
+    return {"site_key": (p.value if p else "") or "", "secret_set": bool(vault.get(db, "turnstile.secret")), "secret_env": bool(os.environ.get("ITOC_TURNSTILE_SECRET"))}
+
+
+@router.put("/turnstile")
+def turnstile_set(body: TurnstileIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """Cloudflare Turnstile on the login page: on when a site key is set and a secret is stored. The secret is stored encrypted and never sent back."""
+    from .. import vault
+    p = db.get(Parameter, "security.turnstile_site_key")
+    key = body.site_key.strip()[:120]
+    if p:
+        p.value, p.updated_by = key, user.username
+    if body.clear_secret:
+        vault.delete(db, "turnstile.secret")
+    elif body.secret.strip():
+        vault.put(db, "turnstile.secret", body.secret.strip())
+    audit(db, user.username, "Security verification (Turnstile): " + ("on" if key else "off"), {"secret_changed": bool(body.secret.strip() or body.clear_secret)})
+    db.commit()
+    bump_config()
+    return {"ok": True}
+
+
 @router.get("/options")
 def options(db: Session = Depends(get_db)):
     """Live pick lists for parameters: values that already exist in the data, so a parameter is chosen, not typed."""

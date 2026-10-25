@@ -158,7 +158,7 @@ const refresh = (o, keepMsg) => { Object.assign(S, o || {}); if (!keepMsg) S.msg
 async function reloadConfig() { applyConfig(await api("/api/config")); }
 
 /* ---------- Admin: parameter generik ---------- */
-async function loadParams() { try { S.params = await api("/api/admin/params"); S.opts = await api("/api/admin/options").catch(() => null); } catch (e) { S.params = []; S.msg = e.message; } render(false); }
+async function loadParams() { try { S.params = await api("/api/admin/params"); S.opts = await api("/api/admin/options").catch(() => null); S.ts = await api("/api/admin/turnstile").catch(() => null); } catch (e) { S.params = []; S.msg = e.message; } render(false); }
 /* Parameters that name things which already exist are chosen from live lists (GET /api/admin/options) instead of typed. */
 const PARAM_VAL = k => ((S.params || []).find(x => x.key === k) || {}).value || [];
 const PICKP = {
@@ -200,9 +200,14 @@ function paramField(p) {
   return `<div class="fld ${wide ? "wide" : ""}"><label for="${id}">${esc(p.label)}${p.editor === "percent" ? " (%)" : ""}${p.editor === "list" ? ` <span class="sub">one per line</span>` : ""}</label>${inp}${p.description ? `<span class="sub">${esc(p.description)}</span>` : ""}</div>`;
 }
 function paramForm() {
-  if (!S.params) { loadParams(); return `<div class="empty sm">Memuat parameter…</div>`; }
-  const groups = [...new Set(S.params.map(p => p.group))];
-  return `<form id="pF" class="form">${groups.map(g => `<div class="fld wide pgh"><span class="lbl">${esc(g)}</span></div>` + S.params.filter(p => p.group === g).map(paramField).join("")).join("")}
+  if (!S.params) { loadParams(); return `<div class="empty sm">Loading parameters…</div>`; }
+  const T = S.ts, groups = [...new Set(S.params.map(p => p.group))], on = T && T.site_key && (T.secret_set || T.secret_env);
+  const box = !T ? "" : `<form id="tsF" class="form formbox"><div class="fld wide pgh"><span class="lbl">Security verification on the login page (Cloudflare Turnstile)</span></div>
+    <div class="fld"><label for="tsK">Site key</label><input type="text" id="tsK" value="${esc(T.site_key)}" autocomplete="off" placeholder="0x4AAAA…"></div>
+    <div class="fld"><label for="tsS">Secret key</label><input type="password" id="tsS" autocomplete="new-password" placeholder="${T.secret_set ? "Stored · leave blank to keep" : T.secret_env ? "Set in the server environment" : "Paste the secret key"}"></div>
+    <div class="acts wide"><button class="btn" type="submit">Save verification</button>${T.secret_set ? `<button class="btn ghost" type="button" id="tsX">Remove secret</button>` : ""}<span class="pill ${on ? "good" : "idle"}"><i>${on ? "✓" : "–"}</i>${on ? "On: the login page asks for the verification" : "Off: needs a site key and a secret"}</span><span class="msg ok" id="tsMsg"></span></div>
+    <span class="sub wide">Keys come from the Cloudflare dashboard (Turnstile). The server needs internet access to challenges.cloudflare.com. Leave the site key empty to switch the verification off.</span></form>`;
+  return box + `<form id="pF" class="form">${groups.map(g => `<div class="fld wide pgh"><span class="lbl">${esc(g)}</span></div>` + S.params.filter(p => p.group === g && p.key !== "security.turnstile_site_key").map(paramField).join("")).join("")}
     <div class="acts wide"><button class="btn" type="submit">Save Parameters</button><span class="sub">Only changed values are sent. Every page is recalculated and changes are recorded in the audit log.</span><span class="msg ok" id="pMsg">${esc(S.msg)}</span></div></form>`;
 }
 function readParam(el) {
@@ -291,6 +296,7 @@ document.addEventListener("click", async e => {
     else if (d.tab) { openSheet(false); set({tab: d.tab, hoForm: false, closing: null}); window.scrollTo({top: 0}); }
     else if (d.go) { set({tab: d.go}); window.scrollTo({top: 0}); }
     else if (b.id === "pwT") { const i = $("lP"), show = i.type === "password"; i.type = show ? "text" : "password"; b.setAttribute("aria-pressed", String(show)); b.setAttribute("aria-label", show ? "Hide password" : "Show password"); }
+    else if (b.id === "tsX") { await send("/api/admin/turnstile", {site_key: $("tsK").value, clear_secret: true}, "PUT"); S.params = null; refresh({msg: "Secret removed."}, true); }
     else if (d.pgdel !== undefined) { b.closest(".pgrp").remove(); }
     else if (d.pgadd !== undefined) { const box = b.closest("[data-all]"), all = box.dataset.all.split("|").filter(Boolean); b.insertAdjacentHTML("beforebegin", `<div class="pgrp"><div class="pickbox">${pChips(all, [])}</div><button type="button" class="btn ghost sm" data-pgdel>Remove group</button></div>`); }
     else if (d.sm !== undefined) { const cur = S.schedM || nowShift().today.slice(0, 7); set({schedM: d.sm === "0" ? "" : addDays(cur + "-" + (+d.sm > 0 ? "28" : "01"), +d.sm > 0 ? 5 : -1).slice(0, 7)}); }
@@ -375,6 +381,10 @@ document.addEventListener("submit", async e => {
     try { await send("/api/handover", {category: v("hCat"), priority: v("hPr"), site: v("hSite"), ticket_id: v("hTk") || null, title: v("hTitle"), body: v("hBody"), next_action: v("hNext")}); refresh({hoForm: false, hoSt: "open", msg: "Handover saved and visible to the next shift."}, true); }
     catch (err) { $("hMsg").textContent = err.message; }
   }
+  if (f.id === "tsF") {
+    try { await send("/api/admin/turnstile", {site_key: $("tsK").value, secret: $("tsS").value}, "PUT"); S.params = null; refresh({msg: "Security verification saved."}, true); }
+    catch (err) { $("tsMsg").textContent = err.message; }
+  }
   if (f.id === "pF") {
     const errs = [], changed = [];
     f.querySelectorAll("[data-key]").forEach(el => { const p = S.params.find(x => x.key === el.dataset.key); let nv; try { nv = readParam(el); } catch (_) { errs.push(p.label + ": invalid JSON"); return; } const nz = x => Array.isArray(x) && x.every(y => typeof y === "string") ? [...x].sort() : x; if (JSON.stringify(nz(nv)) !== JSON.stringify(nz(p.value))) changed.push([p, nv]); });
@@ -425,7 +435,7 @@ function showLogin(msg, change) {
       <button class="btn" type="submit">Save</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`
     : `<form id="loginF" class="loginbox"><div class="lhead"><h1>Sign in</h1></div>
       <div class="fld"><label for="lU">Username</label><input type="text" id="lU" autocomplete="username"></div><div class="fld"><label for="lP">Password</label><div class="pw"><input type="password" id="lP" autocomplete="current-password"><button type="button" class="pwt" id="pwT" aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
-      ${LOGIN.turnstile ? `<div class="cf-turnstile" data-sitekey="${esc(LOGIN.turnstile)}"></div>` : ""}
+      ${LOGIN.turnstile ? `<div class="fld"><label>Security verification</label><div class="cf-turnstile" data-sitekey="${esc(LOGIN.turnstile)}"></div></div>` : ""}
       <button class="btn" type="submit">Sign in</button><span class="msg err" id="lMsg" role="alert">${esc(msg || "")}</span>
       <p class="lg-help">Forgot your password? ${LOGIN.support_phone ? `<a href="https://wa.me/${esc(String(LOGIN.support_phone).replace(/\D/g, ""))}?text=${encodeURIComponent("Hello IT Care, I forgot my TERA Dashboard password.")}" target="_blank" rel="noopener noreferrer">Contact us</a>` : "Contact us"}</p></form>`;
       $("login").innerHTML = `<div class="lg"><div class="lg-bg"></div><div class="lg-wrap">

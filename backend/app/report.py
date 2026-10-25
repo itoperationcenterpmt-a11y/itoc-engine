@@ -438,16 +438,16 @@ _BUILD = {"servicedesk": _servicedesk, "noc": _noc, "soc": _soc, "devices": _dev
 
 # Jenis laporan (bisa diubah di Admin → Operasional → Target dan Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
-    "summary": {"label": "Summary", "desc": "Management summary: key figures and main charts of all areas", "title": "IT Operation Center - Summary", "subtitle": "Management overview of all areas", "prefix": "Management", "sections": None, "summary": True},
-    "noc": {"label": "Links (PRTG)", "desc": "Availability, downtime, problem links, utilization", "title": "IT Operation Center - Links (PRTG)", "subtitle": "Availability, downtime, and traffic of ISP links", "prefix": "Links", "sections": ["noc"]},
-    "soc": {"label": "NDR (Palo Alto)", "desc": "Threat events, severity, firewall actions, URLs", "title": "IT Operation Center - NDR (Palo Alto)", "subtitle": "Threats, firewall actions, and high/critical triage", "prefix": "NDR", "sections": ["soc"]},
-    "servicedesk": {"label": "Ticketing", "desc": "Tickets received, SLA, categories, technician ranking, open tickets", "title": "IT Operation Center - Ticketing", "subtitle": "ManageEngine service desk performance", "prefix": "Ticketing", "sections": ["servicedesk"]},
-    "xdr": {"label": "XDR (Trend Micro)", "desc": "Vision One alerts: severity, detection models, status, backlog", "title": "IT Operation Center - XDR (Trend Micro)", "subtitle": "Vision One Workbench alerts", "prefix": "XDR", "sections": ["xdr"]},
-    "devices": {"label": "Devices", "desc": "Zabbix device status: category, type, location, devices down", "title": "IT Operation Center - Devices", "subtitle": "Device status from Zabbix", "prefix": "Devices", "sections": ["devices"]},
-    "wifi": {"label": "WiFi (Ruckus)", "desc": "Active clients, Access Points, usage per SSID and AP", "title": "IT Operation Center - WiFi (Ruckus)", "subtitle": "Clients and Access Points from Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
-    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links and Ruckus WiFi together", "title": "IT Operation Center - Network", "subtitle": "ISP links and WiFi", "prefix": "Network", "sections": ["noc", "wifi"]},
-    "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Palo Alto NDR and Trend Micro XDR together", "title": "IT Operation Center - Cyber Security", "subtitle": "Palo Alto NDR and Trend Micro XDR", "prefix": "Cyber", "sections": ["soc", "xdr"]},
-    "full": {"label": "Full", "desc": "Summary and details of all areas in one file", "title": "IT Operation Center - Full", "subtitle": "Summary and details of all areas", "prefix": "", "sections": None},
+    "summary": {"label": "Summary", "desc": "Management summary: key figures and main charts of all areas", "title": "IT Operation Center - Summary Report", "subtitle": "Management overview of all areas", "prefix": "Management", "sections": None, "summary": True},
+    "noc": {"label": "Links (PRTG)", "desc": "Availability, downtime, problem links, utilization", "title": "IT Operation Center - Links (PRTG) Report", "subtitle": "Availability, downtime, and traffic of ISP links", "prefix": "Links", "sections": ["noc"]},
+    "soc": {"label": "NDR (Palo Alto)", "desc": "Threat events, severity, firewall actions, URLs", "title": "IT Operation Center - NDR (Palo Alto) Report", "subtitle": "Threats, firewall actions, and high/critical triage", "prefix": "NDR", "sections": ["soc"]},
+    "servicedesk": {"label": "Ticketing", "desc": "Tickets received, SLA, categories, technician ranking, open tickets", "title": "IT Operation Center - Ticketing Report", "subtitle": "ManageEngine service desk performance", "prefix": "Ticketing", "sections": ["servicedesk"]},
+    "xdr": {"label": "XDR (Trend Micro)", "desc": "Vision One alerts: severity, detection models, status, backlog", "title": "IT Operation Center - XDR (Trend Micro) Report", "subtitle": "Vision One Workbench alerts", "prefix": "XDR", "sections": ["xdr"]},
+    "devices": {"label": "Devices", "desc": "Zabbix device status: category, type, location, devices down", "title": "IT Operation Center - Devices Report", "subtitle": "Device status from Zabbix", "prefix": "Devices", "sections": ["devices"]},
+    "wifi": {"label": "WiFi (Ruckus)", "desc": "Active clients, Access Points, usage per SSID and AP", "title": "IT Operation Center - WiFi (Ruckus) Report", "subtitle": "Clients and Access Points from Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
+    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links and Ruckus WiFi together", "title": "IT Operation Center - Network Report", "subtitle": "ISP links and WiFi", "prefix": "Network", "sections": ["noc", "wifi"]},
+    "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Palo Alto NDR and Trend Micro XDR together", "title": "IT Operation Center - Cyber Security Report", "subtitle": "Palo Alto NDR and Trend Micro XDR", "prefix": "Cyber", "sections": ["soc", "xdr"]},
+    "full": {"label": "Full", "desc": "Summary and details of all areas in one file", "title": "IT Operation Center - Full Report", "subtitle": "Summary and details of all areas", "prefix": "", "sections": None},
 }
 
 
@@ -503,7 +503,7 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     if kind.startswith("custom:"):                                  # custom: any combination of sections the role may see, e.g. custom:servicedesk,devices
         titles = dict(SECTIONS)
         keys = [x for x, _ in SECTIONS if x in kind[7:].split(",") and can_see(user, x)]
-        spec = {"key": "custom", "label": "Custom", "desc": "", "title": "IT Operation Center - Custom", "subtitle": " + ".join(titles[x] for x in keys), "prefix": "", "sections": keys, "allowed": keys} if keys else None
+        spec = {"key": "custom", "label": "Custom", "desc": "", "title": "IT Operation Center - Custom Report", "subtitle": " + ".join(titles[x] for x in keys), "prefix": "", "sections": keys, "allowed": keys} if keys else None
     else:
         spec = ks.get(kind) or ks.get("full") or (next(iter(ks.values())) if ks else None)
     if spec is None:
