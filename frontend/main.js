@@ -158,10 +158,39 @@ const refresh = (o, keepMsg) => { Object.assign(S, o || {}); if (!keepMsg) S.msg
 async function reloadConfig() { applyConfig(await api("/api/config")); }
 
 /* ---------- Admin: parameter generik ---------- */
-async function loadParams() { try { S.params = await api("/api/admin/params"); } catch (e) { S.params = []; S.msg = e.message; } render(false); }
+async function loadParams() { try { S.params = await api("/api/admin/params"); S.opts = await api("/api/admin/options").catch(() => null); } catch (e) { S.params = []; S.msg = e.message; } render(false); }
+/* Parameters that name things which already exist are chosen from live lists (GET /api/admin/options) instead of typed. */
+const PARAM_VAL = k => ((S.params || []).find(x => x.key === k) || {}).value || [];
+const PICKP = {
+  "soc.shared_ndr": {t: "groups", src: () => CFG.sites}, "net.shared_isp": {t: "groups", src: () => CFG.sites},
+  "soc.critical_high": {t: "multi", src: () => PARAM_VAL("soc.severities")}, "soc.non_block_actions": {t: "multi", src: () => PARAM_VAL("soc.actions")}, "soc.hc_actions": {t: "multi", src: () => PARAM_VAL("soc.actions")},
+  "sd.closed_statuses": {t: "multi", src: o => o.ticket_status}, "sd.onhold_statuses": {t: "multi", src: o => o.ticket_status}, "sd.high_priority": {t: "single", src: o => o.ticket_priority},
+  "sd.required_fields": {t: "multi", src: o => o.sd_fields}, "sd.rank_units": {t: "multi", src: o => o.units},
+  "wifi.kill_roles": {t: "multi", src: o => o.roles}, "wifi.kill_users": {t: "multi", src: o => o.users}, "wifi.portal_auth": {t: "multi", src: o => o.wifi_auth},
+  "ui.default_preset": {t: "single", src: () => (CFG.params["ui.presets"] || []).map(x => x[0]), lab: v => (((CFG.params["ui.presets"] || []).find(x => x[0] === v)) || [v, v])[1]},
+  "admin.locked_pages": {t: "multi", src: () => (typeof ADM !== "undefined" ? ADM.flatMap(([, , ps]) => ps.map(x => x[0])) : [])},
+  "dev.tab_kinds": {t: "kvsel", src: o => o.dev_kinds}, "dev.kind_labels": {t: "kvtext", keys: o => o.dev_kinds}, "report.contact": {t: "object"}
+};
+const pChip = (v, on, stale, lab) => `<label class="pchip ${stale ? "stale" : ""}"><input type="checkbox" value="${esc(v)}" ${on ? "checked" : ""}>${esc(lab || v)}${stale ? " (not in list)" : ""}</label>`;
+const pChips = (all, on, lab) => all.map(v => pChip(v, on.includes(v), false, lab && lab(v))).join("") + on.filter(v => !all.includes(v)).map(v => pChip(v, true, true)).join("");
+function paramPick(p, a) {
+  const c = PICKP[p.key]; if (!c || !S.opts) return null;
+  const all = c.src ? [...new Set((c.src(S.opts) || []).map(String))] : [], v = p.value;
+  if (c.t === "multi") return `<div class="pickbox" ${a} data-ed="multi">${pChips(all, v || [], c.lab) || `<span class="sub">Nothing to choose from yet.</span>`}</div>`;
+  if (c.t === "single") return `<select ${a} data-ed="single">${all.map(x => `<option value="${esc(x)}" ${x === v ? "selected" : ""}>${esc(c.lab ? c.lab(x) : x)}</option>`).join("")}${v != null && !all.includes(v) ? `<option value="${esc(v)}" selected>${esc(v)} (not in list)</option>` : ""}</select>`;
+  if (c.t === "groups") {
+    const grp = g => `<div class="pgrp"><div class="pickbox">${pChips(all, g)}</div><button type="button" class="btn ghost sm" data-pgdel>Remove group</button></div>`;
+    return `<div ${a} data-ed="groups" data-all="${esc(all.join("|"))}">${(v || []).map(grp).join("")}<button type="button" class="btn ghost sm" data-pgadd>+ Add group</button><span class="sub">Locations in one group are shown as one.</span></div>`;
+  }
+  if (c.t === "kvsel") return `<div ${a} data-ed="kvsel">${Object.entries(v || {}).map(([k, x]) => `<div class="kvrow"><b>${esc(k)}</b><select data-k="${esc(k)}">${all.map(o => `<option ${o === x ? "selected" : ""}>${esc(o)}</option>`).join("")}${x != null && !all.includes(x) ? `<option selected>${esc(x)}</option>` : ""}</select></div>`).join("")}</div>`;
+  if (c.t === "kvtext") { const ks = [...new Set([...Object.keys(v || {}), ...(c.keys(S.opts) || [])])]; return `<div ${a} data-ed="kvtext">${ks.map(k => `<div class="kvrow"><b>${esc(k)}</b><input type="text" data-k="${esc(k)}" value="${esc((v || {})[k] ?? "")}"></div>`).join("")}</div>`; }
+  if (c.t === "object") return `<div ${a} data-ed="object">${Object.entries(v || {}).map(([k, x]) => `<div class="kvrow"><b>${esc(colLabel(k))}</b><input type="text" data-k="${esc(k)}" value="${esc(x ?? "")}"></div>`).join("")}</div>`;
+  return null;
+}
 function paramField(p) {
   const id = "pp_" + p.key.replace(/\W/g, "_"), u = p.ui || {}, a = `id="${id}" data-key="${esc(p.key)}" data-ed="${p.editor}"`, wide = ["list", "json", "text"].includes(p.editor);
-  let inp;
+  let inp = paramPick(p, `id="${id}" data-key="${esc(p.key)}"`);
+  if (inp) return `<div class="fld wide"><label for="${id}">${esc(p.label)}</label>${inp}${p.description ? `<span class="sub">${esc(p.description)}</span>` : ""}</div>`;
   if (p.editor === "percent") inp = `<input type="number" ${a} step="${(u.step || .01) * 100}" ${u.min != null ? `min="${u.min * 100}"` : ""} ${u.max != null ? `max="${u.max * 100}"` : ""} value="${+(p.value * 100).toFixed(4)}">`;
   else if (p.editor === "number") inp = `<input type="number" ${a} step="${u.step || "any"}" ${u.min != null ? `min="${u.min}"` : ""} ${u.max != null ? `max="${u.max}"` : ""} value="${p.value}">`;
   else if (p.editor === "date") inp = `<input type="date" ${a} value="${esc(p.value)}">`;
@@ -178,6 +207,10 @@ function paramForm() {
 }
 function readParam(el) {
   const ed = el.dataset.ed, v = el.value;
+  if (ed === "multi") return [...el.querySelectorAll("input:checked")].map(i => i.value);
+  if (ed === "groups") return [...el.querySelectorAll(".pgrp")].map(g => [...g.querySelectorAll("input:checked")].map(i => i.value)).filter(g => g.length > 1);
+  if (ed === "single") return v;
+  if (ed === "kvsel" || ed === "kvtext" || ed === "object") return Object.fromEntries([...el.querySelectorAll("[data-k]")].map(i => [i.dataset.k, i.value || ""]).filter(([, x]) => ed !== "kvtext" || x !== ""));
   if (ed === "percent") return parseFloat(v) / 100;
   if (ed === "number") return parseFloat(v);
   if (ed === "list") return v.split("\n").map(x => x.trim()).filter(Boolean);
@@ -187,11 +220,25 @@ function readParam(el) {
 
 /* ---------- Admin: generic master data (locations, personnel, teams, shifts, ISPs, SLA targets, sensors, menus, roles, formulas, data sources) ---------- */
 async function loadMaster() { try { S.mdata = await api("/api/admin/master/" + S.mkey); } catch (e) { S.mdata = {key: S.mkey, columns: [], rows: [], pk: []}; S.msg = e.message; } render(false); }
-const mShow = (v, c) => v == null ? "–" : c.kind === "bool" ? (v ? "Ya" : "–") : c.kind === "json" ? {h: `<span class="num sub">${esc(JSON.stringify(v).slice(0, 80))}</span>`} : c.kind === "int" || c.kind === "float" ? v : String(v);
+const mShow = (v, c) => v == null ? "–" : c.kind === "bool" ? (v ? "Yes" : "–") : c.kind === "json" ? {h: `<span class="num sub">${esc(JSON.stringify(v).slice(0, 80))}</span>`} : c.kind === "int" || c.kind === "float" ? v : String(v);
+/* Pick lists for master-data columns (the server reads them from the data they refer to): select, suggestions, chips for several values, or on/off switches. */
+function mPick(c, v, ro, a, ch) {
+  const opts = ch.opts || [], id = "mf_" + c.name;
+  if (ch.flags || ch.multi) {
+    const on = ch.flags ? Object.entries(v || {}).filter(([, x]) => x).map(([k]) => k) : (v || []), known = new Set(opts.map(x => x.v));
+    const all = [...opts, ...on.filter(x => !known.has(x)).map(x => ({v: x, l: x, stale: 1}))];
+    return `<div class="pickbox" id="${id}" data-col="${c.name}" data-kind="${ch.flags ? "flags" : "multi"}" data-all="${esc(all.map(x => x.v).join("|"))}" ${ro ? "data-ro=1" : ""}>${all.map(x => `<label class="pchip ${x.stale ? "stale" : ""}"><input type="checkbox" value="${esc(x.v)}" ${on.includes(x.v) ? "checked" : ""} ${ro}>${esc(x.l)}${x.stale ? " (not in list)" : ""}</label>`).join("") || `<span class="sub">Nothing to choose from yet.</span>`}</div>`;
+  }
+  if (ch.free) return `<input type="text" ${a} list="dl_${c.name}" value="${esc(v ?? "")}"><datalist id="dl_${c.name}">${opts.map(x => `<option value="${esc(x.v)}">`).join("")}</datalist>`;
+  const stale = v != null && v !== "" && !opts.some(x => x.v === v);
+  return `<select ${a} ${ch.sets ? `data-sets="${ch.sets}"` : ""}>${c.nullable || ch.empty ? `<option value="">${esc(ch.empty || "–")}</option>` : ""}${opts.map(x => `<option value="${esc(x.v)}" ${x.s ? `data-s="${esc(x.s)}"` : ""} ${x.v === v ? "selected" : ""}>${esc(x.l)}</option>`).join("")}${stale ? `<option value="${esc(v)}" selected>${esc(v)} (not in list)</option>` : ""}</select>`;
+}
 function mField(c, row, isNew) {
-  const id = "mf_" + c.name, v = row[c.name], ro = c.pk && !isNew ? "disabled" : "", a = `id="${id}" data-col="${c.name}" data-kind="${c.kind}" ${ro}`;
+  const sch = Object.values((S.mdata || {}).choices || {}).find(x => x.sets === c.name);
+  const id = "mf_" + c.name, v = row[c.name] ?? (isNew ? (sch && sch.opts[0] && sch.opts[0].s) || c.default : undefined), ro = c.pk && !isNew ? "disabled" : "", a = `id="${id}" data-col="${c.name}" data-kind="${c.kind}" ${ro}`, ch = ((S.mdata || {}).choices || {})[c.name];
   let inp;
-  if (c.kind === "bool") inp = `<select ${a}><option value="true" ${v ? "selected" : ""}>Ya</option><option value="false" ${v ? "" : "selected"}>Tidak</option></select>`;
+  if (ch && !ro) { inp = mPick(c, v, ro, a, ch); return `<div class="fld ${ch.flags || ch.multi ? "wide" : ""}"><label for="${id}">${esc(colLabel(c.name))}${c.nullable ? "" : " *"}</label>${inp}</div>`; }
+  if (c.kind === "bool") inp = `<select ${a}><option value="true" ${v ? "selected" : ""}>Yes</option><option value="false" ${v ? "" : "selected"}>No</option></select>`;
   else if (c.kind === "json") inp = `<textarea ${a} rows="3" class="jsed">${esc(v == null ? "" : JSON.stringify(v, null, 1))}</textarea>`;
   else if (c.kind === "text") inp = `<textarea ${a} rows="2">${esc(v ?? "")}</textarea>`;
   else inp = `<input type="${c.kind === "int" || c.kind === "float" ? "number" : c.kind === "date" ? "date" : "text"}" ${c.kind === "float" ? `step="any"` : ""} ${a} value="${esc(v ?? "")}">`;
@@ -243,6 +290,9 @@ document.addEventListener("click", async e => {
     else if (d.closeSheet !== undefined) { openSheet(false); }
     else if (d.tab) { openSheet(false); set({tab: d.tab, hoForm: false, closing: null}); window.scrollTo({top: 0}); }
     else if (d.go) { set({tab: d.go}); window.scrollTo({top: 0}); }
+    else if (b.id === "pwT") { const i = $("lP"), show = i.type === "password"; i.type = show ? "text" : "password"; b.setAttribute("aria-pressed", String(show)); b.setAttribute("aria-label", show ? "Hide password" : "Show password"); }
+    else if (d.pgdel !== undefined) { b.closest(".pgrp").remove(); }
+    else if (d.pgadd !== undefined) { const box = b.closest("[data-all]"), all = box.dataset.all.split("|").filter(Boolean); b.insertAdjacentHTML("beforebegin", `<div class="pgrp"><div class="pickbox">${pChips(all, [])}</div><button type="button" class="btn ghost sm" data-pgdel>Remove group</button></div>`); }
     else if (d.sm !== undefined) { const cur = S.schedM || nowShift().today.slice(0, 7); set({schedM: d.sm === "0" ? "" : addDays(cur + "-" + (+d.sm > 0 ? "28" : "01"), +d.sm > 0 ? 5 : -1).slice(0, 7)}); }
     else if (b.closest("#fKind")) set({kind: d.k, grp: ""});
     else if (b.closest("#fStat")) set({dstat: d.st});
@@ -295,6 +345,7 @@ document.addEventListener("change", async e => {
   else if (t.dataset.laySize !== undefined) { const blk = t.closest(".wblock"); blk.className = blk.className.replace(SZ, "").trim() + " " + t.value; blk.dataset.size = t.value; }
   else if (t.id === "dim") set({dim: t.value});
   else if (t.id === "sdim") set({sdim: t.value});
+  else if (t.dataset && t.dataset.sets) { const o = t.selectedOptions[0], tg = document.getElementById("mf_" + t.dataset.sets); if (tg && o && o.dataset.s) tg.value = o.dataset.s; }
   else if (t.dataset && t.dataset.fwmap) { api("/api/admin/fw-map", {method: "PUT", body: JSON.stringify({fw: t.dataset.fwmap, site: t.value})}).then(() => render(true)).catch(er => alert(er.message)); }
   else if (t.id === "stop") set({stop: t.value});
   else if (t.id === "sensor") set({sensor: t.value});
@@ -326,7 +377,7 @@ document.addEventListener("submit", async e => {
   }
   if (f.id === "pF") {
     const errs = [], changed = [];
-    f.querySelectorAll("[data-key]").forEach(el => { const p = S.params.find(x => x.key === el.dataset.key); let nv; try { nv = readParam(el); } catch (_) { errs.push(p.label + ": invalid JSON"); return; } if (JSON.stringify(nv) !== JSON.stringify(p.value)) changed.push([p, nv]); });
+    f.querySelectorAll("[data-key]").forEach(el => { const p = S.params.find(x => x.key === el.dataset.key); let nv; try { nv = readParam(el); } catch (_) { errs.push(p.label + ": invalid JSON"); return; } const nz = x => Array.isArray(x) && x.every(y => typeof y === "string") ? [...x].sort() : x; if (JSON.stringify(nz(nv)) !== JSON.stringify(nz(p.value))) changed.push([p, nv]); });
     for (const [p, nv] of changed) { try { await send("/api/admin/params/" + encodeURIComponent(p.key), {value: nv}, "PUT"); } catch (err) { errs.push(p.label + ": " + err.message); } }
     await reloadConfig(); S.params = null;
     refresh({msg: errs.length ? "Some failed: " + errs.join("; ") : changed.length ? `Saved (${changed.length} parameters). All figures are recalculated.` : "No changes."}, true);
@@ -339,6 +390,7 @@ document.addEventListener("submit", async e => {
   if (f.id === "mF") {
     const row = {}; let bad = "";
     f.querySelectorAll("[data-col]").forEach(el => { if (el.disabled) return; const k = el.dataset.kind, x = el.value;
+      if (k === "multi" || k === "flags") { if (el.dataset.ro) return; const on = [...el.querySelectorAll("input:checked")].map(i => i.value); row[el.dataset.col] = k === "multi" ? on : Object.fromEntries(el.dataset.all.split("|").filter(Boolean).map(a => [a, on.includes(a) ? 1 : 0])); return; }
       if (k === "json") { try { row[el.dataset.col] = x.trim() ? JSON.parse(x) : null; } catch (_) { bad = el.dataset.col + ": invalid JSON"; } }
       else if (k === "bool") row[el.dataset.col] = x === "true"; else row[el.dataset.col] = x === "" ? null : x; });
     if (bad) { $("mMsg").textContent = bad; return; }
@@ -347,7 +399,7 @@ document.addEventListener("submit", async e => {
     catch (err) { $("mMsg").textContent = err.message; }
   }
   if (f.id === "loginF") {
-    try { const r = await send("/api/auth/login", {username: v("lU"), password: $("lP").value}); boot(); }
+    try { const tk = f.querySelector("[name=cf-turnstile-response]"), r = await send("/api/auth/login", {username: v("lU"), password: $("lP").value, captcha: tk ? tk.value : ""}); boot(); }
     catch (err) { $("lMsg").textContent = err.message; }
   }
   if (f.id === "pwF") {
@@ -372,12 +424,14 @@ function showLogin(msg, change) {
       <div class="fld"><label for="oP">Current password</label><input type="password" id="oP" autocomplete="current-password"></div><div class="fld"><label for="nP">New password</label><input type="password" id="nP" autocomplete="new-password"></div><div class="fld"><label for="nP2">Repeat new password</label><input type="password" id="nP2" autocomplete="new-password"></div>
       <button class="btn" type="submit">Save</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`
     : `<form id="loginF" class="loginbox"><div class="lhead"><h1>Sign in</h1></div>
-      <div class="fld"><label for="lU">Username</label><input type="text" id="lU" autocomplete="username"></div><div class="fld"><label for="lP">Password</label><input type="password" id="lP" autocomplete="current-password"></div>
-      <button class="btn" type="submit">Sign in</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`;
+      <div class="fld"><label for="lU">Username</label><input type="text" id="lU" autocomplete="username"></div><div class="fld"><label for="lP">Password</label><div class="pw"><input type="password" id="lP" autocomplete="current-password"><button type="button" class="pwt" id="pwT" aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+      ${LOGIN.turnstile ? `<div class="cf-turnstile" data-sitekey="${esc(LOGIN.turnstile)}"></div>` : ""}
+      <button class="btn" type="submit">Sign in</button><span class="msg err" id="lMsg" role="alert">${esc(msg || "")}</span>
+      <p class="lg-help">Forgot your password? ${LOGIN.support_phone ? `<a href="https://wa.me/${esc(String(LOGIN.support_phone).replace(/\D/g, ""))}?text=${encodeURIComponent("Hello IT Care, I forgot my TERA Dashboard password.")}" target="_blank" rel="noopener noreferrer">Contact IT Care on WhatsApp</a>` : "Contact IT Care."}</p></form>`;
       $("login").innerHTML = `<div class="lg"><div class="lg-bg"></div><div class="lg-wrap">
     <section class="lg-card lg-info"><button type="button" class="lg-theme" id="themeL" aria-label="Ganti tema terang/gelap">◐</button>
-      ${LOGIN.eyebrow ? `<span class="lg-eyebrow">${esc(LOGIN.eyebrow)}</span>` : ""}<h2 class="brandName">${brandHtml()}</h2><span class="lg-prod">Dashboard</span>${LOGIN.acronym.length ? `<ul class="lg-acr" aria-label="What TERA stands for">${LOGIN.acronym.map(([l, w]) => `<li><b>${esc(l)}</b>${esc(w)}</li>`).join("")}</ul>` : ""}${LOGIN.tagline ? `<p>${esc(LOGIN.tagline)}</p>` : ""}
-      ${LOGIN.points.length ? `<ul class="lg-pts">${LOGIN.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>
+      ${LOGIN.eyebrow ? `<span class="lg-eyebrow">${esc(LOGIN.eyebrow)}</span>` : ""}${LOGIN.acronym.length ? `<h2 class="lg-title">${LOGIN.acronym.map(([l, w]) => `<span class="ini">${esc(l)}</span>${esc(w.slice(1))}`).join(", ").replace(/, ([^,]*)$/, " &amp; $1")}</h2>` : `<h2 class="brandName">${brandHtml()}</h2>`}<span class="lg-prod">${esc(LOGIN.badge || "Dashboard")}</span>${LOGIN.tagline ? `<p>${esc(LOGIN.tagline)}</p>` : ""}${LOGIN.acronym.length ? `<ul class="lg-acr" aria-label="What TERA stands for">${LOGIN.acronym.map(([l, w, d]) => `<li><b>${esc(l)}</b><span><strong>${esc(w)}</strong>${d ? `<small>${esc(d)}</small>` : ""}</span></li>`).join("")}</ul>` : ""}
+      ${LOGIN.points.length && !LOGIN.acronym.length ? `<ul class="lg-pts">${LOGIN.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>
     <section class="lg-card lg-form"><img class="lg-logo lg-l" src="assets/tera-lockup-col.png" alt="TERA, Divisi Teknologi Informasi, Pelindo Multi Terminal"><img class="lg-logo lg-d" src="assets/tera-lockup-rev.png" alt="">${form}<div class="loginfoot">${esc(footText())}</div></section></div></div>`;
   const first = $("login").querySelector("input"); if (first) first.focus();
 }function logout(msg) { fetch("/api/auth/logout", {method: "POST", credentials: "same-origin", headers: {"X-Requested-With": "itoc"}}).catch(() => {}); CFG = null; showLogin(typeof msg === "string" ? msg : ""); }
@@ -386,8 +440,8 @@ const footText = () => FOOT.replace("{year}", new Date().getFullYear()) + (CFG &
 /* The name shown in the sidebar and login page is the first BSPLIT words ("Dashboard IT"); the full name is used in the tab title, reports, and email. */
 const brandHtml = () => { const w = BRAND.trim().split(/\s+/), n = Math.max(1, Math.min(typeof BSPLIT === "number" ? BSPLIT : 2, w.length)), t = w.slice(0, n).join(" "); return `<span class="b1">${/^tera$/i.test(t) ? `T<span class="e">E</span>RA` : esc(t)}</span>`; };
 function applyBrand() { document.title = BRAND; document.querySelectorAll(".brandName").forEach(e => e.innerHTML = brandHtml()); }
-let LOGIN = {tagline: "", points: [], place: "", eyebrow: "", acronym: []};
-async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || "", acronym: r.acronym || []}; } catch (_) {} applyBrand(); }
+let LOGIN = {tagline: "", points: [], place: "", eyebrow: "", acronym: [], badge: "", support_phone: "", turnstile: ""};
+async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || "", acronym: r.acronym || [], badge: r.badge || "", support_phone: r.support_phone || "", turnstile: r.turnstile || ""}; } catch (_) {} applyBrand(); }
 async function boot() {
   await loadPublic();
   try { if ((await fetch("/api/auth/me", {credentials: "same-origin"})).status === 401) return showLogin(); } catch (_) { return showLogin(); }

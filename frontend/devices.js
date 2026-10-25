@@ -27,7 +27,7 @@ const basemapPath = (B, X, Y) => (BASEMAP || []).filter(r => r.some(([lo, la]) =
 /* The device location map uses Leaflet + OpenStreetMap. The markup only prepares a container; initDevMaps() builds the map after the page renders. */
 const DMAPS = {};
 function mapSvg(D) {
-  if (!D.map.length) return empty("No locations with coordinates yet. Fill in lat and lon in Admin → Master Data → Locations.");
+  if (!D.map.length) return empty("No locations with coordinates yet. Add Location latitude and longitude to the host inventory in Zabbix, or fill in lat and lon in Admin → Master Data → Locations.");
   const id = "dmap" + Object.keys(DMAPS).length + "x" + Math.random().toString(36).slice(2, 8);
   DMAPS[id] = D.map;
   return `<div class="dmapbox" id="${id}" role="img" aria-label="Device location map"></div>` + (D.noCoord.length ? `<span class="sub">No coordinates yet: ${esc(D.noCoord.slice(0, 8).join(", "))}${D.noCoord.length > 8 ? ", …" : ""}</span>` : "");
@@ -45,7 +45,7 @@ function initDevMaps() {
     [...pts].sort((a, b) => b.total - a.total).forEach(p => {
       const cl = p.avail == null ? "n" : p.avail >= 0.99 ? "g" : p.avail >= 0.95 ? "w" : "c";
       const m = L.circleMarker([p.lat, p.lon], {radius: 6 + Math.sqrt(p.total) * 1.2, color: p.down ? colour.c : "#ffffff", weight: p.down ? 3 : 1, fillColor: colour[cl], fillOpacity: 0.85}).addTo(map);
-      m.bindTooltip(`<b>${esc(p.k)}</b><br>${p.total} devices · ${p.down} down · ${p.deg || 0} interface<br>availability ${p.avail != null ? pc(p.avail, 1) : "-"}`);
+      m.bindTooltip(`<b>${esc(p.k)}</b><br>${p.total} devices · ${p.down} down · ${p.deg || 0} interface<br>availability ${p.avail != null ? pc(p.avail, 1) : "-"}<br><small>position: ${p.src === "zabbix" ? "Zabbix inventory (" + p.geo + " hosts)" : "Locations master"}</small>`);
       bounds.push([p.lat, p.lon]);
     });
     if (bounds.length) map.fitBounds(bounds, {padding: [30, 30], maxZoom: 9});

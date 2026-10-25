@@ -54,13 +54,50 @@ def _coerce(col, v):
     return v
 
 
+ICONS = ["dashboard", "ticket", "activity", "wifi", "cctv", "xdr", "camera", "server", "shield", "users", "handover", "database", "sliders", "report", "calendar"]
+FILTERS = [("p", "Period"), ("s", "Shift"), ("l", "Location"), ("c", "Compare with previous period"), ("k", "Category / type buttons"), ("t", "Status buttons"), ("g", "Group list"), ("y", "Type list")]
+SECTIONS_ = [("servicedesk", "Ticketing"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)")]
+
+
+def _distinct(db, col):
+    return [v for (v,) in db.execute(select(col).where(col.isnot(None), col != "").distinct().order_by(col)) if v]
+
+
+def _choices(key: str, db: Session) -> dict:
+    """Pick lists for master-data columns, read live from the data they refer to, so a field never needs to be typed from memory.
+    opts = [{v, l}], multi = several values (list), flags = several on/off switches (object), free = suggestions only (any text allowed)."""
+    from .. import models as M
+    o = lambda vs: [{"v": v, "l": l} for v, l in vs]
+    same = lambda vs: o((v, v) for v in vs)
+    if key == "widget":
+        from .. import report as R
+        ids = {"servicedesk": R.SD_IDS, "noc": R.NOC_IDS, "soc": R.SOC_IDS, "xdr": R.XDR_IDS, "devices": R.DEV_IDS, "wifi": R.WIFI_IDS}
+        have = {w for (w,) in db.execute(select(M.Widget.key))}
+        return {"section": {"opts": o(SECTIONS_)}, "kind": {"opts": o([("bar", "Bars"), ("stack", "Stacked bars"), ("hbar", "Horizontal bars (ranking)"), ("donut", "Donut"), ("line", "Line")])},
+                "presets": {"opts": o([("ringkas", "Short"), ("standar", "Standard"), ("lengkap", "Complete")]), "multi": True},
+                "key": {"opts": [{"v": i, "l": i, "s": s} for s, l in ids.items() for i in l if i not in have], "sets": "section"}}
+    if key == "module":
+        return {"parent": {"opts": o((m.key, m.label) for m in db.scalars(select(M.Module).order_by(M.Module.sort))), "empty": "None (top-level menu)"}, "icon": {"opts": same(ICONS), "icons": True},
+                "filters": {"opts": o(FILTERS), "flags": True}}
+    if key == "person":
+        return {"team_code": {"opts": o((t.code, f"{t.code} · {t.label}") for t in db.scalars(select(M.Team).order_by(M.Team.sort))), "empty": "No team"},
+                "unit": {"opts": same(sorted({*_distinct(db, M.Person.unit), "ITOC", "EOS", "IT Care"})), "free": True}, "job": {"opts": same(_distinct(db, M.Person.job)), "free": True}}
+    if key == "site":
+        return {"kind": {"opts": same(sorted({*_distinct(db, M.Site.kind), "branch", "head office", "representative office"})), "free": True}}
+    if key == "prtg_sensor":
+        return {"device": {"opts": same(_distinct(db, M.PrtgSensor.device)), "free": True}}
+    if key == "sla_target":
+        return {"name": {"opts": same(_distinct(db, M.Ticket.sla_name)), "free": True}}
+    return {}
+
+
 @router.get("/master/{key}")
 def master_list(key: str, db: Session = Depends(get_db)):
     model, label, cols = _meta(key)
     pk = [c.key for c in inspect(model).primary_key]
     rows = db.scalars(select(model)).all()
-    return {"key": key, "label": label, "pk": pk,
-            "columns": [{"name": c.key, "kind": _kind(c), "nullable": c.nullable, "pk": c.primary_key, "auto": c.primary_key and c.autoincrement is True and _kind(c) == "int"} for c in cols],
+    return {"key": key, "label": label, "pk": pk, "choices": _choices(key, db),
+            "columns": [{"name": c.key, "kind": _kind(c), "default": (c.default.arg if c.default is not None and not callable(c.default.arg) and not isinstance(c.default.arg, (list, dict)) else None), "nullable": c.nullable, "pk": c.primary_key, "auto": c.primary_key and c.autoincrement is True and _kind(c) == "int"} for c in cols],
             "rows": [{c.key: _ser(getattr(r, c.key)) for c in cols} for r in rows]}
 
 
@@ -68,6 +105,7 @@ def _save(key, data: dict, db: Session, user: User, obj=None):
     model, label, cols = _meta(key)
     new = obj is None
     obj = obj or model()
+    old_name = getattr(obj, "name", None) if key == "site" and not new else None
     for c in cols:
         if c.key in data and not (c.primary_key and not new):
             setattr(obj, c.key, _coerce(c, data[c.key]))
@@ -78,10 +116,23 @@ def _save(key, data: dict, db: Session, user: User, obj=None):
     except IntegrityError as e:
         db.rollback()
         raise HTTPException(409, "Conflicting data or invalid reference: " + str(e.orig).split("\n")[0])
+    if key == "site" and old_name and obj.name != old_name:
+        _site_renamed(db, old_name, obj.name)
     audit(db, user.username, f"{'Menambah' if new else 'Mengubah'} {label}", {"table": key, "data": {k: _ser(v) for k, v in data.items()}})
     db.commit()
     bump_config()
     return {"ok": True}
+
+
+def _site_renamed(db, old: str, new: str | None):
+    """A location that is renamed (or removed) is renamed everywhere a parameter or mapping names it, so nothing keeps pointing at the old name."""
+    from ..models import SocFwMap
+    for k in ("soc.shared_ndr", "net.shared_isp"):
+        p = db.get(Parameter, k)
+        if p and isinstance(p.value, list):
+            p.value = [[(new if x == old else x) for x in g if not (x == old and new is None)] for g in p.value]
+    for m in db.query(SocFwMap).filter(SocFwMap.site == old):
+        m.site = new
 
 
 def _get(key, pkval, db):
@@ -106,6 +157,8 @@ def master_update(key: str, pk: str, data: dict, db: Session = Depends(get_db), 
 @router.delete("/master/{key}/{pk}")
 def master_delete(key: str, pk: str, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     obj = _get(key, pk, db)
+    if key == "site":
+        _site_renamed(db, obj.name, None)
     db.delete(obj)
     try:
         db.flush()
@@ -119,6 +172,17 @@ def master_delete(key: str, pk: str, db: Session = Depends(get_db), user: User =
 
 
 # ---------------- parameter ----------------
+@router.get("/options")
+def options(db: Session = Depends(get_db)):
+    """Live pick lists for parameters: values that already exist in the data, so a parameter is chosen, not typed."""
+    from .. import models as M
+    d = lambda col: [v for (v,) in db.execute(select(col).where(col.isnot(None), col != "").distinct().order_by(col)) if v]
+    return {"sites": [s.name for s in db.scalars(select(M.Site).where(M.Site.active.is_(True)).order_by(M.Site.sort, M.Site.name))],
+            "roles": [r.key for r in db.scalars(select(Role).order_by(Role.key))], "users": [u.username for u in db.scalars(select(User).order_by(User.username))],
+            "ticket_status": d(M.Ticket.status), "ticket_priority": d(M.Ticket.priority), "wifi_auth": d(M.WifiSession.auth), "units": sorted({*d(M.Person.unit), "ITOC", "EOS", "IT Care"}),
+            "sd_fields": ["mode", "requester", "site", "category", "subcategory", "technician", "sla_name", "impact", "priority", "urgency"], "dev_kinds": d(M.ZbxHost.kind)}
+
+
 @router.get("/params")
 def params(db: Session = Depends(get_db)):
     return [{"key": p.key, "label": p.label, "group": p.group, "editor": p.editor, "ui": p.ui, "description": p.description, "value": p.value,

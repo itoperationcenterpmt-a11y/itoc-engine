@@ -73,12 +73,20 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
     nt = sum(1 for d in down if d["ageH"] is None)
     if nt:
         age_dist.append({"k": "no time", "n": nt})
+    def where(loc, hosts):
+        """Position of a location: the median of its Zabbix hosts' inventory coordinates (Zabbix is the source), else the coordinates in the Locations master."""
+        ll = sorted(h.lat for h, _ in hosts if h.lat is not None and h.lon is not None)
+        lo = sorted(h.lon for h, _ in hosts if h.lat is not None and h.lon is not None)
+        if ll:
+            return ll[len(ll) // 2], lo[len(lo) // 2], "zabbix", len(ll)
+        s = sites.get(loc)
+        return (s.lat, s.lon, "master", 0) if s is not None and s.lat is not None and s.lon is not None else (None, None, "", 0)
     mp, nocoord = [], []
     for k, v in locs.items():
-        s = sites.get(k)
         a = _agg(v)
-        if s is not None and s.lat is not None and s.lon is not None:
-            mp.append({"k": k, "lat": s.lat, "lon": s.lon, **a})
+        la, lo_, src, n = where(k, v)
+        if la is not None:
+            mp.append({"k": k, "lat": la, "lon": lo_, "src": src, "geo": n, **a})
         else:
             nocoord.append(k)
     # daftar group (untuk filter) dan data peta per group (untuk widget peta yang dikhususkan, mis. Network-SDWAN); mengikuti filter lokasi saja
@@ -92,9 +100,9 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
     for gname, lg in gmaps.items():
         pts = []
         for loc, v in lg.items():
-            s = sites.get(loc)
-            if s is not None and s.lat is not None and s.lon is not None:
-                pts.append({"k": loc, "lat": s.lat, "lon": s.lon, **_agg(v)})
+            la, lo_, src, n = where(loc, v)
+            if la is not None:
+                pts.append({"k": loc, "lat": la, "lon": lo_, "src": src, "geo": n, **_agg(v)})
         group_maps[gname] = pts
     kind_loc, kind_down = {}, {}
     for key, v in kinds.items():

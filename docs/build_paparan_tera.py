@@ -276,7 +276,7 @@ ps = t.text_frame.paragraphs
 set_runs(ps[0], "TERA Dashboard")
 if len(ps) > 1:
     set_runs(ps[1], "PT PELINDO MULTI TERMINAL")
-set_text(named(cover, "167"), "Terminal Event, Response & Analytics · by IT Operation Center")
+set_text(named(cover, "167"), "Telemetry, Events, Response & Analytics · by IT Operation Center")
 set_text(named(cover, "168"), "Oktober 2026")
 cover.notes_slide.notes_text_frame.text = "Pembuka: TERA adalah satu layar kerja untuk ITOC. Paparan menjelaskan nama, fungsi, data, keamanan, kebutuhan server, dan langkah berikutnya."
 
@@ -298,7 +298,7 @@ text(s, 7.7, 5.2, 4.8, 1.35, [[("Prinsip: ", {"bold": True, "color": CYAN}), ("d
 # ---------------------------------------------------------------- 3. Nama dan identitas
 s = new("TERA: nama dan identitas", notes="TERA adalah nama pendek yang dipakai sehari-hari. Nama panjang hanya muncul di tagline. Dashboard dan Console adalah dua produk dengan logo yang sama.")
 cw = (W - 2 * M - 0.5) / 3
-card(s, M, 1.5, cw, 3.8, "Arti nama", ["Terminal Event, Response & Analytics", "Event: alert dari semua sumber", "Response: serah terima dan tindak lanjut", "Analytics: Insights dan laporan", "Tidak memuat nama sistem sumber, sehingga tetap berlaku bila sumber berganti"], tag="T", tag_color=BLUE, size=15)
+card(s, M, 1.5, cw, 3.8, "Arti nama", ["Telemetry, Events, Response & Analytics", "Telemetry: kondisi link ISP dan infrastruktur", "Events: ticket, threat, dan aksi firewall", "Response: penanganan insiden dan SLA", "Analytics: trend, evaluasi, dan report", "Tidak memuat nama sistem sumber, sehingga tetap berlaku bila sumber berganti"], tag="T", tag_color=BLUE, size=15)
 card(s, M + cw + 0.25, 1.5, cw, 3.8, "Keluarga produk", ["TERA Dashboard: memantau, menganalisis, melapor", "TERA Console: sumber data, pemetaan, akses, konfigurasi", "Logo dan tulisan TERA sama; hanya label produk berbeda", "Rencana: keduanya terintegrasi, satu login, mode Watch dan Configure"], tag="D", tag_color=NAVY, size=15)
 card(s, M + 2 * (cw + 0.25), 1.5, cw, 3.8, "Identitas visual", ["Logo kit ITOC-TERA dari Divisi TI", "Navy, biru Pelindo, biru muda", "Huruf Montserrat untuk tulisan TERA", "Baris penanda: by IT Operation Center", "Ikon penuh untuk sidebar dan login; huruf T untuk favicon"], tag="V", tag_color=AMBER, size=15)
 

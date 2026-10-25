@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 class Login(BaseModel):
     username: str
     password: str
+    captcha: str = ""
 
 
 class PwChange(BaseModel):
@@ -33,6 +34,26 @@ def _locked(db: Session, cfg, name: str, ip: str) -> bool:
     return q.filter(AuditLog.username == name[:60]).scalar() >= _MAX_USER or q.filter(AuditLog.detail["ip"].astext == ip).scalar() >= _MAX_IP
 
 
+def _verify_captcha(db: Session, cfg, token: str, ip: str):
+    """Cloudflare Turnstile, only when a site key is set in the parameters and the secret is in the environment (ITOC_TURNSTILE_SECRET) or the secret store."""
+    if not cfg.p("security.turnstile_site_key", ""):
+        return
+    import os
+    import httpx
+    from .. import vault
+    secret = os.environ.get("ITOC_TURNSTILE_SECRET") or vault.cred(db, "turnstile.secret", "TURNSTILE_SECRET")
+    if not secret:
+        return                                                    # key set but no secret yet: do not lock everyone out
+    if not token:
+        raise HTTPException(400, "Complete the security verification first.")
+    try:
+        r = httpx.post("https://challenges.cloudflare.com/turnstile/v0/siteverify", data={"secret": secret, "response": token, "remoteip": ip}, timeout=8).json()
+    except Exception:
+        raise HTTPException(503, "The security verification service cannot be reached. Try again shortly.")
+    if not r.get("success"):
+        raise HTTPException(400, "Security verification failed. Reload the page and try again.")
+
+
 @router.post("/login")
 def login(body: Login, request: Request, response: Response, db: Session = Depends(get_db)):
     cfg = load_config(db)
@@ -40,6 +61,7 @@ def login(body: Login, request: Request, response: Response, db: Session = Depen
     ip = request.client.host if request.client else "?"
     if _locked(db, cfg, name, ip):
         raise HTTPException(429, "Too many login attempts. Try again in a few minutes.")
+    _verify_captcha(db, cfg, body.captcha, ip)
     u = db.query(User).filter_by(username=name).one_or_none()
     ok = check_pw(body.password, u.password_hash if u else _DUMMY)   # waktu proses sama untuk akun yang tidak ada
     if not u or not u.active or not ok:

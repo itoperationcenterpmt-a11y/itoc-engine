@@ -393,6 +393,8 @@ class ZbxHost(Base):
     dev_code: Mapped[str] = mapped_column(String(20), default="")
     ip: Mapped[str] = mapped_column(String(45), default="", server_default="", index=True)   # first interface address (used to match Milestone cameras)
     groups: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    lat: Mapped[float | None] = mapped_column(Float)                   # host inventory location (Zabbix), drives the Devices map
+    lon: Mapped[float | None] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(20), default="up")      # up | down | maintenance | disabled
     down_since: Mapped[datetime | None] = mapped_column(DateTime)
     problem: Mapped[str | None] = mapped_column(Text)
