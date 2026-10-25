@@ -14,7 +14,7 @@ from .security import can_see
 
 SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)")]
 WEEKLY_AFTER = 31  # rentang harian lebih panjang dari ini diringkas per minggu (sama dengan dashboard Excel)
-_UK = {"type": "Tipe ancaman", "action": "Tindakan", "severity": "Severity"}
+_UK = {"type": "Threat type", "action": "Action", "severity": "Severity"}
 
 
 def fmt_n(x):
@@ -62,7 +62,7 @@ def _chart(title, labels, series, kind="bar"):
 
 
 def _daily(title, dates, series, kind="bar", mean=False):
-    """Grafik harian; rentang panjang diringkas per minggu (jumlah, atau rata-rata bila mean)."""
+    """Grafik harian; long ranges are summed per week (jumlah, atau rata-rata bila mean)."""
     if len(dates) <= WEEKLY_AFTER:
         return _chart(title + " per day", [_short(d) for d in dates], series, kind)
     out = []
@@ -72,7 +72,7 @@ def _daily(title, dates, series, kind="bar", mean=False):
             part = [v or 0 for v in se["values"][i:i + 7]]
             vals.append(round(sum(part) / len(part), 2) if mean else sum(part))
         out.append({"name": se["name"], "values": vals})
-    return _chart(title + " per minggu", [_short(dates[i]) for i in range(0, len(dates), 7)], out, kind)
+    return _chart(title + " per week", [_short(dates[i]) for i in range(0, len(dates), 7)], out, kind)
 
 
 def _top(title, rows, name="Count", n=10):
@@ -93,7 +93,7 @@ def _pick(cfg, section, ids, preset, charts):
     pool = {i: c for i, c in zip(ids, charts) if c and c["labels"] and any(any(v for v in s["values"]) for s in c["series"])}
     ws = [w for w in cfg.widgets if w["section"] == section]
     if not ws:
-        return list(pool.values())
+        return list(pool.values())[:{"ringkas": 2, "standar": 4}.get(preset, 99)]
     out = []
     for w in sorted(ws, key=lambda w: (not w["hero"], w["sort"])):
         c = pool.get(w["key"])
@@ -124,7 +124,7 @@ def _servicedesk(db, cfg, f, preset="standar"):
     tc, tl, bz = T.get("topCat"), T.get("topLoc"), T.get("busiest")
     s["kpis"] = [
         _kpi("Tickets received", n, "n", fmt_f(T["perDay"], 1) + " per day"),
-        _kpi("Tingkat penyelesaian", T["doneRate"], "p1", fmt_n(T["open"]) + " still open"),
+        _kpi("Completion rate", T["doneRate"], "p1", fmt_n(T["open"]) + " still open"),
         _kpi("Within SLA target", T["slaPct"], "p1", fmt_n(T["slaOut"]) + " melewati target"),
         _kpi("Median duration (minutes)", T["medMin"], "f0", "P90 " + fmt_f(T["p90"], 1) + " h"),
         _kpi("Average duration (hours)", T["avgH"], "f1", ""),
@@ -143,9 +143,9 @@ def _servicedesk(db, cfg, f, preset="standar"):
         _top("Top 10 categories by tickets", dim("kategori"), "Tickets"),
         None if f.site else _top("Top 10 locations by tickets", dim("lokasi"), "Tickets"),
         _chart("Distribution of resolution time", [x["k"] for x in T["durasi"]], [{"name": "Tickets", "values": [x["n"] for x in T["durasi"]]}]),
-        _chart("Tickets received per hour created", [f"{h:02d}" for h in range(24)], [{"name": "Tickets", "values": T["hours"]}]),
+        _chart("Tickets received per hour", [f"{h:02d}" for h in range(24)], [{"name": "Tickets", "values": T["hours"]}]),
         _top("Top 10 technicians", [(r["name"], r["n"]) for r in T["ranking"]], "Tickets"),
-        _chart("Kepatuhan SLA per level", [r["k"] for r in sla], [{"name": "Within target", "values": [r["in"] for r in sla]}, {"name": "Melewati target", "values": [r["out"] for r in sla]}], "stack"),
+        _chart("SLA compliance per level", [r["k"] for r in sla], [{"name": "Within target", "values": [r["in"] for r in sla]}, {"name": "Melewati target", "values": [r["out"] for r in sla]}], "stack"),
         _top("Tickets per request mode", dim("mode"), "Tickets"),
         _chart("Average tickets per weekday", [x["k"] for x in T["weekday"]], [{"name": "Average", "values": [round(x["avg"], 1) for x in T["weekday"]]}])])
     heads = ["", "Tickets", "% of total", "Done", "Open", "Within SLA"]
@@ -166,7 +166,7 @@ def _servicedesk(db, cfg, f, preset="standar"):
         s["tables"].append(_table("Open tickets (latest)", ["ID", "Subject", "Location", "Technician", "Priority", "Status", "Age (days)"], ["t", "t", "t", "t", "t", "t", "f1"],
                                   [[r["id"], r["subj"], r["loc"], r["tech"], r["prio"], r["status"], r["age"]] for r in T["openList"][:10]]))
     if T["incomplete"]:
-        s["attention"].append(f"{fmt_n(T['incomplete'])} tiket ({fmt_p(T['incomplete'] / n, 0)}) punya input wajib tidak lengkap")
+        s["attention"].append(f"{fmt_n(T['incomplete'])} tickets ({fmt_p(T['incomplete'] / n, 0)}) have incomplete required fields")
     if T["noSla"]:
         s["attention"].append(f"{fmt_n(T['noSla'])} tickets without SLA")
     if T["open"]:
@@ -192,17 +192,17 @@ def _noc(db, cfg, f, preset="standar"):
         _kpi("Links without downtime", N["noDown"], "n", ""),
         _kpi("Data coverage", N["cov"], "p1", "monitored time"),
         _kpi("Total volume (TB)", N["volTB"], "f1", fmt_f(N["mbps"], 0) + " Mbit/s average"),
-        _kpi("Utilisasi puncak tinggi", N["utilHigh"], "n", "link di atas " + fmt_p(P["utilPeak"], 0)),
+        _kpi("High peak utilization", N["utilHigh"], "n", "link di atas " + fmt_p(P["utilPeak"], 0)),
         _kpi("Link with most downtime", w["link"] if w else None, "t", fmt_f(w["down"] / 3600, 1) + " h" if w else ""),
         _kpi("Location with most downtime", lt["k"] if lt else None, "t", fmt_f(lt["downH"], 1) + " h (all links)" if lt else "")]
     d, isp = N["daily"], N["isp"]
     s["charts"] = _pick(cfg, "noc", NOC_IDS, preset, [
-        _chart("Status SLA link", [st["ok"], st["bad"], st["nodata"]], [{"name": "Link", "values": [N["ok"], N["bad"], N["nodata"]]}], "donut"),
+        _chart("Link SLA status", [st["ok"], st["bad"], st["nodata"]], [{"name": "Link", "values": [N["ok"], N["bad"], N["nodata"]]}], "donut"),
         _daily("Total downtime of all links (minutes)", [x["date"] for x in d], [{"name": "Downtime (minutes)", "values": [round(x["down"], 1) for x in d]}]),
         _top("Top 10 links by downtime (hours)", [(x["link"], round(x["down"] / 3600, 2)) for x in N["rank"]], "Hours"),
         _top("Top 10 locations by downtime (hours)", [(x["k"], round(x["downH"], 2)) for x in sorted(N["lokasi"], key=lambda r: -r["downH"])], "Hours"),
         _chart("Link distribution by availability", [x["k"] for x in N["buckets"]], [{"name": "Link", "values": [x["n"] for x in N["buckets"]]}]),
-        _chart("Status SLA per ISP", [x["k"] for x in isp], [{"name": st["ok"], "values": [x["ok"] for x in isp]}, {"name": st["bad"], "values": [x["bad"] for x in isp]},
+        _chart("SLA status per ISP", [x["k"] for x in isp], [{"name": st["ok"], "values": [x["ok"] for x in isp]}, {"name": st["bad"], "values": [x["bad"] for x in isp]},
                                                               {"name": st["nodata"], "values": [x["nodata"] for x in isp]}], "stack"),
         _top("Top 10 links by average traffic (Mbit/s)", [(x["link"], round(x["avg"], 1)) for x in N["traffic"]], "Mbit/s"),
         _top("Top 10 links by peak utilization (%)", [(x["link"], round(x["uP"] * 100, 1)) for x in N["util"]], "% kapasitas"),
@@ -216,9 +216,9 @@ def _noc(db, cfg, f, preset="standar"):
         s["tables"].append(_table("Highest utilization", ["Link", "Average (Mbit/s)", "Peak (Mbit/s)", "Capacity (Mbit/s)", "Peak utilization", "Status"], ["t", "f1", "f1", "f0", "p1", "t"],
                                   [[r["link"], r["avg"], r["max"], r["cap"], r["uP"], r["ust"]] for r in N["util"][:10]]))
     if N["bad"]:
-        s["attention"].append(f"{N['bad']} link di bawah target availability")
+        s["attention"].append(f"{N['bad']} link{'s' if N['bad'] != 1 else ''} below the availability target")
     if N["nodata"]:
-        s["attention"].append(f"{N['nodata']} link data kurang (cakupan di bawah batas)")
+        s["attention"].append(f"{N['nodata']} link{'s' if N['nodata'] != 1 else ''} with too little data (coverage below the limit)")
     if N.get("unmappedIsp"):
         s["attention"].append(f"{len(N['unmappedIsp'])} links do not match any ISP")
     return s
@@ -272,20 +272,20 @@ def _soc(db, cfg, f, preset="standar"):
     s["kpis"] = [
         _kpi("Total threat events", R["total"], "n", fmt_n(R["perDay"]) + " per day"),
         _kpi("Critical + High", R["ch"], "n", fmt_n(R["crit"]) + " critical"),
-        _kpi("Critical + High blocked", R["chBlkPct"], "p1", "tindakan selain alert"),
+        _kpi("Critical + High blocked", R["chBlkPct"], "p1", "actions other than alert"),
         _kpi("Critical + High alert only", R["chAlert"], "n", "logged, not stopped"),
         _kpi("Internal-source events", R["internalPct"], "p1", "of total events"),
         _kpi("Internal hosts detected", K.get("hosts"), "n", fmt_n(K.get("hostsCH")) + " with critical/high" if K.get("hostsCH") is not None else ""),
         _kpi("Top source countries", first("negara", 0), "t", fmt_n(first("negara", 1)) + " event" if tabs.get("negara") else ""),
         _kpi("Top source IPs", first("ip", 0), "t", fmt_n(first("ip", 3)) + " event" if tabs.get("ip") else ""),
         _kpi("URLs blocked", R["urlBlk"], "n", "of " + fmt_n(R["url"]) + " URL events"),
-        _kpi("Total trafik (TB)", R["tb"], "f1", ""),
+        _kpi("Total traffic (TB)", R["tb"], "f1", ""),
         _kpi("Top application", K.get("topApp"), "t", fmt_p(K["topAppPct"], 0) + " of volume" if K.get("topAppPct") is not None else ""),
         _kpi("Risky applications seen", K.get("watchSeen"), "n", "from the watch list")]
     s["charts"] = _pick(cfg, "soc", SOC_IDS, preset, [
-        _chart("Event per severity", [x["k"] for x in R["sev"]], [{"name": "Event", "values": [x["n"] for x in R["sev"]]}], "hbar"),
+        _chart("Events per severity", [x["k"] for x in R["sev"]], [{"name": "Event", "values": [x["n"] for x in R["sev"]]}], "hbar"),
         _daily("Threat events by severity", [x["date"] for x in d], [{"name": sv, "values": [x.get(sv, 0) for x in d]} for sv in SEV], "stack"),
-        _top("Tindakan firewall", [(x["k"], x["n"]) for x in R["action"]], "Event"),
+        _top("Firewall actions", [(x["k"], x["n"]) for x in R["action"]], "Event"),
         _top("Top 10 threat categories", [(x["k"], x["n"]) for x in R["cat"]], "Event"),
         top("negara", 0, 1, "Top 10 attack source countries"),
         top("ip", 0, 3, "Top 10 attack source IPs"),
@@ -293,10 +293,10 @@ def _soc(db, cfg, f, preset="standar"):
         _top("Blocked URL categories", [(x["k"], x["blk"]) for x in R["urlCat"]], "Blocked"),
         top("app", 0, 2, "Top 10 applications by volume (GB)"),
         top("appcat", 0, 1, "Volume per application category (GB)"),
-        _daily("Trafik (TB)", [x["date"] for x in d], [{"name": "TB", "values": [round(x["tb"], 2) for x in d]}])])
+        _daily("Traffic (TB)", [x["date"] for x in d], [{"name": "TB", "values": [round(x["tb"], 2) for x in d]}])])
     heads = ["", "Events", "% of total", "Blocked", "Alert only", "% blocked"]
     kinds = ["t", "n", "p1", "n", "n", "p1"]
-    for title, key, first_col in (("Event per severity", "sev", "Severity"), ("Event per tipe ancaman", "type", "Tipe"), ("Event per tindakan firewall", "action", "Tindakan")):
+    for title, key, first_col in (("Events per severity", "sev", "Severity"), ("Event per tipe ancaman", "type", "Tipe"), ("Event per tindakan firewall", "action", "Action")):
         rows = R.get(key) or []
         if rows:
             s["tables"].append(_table(title, [first_col] + heads[1:], kinds, [[r["k"], r["n"], r["pct"], r["blk"], r["alert"], r["blkPct"]] for r in rows]))
@@ -306,7 +306,7 @@ def _soc(db, cfg, f, preset="standar"):
     if R["chAlert"]:
         s["attention"].append(f"{fmt_n(R['chAlert'])} critical/high events alert only, not blocked")
     for kind, rows in (R.get("unknown") or {}).items():
-        s["attention"].append(_UK[kind] + " baru di luar daftar parameter: " + ", ".join(x[0] for x in rows))
+        s["attention"].append(_UK[kind] + " not in the parameter list: " + ", ".join(x[0] for x in rows))
     return s
 
 
@@ -325,7 +325,7 @@ def _devices(db, cfg, f, preset="standar"):
     if not D["configured"] or not A["total"]:
         s["notes"].append("No device data from Zabbix yet." + (" Last sync failed: " + D["error"] if D["error"] else ""))
         return s
-    s["notes"].append("Device status = current state when the report is generated (Zabbix snapshot). The history section (incidents and downtime) follows the report period" + (", recorded since " + H["since"][:10] if H.get("since") else "") + ".")
+    s["notes"].append("Device status is a Zabbix snapshot at report time; incidents and downtime follow the report period" + (" (recorded since " + H["since"][:10] + ")" if H.get("since") else "") + ".")
     s["kpis"] = [_kpi("Devices", A["total"], "n", "monitored from Zabbix"), _kpi("Online", A["up"], "n", fmt_p(A["avail"], 1) + " of the active ones" if A["avail"] is not None else ""),
                  _kpi("Down", A["down"], "n", f"{D['chronic']} over {D['chronicDays']} days"), _kpi("Availability Now", A["avail"], "p2", "online ÷ (online + down)"),
                  _kpi("Interface Issue", A["deg"], "n", "ping OK, SNMP/agent unavailable"), _kpi("Maintenance", A["maint"], "n", "disabled in Zabbix: " + fmt_n(A["off"]))]
@@ -367,27 +367,27 @@ def _wifi(db, cfg, f, preset="standar"):
     if not W["configured"] or not (W["total"] or W["apTotal"]):
         s["notes"].append("No WiFi data from Ruckus vSZ yet." + (" Last sync failed: " + W["error"] if W["error"] else ""))
         return s
-    s["notes"].append("KPIs and status charts = current state when the report is generated (vSZ snapshot). The period section (usage, clients, sessions) is calculated from stored sessions" + (", recorded since " + Hh["since"][:10] if Hh.get("since") else "") + "; a session's usage is counted on the day the session started.")
+    s["notes"].append("Status figures are a Ruckus vSZ snapshot at report time; usage, clients, and sessions follow the report period" + (" (recorded since " + Hh["since"][:10] + ")" if Hh.get("since") else "") + ".")
     s["kpis"] = [_kpi("Active clients", W["total"], "n", "connected now"), _kpi("Logged-in users", W["users"], "n", f"{fmt_n(W['named'])} clients with a username"),
                  _kpi("Access Points online", W["apOnline"], "n", f"of {fmt_n(W['apTotal'])} APs"), _kpi("Weak signal", W["weak"], "n", f"below {W['weakAt']} dBm"),
                  _kpi("Download (GB)", W["tx"] / _GB, "f1", "sesi berjalan"), _kpi("Upload (GB)", W["rx"] / _GB, "f1", "sesi berjalan")]
     tr = W["trend"]
     s["charts"] = _pick(cfg, "wifi", WIFI_IDS, preset, [
-        _top("Client per SSID", [(x["k"], x["n"]) for x in W["bySsid"]], "Client"),
-        _top("Penggunaan per SSID (GB)", [(x["k"], round(x["n"] / _GB, 2)) for x in W["bySsidBytes"]], "GB"),
-        _top("Client per Access Point", [(x["k"], x["n"]) for x in W["byAp"]], "Client"),
-        _top("Client per zone", [(x["k"], x["n"]) for x in W["byZone"]], "Client"),
-        _chart("Client per band", [x["k"] for x in W["byBand"]], [{"name": "Client", "values": [x["n"] for x in W["byBand"]]}], "donut"),
+        _top("Clients per SSID", [(x["k"], x["n"]) for x in W["bySsid"]], "Client"),
+        _top("Usage per SSID (GB)", [(x["k"], round(x["n"] / _GB, 2)) for x in W["bySsidBytes"]], "GB"),
+        _top("Clients per Access Point", [(x["k"], x["n"]) for x in W["byAp"]], "Client"),
+        _top("Clients per zone", [(x["k"], x["n"]) for x in W["byZone"]], "Client"),
+        _chart("Clients per band", [x["k"] for x in W["byBand"]], [{"name": "Client", "values": [x["n"] for x in W["byBand"]]}], "donut"),
         _chart("Clients over the last 24 hours", [f"{(x['t'] // 3600000) % 24:02d}.{(x['t'] // 60000) % 60:02d}" for x in tr], [{"name": "Client", "values": [x["c"] for x in tr]}], "line") if len(tr) > 1 else None,
-        _daily("Penggunaan WiFi (GB)", [x["date"] for x in Hh["daily"]], [{"name": "GB", "values": [round(x["bytes"] / _GB, 2) for x in Hh["daily"]]}]),
-        _daily("Client unik dan sesi", [x["date"] for x in Hh["daily"]], [{"name": "Client unik", "values": [x["clients"] for x in Hh["daily"]]}, {"name": "Sesi", "values": [x["sessions"] for x in Hh["daily"]]}]),
+        _daily("WiFi usage (GB)", [x["date"] for x in Hh["daily"]], [{"name": "GB", "values": [round(x["bytes"] / _GB, 2) for x in Hh["daily"]]}]),
+        _daily("Unique clients and sessions", [x["date"] for x in Hh["daily"]], [{"name": "Client unik", "values": [x["clients"] for x in Hh["daily"]]}, {"name": "Sesi", "values": [x["sessions"] for x in Hh["daily"]]}]),
         _top("Usage per zone in the period (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byZone"]], "GB"),
         _top("Usage per SSID in the period (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["bySsid"]], "GB"),
         _top("Usage per location in the period (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byLoc"]], "GB"),
         _chart("Session start hour", [f"{h:02d}" for h in range(24)], [{"name": "Sesi", "values": Hh["hours"]}]),
         _top("Dominant devices in the period (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byDevice"]], "GB")])
     s["kpis"] += [_kpi("Sessions (period)", Hh["sessions"], "n", ""), _kpi("Unique clients (period)", Hh["clients"], "n", "distinct MACs"), _kpi("Total usage (GB)", (Hh["rx"] + Hh["tx"]) / _GB, "f1", "report period"),
-                  _kpi("Rata-rata usage per client (GB)", (Hh["rx"] + Hh["tx"]) / _GB / Hh["clients"] if Hh["clients"] else None, "f2", "")]
+                  _kpi("Average usage per client (GB)", (Hh["rx"] + Hh["tx"]) / _GB / Hh["clients"] if Hh["clients"] else None, "f2", "")]
     for ttl, key, nm in (("Usage per zone (period)", "byZone", "Zone"), ("Usage per SSID (period)", "bySsid", "SSID"), ("Usage per location (period)", "byLoc", "Location"), ("Usage per AP (period)", "byAp", "AP")):
         s["tables"].append(_table(ttl, [nm, "Client unik", "Sesi", "Penggunaan (GB)"], ["t", "n", "n", "f2"], [[x["k"], x["clients"], x["sessions"], x["bytes"] / _GB] for x in Hh[key]]))
     s["tables"].append(_table("Clients with the most usage (period)", ["User / Host", "MAC", "SSID", "Sessions", "Usage (GB)"], ["t", "t", "t", "n", "f2"],
@@ -422,15 +422,14 @@ def _xdr(db, cfg, f, preset="standar"):
                  _kpi("Average score", X["avgScore"], "f1", "0 to 100"), _kpi("Backlog critical/high", X["backlogCH"], "n", "open now, all periods")]
     d = X["daily"]
     s["charts"] = _pick(cfg, "xdr", XDR_IDS, preset, [
-        _chart("Alert per severity", [x["k"].capitalize() for x in X["bySev"]], [{"name": "Alert", "values": [x["n"] for x in X["bySev"]]}], "donut"),
-        _daily("Alerts per day", [x["date"] for x in d], [{"name": k.capitalize(), "values": [x[k] for x in d]} for k in XDR.SEV], "stack"),
+        _chart("Alerts per severity", [x["k"].capitalize() for x in X["bySev"]], [{"name": "Alert", "values": [x["n"] for x in X["bySev"]]}], "donut"),
+        _daily("Alerts", [x["date"] for x in d], [{"name": k.capitalize(), "values": [x[k] for x in d]} for k in XDR.SEV], "stack"),
         _top("Top 10 detection models", [(x["k"], x["n"]) for x in X["byModel"]], "Alert"),
-        _chart("Status investigasi", [x["k"] for x in X["byStatus"]], [{"name": "Alert", "values": [x["n"] for x in X["byStatus"]]}])])
-    s["tables"].append(_table("Model deteksi teratas", ["Model", "Alert"], ["t", "n"], [[x["k"], x["n"]] for x in X["byModel"]]))
-    s["tables"].append(_table("Alert critical/high terbaru", ["Time", "Severity", "Model", "Skor", "Status"], ["t", "t", "t", "n", "t"],
+        _chart("Investigation status", [x["k"] for x in X["byStatus"]], [{"name": "Alert", "values": [x["n"] for x in X["byStatus"]]}])])
+    s["tables"].append(_table("Top detection models", ["Model", "Alert"], ["t", "n"], [[x["k"], x["n"]] for x in X["byModel"]]))
+    s["tables"].append(_table("Latest critical and high alerts", ["Time", "Severity", "Model", "Skor", "Status"], ["t", "t", "t", "n", "t"],
                               [[datetime.utcfromtimestamp(x["created"] / 1000).strftime("%d/%m %H.%M"), x["severity"], x["model"], x["score"], x["status"]] for x in X["list"] if x["severity"] in ("critical", "high")][:25]))
     i = X["impact"]
-    s["notes"].append(f"Impact scope (counts may overlap between alerts): desktop {fmt_n(i['desktop'])}, server {fmt_n(i['server'])}, account {fmt_n(i['account'])}, email {fmt_n(i['email'])}.")
     if X["backlogCH"]:
         s["attention"].append(f"{X['backlogCH']} critical/high alerts still open")
     return s
@@ -439,16 +438,16 @@ _BUILD = {"servicedesk": _servicedesk, "noc": _noc, "soc": _soc, "devices": _dev
 
 # Jenis laporan (bisa diubah di Admin → Operasional → Target dan Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
-    "summary": {"label": "Summary", "desc": "Management summary: KPIs and main charts of all areas", "title": "Report ITOC : Summary", "subtitle": "Management Overview", "prefix": "Management", "sections": None, "summary": True},
-    "noc": {"label": "PRTG (Link)", "desc": "Availability, downtime, link bermasalah, utilisasi", "title": "Report ITOC Network SLA & Traffic ISP", "subtitle": "Evaluasi Availability, Coverage Monitoring, Traffic", "prefix": "Network SLA", "sections": ["noc"]},
-    "soc": {"label": "NDR (Palo Alto)", "desc": "Event ancaman, severity, tindakan firewall, URL", "title": "Report ITOC SOC Monitoring", "subtitle": "Summary of traffic security, threats, web security, and high/critical triage", "prefix": "SOC", "sections": ["soc"]},
-    "servicedesk": {"label": "Ticketing", "desc": "Tickets received, SLA, categories, technician ranking, open tickets", "title": "ITOC Ticketing Servicedesk Report", "subtitle": "ManageEngine Ticketing Performance Summary", "prefix": "Ticketing", "sections": ["servicedesk"]},
-    "xdr": {"label": "XDR (Trend Micro)", "desc": "Alert Trend Micro Vision One: severity, model deteksi, status, backlog", "title": "Report ITOC XDR", "subtitle": "Alert Workbench Trend Micro Vision One", "prefix": "XDR", "sections": ["xdr"]},
-    "devices": {"label": "Devices", "desc": "Zabbix device status: category, type, location, devices down", "title": "Report ITOC Devices", "subtitle": "Device Status from Zabbix", "prefix": "Devices", "sections": ["devices"]},
-    "wifi": {"label": "WiFi (Ruckus)", "desc": "Client aktif, Access Point, usage per SSID dan AP (Ruckus vSZ)", "title": "Report ITOC WiFi Users", "subtitle": "Client dan Access Point Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
-    "network": {"label": "Network (PRTG + WiFi)", "desc": "Combined summary of PRTG links and Ruckus WiFi, plus the details of both", "title": "Report ITOC Network", "subtitle": "Link PRTG dan WiFi Ruckus", "prefix": "Network", "sections": ["noc", "wifi"]},
-    "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Combined summary of Palo Alto NDR and Trend Micro XDR, plus the details of both", "title": "Report ITOC Cyber Security", "subtitle": "NDR Palo Alto dan XDR Trend Micro", "prefix": "Cyber", "sections": ["soc", "xdr"]},
-    "full": {"label": "Full", "desc": "Summary and details of all areas in one file", "title": "Report ITOC : Summary & Rincian", "subtitle": "Management Overview", "prefix": "", "sections": None},
+    "summary": {"label": "Summary", "desc": "Management summary: key figures and main charts of all areas", "title": "ITOC Report · Summary", "subtitle": "Management overview of all areas", "prefix": "Management", "sections": None, "summary": True},
+    "noc": {"label": "Links (PRTG)", "desc": "Availability, downtime, problem links, utilization", "title": "ITOC Report · Links (PRTG)", "subtitle": "Availability, downtime, and traffic of ISP links", "prefix": "Links", "sections": ["noc"]},
+    "soc": {"label": "NDR (Palo Alto)", "desc": "Threat events, severity, firewall actions, URLs", "title": "ITOC Report · NDR (Palo Alto)", "subtitle": "Threats, firewall actions, and high/critical triage", "prefix": "NDR", "sections": ["soc"]},
+    "servicedesk": {"label": "Ticketing", "desc": "Tickets received, SLA, categories, technician ranking, open tickets", "title": "ITOC Report · Ticketing", "subtitle": "ManageEngine service desk performance", "prefix": "Ticketing", "sections": ["servicedesk"]},
+    "xdr": {"label": "XDR (Trend Micro)", "desc": "Vision One alerts: severity, detection models, status, backlog", "title": "ITOC Report · XDR (Trend Micro)", "subtitle": "Vision One Workbench alerts", "prefix": "XDR", "sections": ["xdr"]},
+    "devices": {"label": "Devices", "desc": "Zabbix device status: category, type, location, devices down", "title": "ITOC Report · Devices", "subtitle": "Device status from Zabbix", "prefix": "Devices", "sections": ["devices"]},
+    "wifi": {"label": "WiFi (Ruckus)", "desc": "Active clients, Access Points, usage per SSID and AP", "title": "ITOC Report · WiFi (Ruckus)", "subtitle": "Clients and Access Points from Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
+    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links and Ruckus WiFi together", "title": "ITOC Report · Network", "subtitle": "ISP links and WiFi", "prefix": "Network", "sections": ["noc", "wifi"]},
+    "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Palo Alto NDR and Trend Micro XDR together", "title": "ITOC Report · Cyber Security", "subtitle": "Palo Alto NDR and Trend Micro XDR", "prefix": "Cyber", "sections": ["soc", "xdr"]},
+    "full": {"label": "Full", "desc": "Summary and details of all areas in one file", "title": "ITOC Report · Full", "subtitle": "Summary and details of all areas", "prefix": "", "sections": None},
 }
 
 
@@ -475,18 +474,36 @@ def _period(cfg, d1, d2):
     return p(d1) if d1 == d2 else p(d1) + " – " + p(d2)
 
 
+LIMITS = {"ringkas": (4, 2, 1, 5), "standar": (8, 4, 2, 8)}      # key figures, charts, tables, rows per table; "lengkap" is not limited
+
+
+def _compact(s, preset):
+    lim = LIMITS.get(preset)
+    if not lim:
+        return
+    k, c, t, r = lim
+    s["kpis"], s["charts"] = s["kpis"][:k], s["charts"][:c]
+    out = []
+    for tb in s["tables"][:t]:
+        n = len(tb["rows"])
+        out.append({**tb, "rows": tb["rows"][:r], "title": f"{tb['title']} (top {r} of {n})"} if n > r else tb)
+    s["tables"] = out
+
+
 def build(db, cfg, user, f, kind="full", preset="standar"):
     """kind = kunci jenis laporan. Bagian di luar izin role dibuang diam-diam."""
     ks = kinds_for(cfg, user)
     if kind.startswith("custom:"):                                  # custom: any combination of sections the role may see, e.g. custom:servicedesk,devices
         titles = dict(SECTIONS)
         keys = [x for x, _ in SECTIONS if x in kind[7:].split(",") and can_see(user, x)]
-        spec = {"key": "custom", "label": "Custom", "desc": "", "title": "Report ITOC : Custom", "subtitle": " + ".join(titles[x] for x in keys), "prefix": "", "sections": keys, "allowed": keys} if keys else None
+        spec = {"key": "custom", "label": "Custom", "desc": "", "title": "ITOC Report · Custom", "subtitle": " + ".join(titles[x] for x in keys), "prefix": "", "sections": keys, "allowed": keys} if keys else None
     else:
         spec = ks.get(kind) or ks.get("full") or (next(iter(ks.values())) if ks else None)
     if spec is None:
         return {"title": cfg.p("ui.brand_name", "Dashboard"), "sections": [], "kinds": []}
     secs = [_BUILD[k](db, cfg, f, preset) for k in spec["allowed"]]
+    for s_ in secs:
+        _compact(s_, preset)
     single = len(spec["allowed"]) == 1 and spec.get("sections")
     for s in secs:
         s["prefix"] = spec["prefix"] if single and spec.get("prefix") else s["title"]
@@ -498,8 +515,9 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
         if s["charts"]:
             overview["charts"].append({**s["charts"][0], "title": s["title"] + " · " + s["charts"][0]["title"]})
         att += [[s["title"], a] for a in s["attention"]]
+    overview["charts"] = overview["charts"][:4]
     if att:
-        overview["tables"].append(_table("Needs attention", ["Area", "Temuan"], ["t", "t"], att))
+        overview["tables"].append(_table("Needs attention", ["Area", "Finding"], ["t", "t"], att))
     filt = []
     if f.shift:
         filt.append("Shift: " + next((x["name"] for x in cfg.shifts if x["no"] == f.shift), str(f.shift)))

@@ -198,7 +198,7 @@ def to_pdf(m: dict) -> bytes:
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
     W = landscape(A4)[0] - 24 * mm
     hx = lambda c: colors.HexColor("#" + c)
     st = {"h1": ParagraphStyle("h1", fontName="Helvetica-Bold", fontSize=20, leading=24, textColor=hx(NAVY)),
@@ -234,20 +234,22 @@ def to_pdf(m: dict) -> bytes:
             flow += [t, Spacer(1, 4)]
         cw = (W - 6) / 2
         for i in range(0, len(s["charts"]), 2):
-            row = [_pdf_chart(c, cw, 190) for c in s["charts"][i:i + 2]]
+            row = [_pdf_chart(c, cw, 165) for c in s["charts"][i:i + 2]]
             row += [""] * (2 - len(row))
             gt = Table([row], colWidths=[cw + 3, cw + 3])
             gt.setStyle(TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
             flow.append(gt)
         for t in s["tables"]:
-            flow.append(P(t["title"], "h3"))
+            ttl = P(t["title"], "h3")
             data = [[P(h, "ch") for h in t["heads"]]] + [[P(fmt(v, t["kinds"][c]), "c") for c, v in enumerate(row)] for row in t["rows"]]
             wts = [3.4 if k == "t" else 1.2 for k in t["kinds"]]
             wts[0] = max(wts[0], 2.6)
             tb = Table(data, colWidths=[W * w / sum(wts) for w in wts], repeatRows=1)
             tb.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), hx(NAVY)), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F6F8FA")]),
                                     ("LINEBELOW", (0, 0), (-1, -1), .25, hx(LINE)), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-            flow.append(tb)
+            flow.append(KeepTogether([ttl, tb]) if len(t["rows"]) <= 14 else [ttl, tb][0])
+            if len(t["rows"]) > 14:
+                flow.append(tb)
 
     def deco(canvas, doc):
         canvas.saveState()

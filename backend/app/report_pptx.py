@@ -231,7 +231,7 @@ def build_from_template(m: dict) -> bytes:
         for t in sec["tables"]:
             for start in range(0, len(t["rows"]), 14):
                 part = t["rows"][start:start + 14]
-                ts = page(f"{pre} : {t['title']}" + (f" ({start // 14 + 1})" if len(t["rows"]) > 14 else ""))
+                ts = page(f"{pre} · {t['title']}" + (f" ({start // 14 + 1}/{-(-len(t['rows']) // 14)})" if len(t["rows"]) > 14 else ""))
                 _table(ts, t, part, 110)
 
     def chart_pages(sec, pre, skip):
@@ -239,13 +239,13 @@ def build_from_template(m: dict) -> bytes:
         rest = sec["charts"][skip:]
         gw, gh = W0 / 2 - 6, (Y1 - Y0) / 2 - 6
         for i in range(0, len(rest), 4):
-            s = page(f"{pre} : Charts" + (f" ({i // 4 + 1})" if len(rest) > 4 else ""))
+            s = page(f"{pre} · Charts" + (f" ({i // 4 + 1}/{-(-len(rest) // 4)})" if len(rest) > 4 else ""))
             for j, ch in enumerate(rest[i:i + 4]):
                 _chart(s, ch, X0 + (j % 2) * (gw + 12), Y0 + (j // 2) * (gh + 12), gw, gh, fs=10)
 
     is_summary = m.get("kind") == "summary"
     if ov and ov["kpis"] and (is_summary or len(secs) > 1):
-        s = page("Management : Summary Overview")
+        s = page("Summary · Overview")
         groups, order = {}, []
         for k in ov["kpis"]:
             key = k.get("sec", "")
@@ -260,10 +260,10 @@ def build_from_template(m: dict) -> bytes:
             w = W0 / len(charts)
             _chart(s, ch, X0 + i * w, y, w - 8, Y1 - y)
         if ov["tables"]:
-            tables_of(ov, "Management")
+            tables_of(ov, "Summary")
     for sec in secs:
         pre = sec.get("prefix") or sec["title"]
-        s = page(f"{pre} : Overview")
+        s = page(f"{pre} · Overview")
         y = Y0
         for n in sec["notes"]:
             _tb(s, X0, y, W0, 30, n, 16, False, GRAY, PP_ALIGN.LEFT)
