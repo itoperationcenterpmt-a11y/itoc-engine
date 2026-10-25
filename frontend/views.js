@@ -412,8 +412,9 @@ function upCards() {
     ["tickets", "Ticketing · ManageEngine", "Ekspor ManageEngine .xls / .xlsx", "upt", ".xls,.xlsx", false, "Choose XLS / XLSX", "upmsg2"],
     ["prtg", "Networking · PRTG", "PRTG daily report PDF, multiple files or .zip", "upn", ".pdf,.zip", true, "Choose PDF / ZIP", "upmsg3"]
   ].filter(c => canUp(c[0]));
-  if (!C.length) return `<div class="empty sm">No upload permission.</div>`;
-  return `<div class="uploads">${C.map(([, ttl, hint, id, acc, multi, btn, msg]) => `<div class="drop"><b>${ttl}</b><span class="sub">${hint}</span><label class="btn upbtn" for="${id}">${btn}</label><input type="file" id="${id}" accept="${acc}" ${multi ? "multiple" : ""} class="vh"><div id="${msg}"></div></div>`).join("")}</div>`;
+  const sgSites = CFG.sites, sg = canUp("sangfor") ? `<div class="drop"><b>Network · Sangfor Internet Usage</b><span class="sub">Report Center export: .xlsx files, or the .zip / .tar.gz that holds them. One site and period per upload.</span><select id="upsgSite" aria-label="Location of the Sangfor device">${sgSites.map(s => `<option ${s === (S.site || sgSites[0]) ? "selected" : ""}>${esc(s)}</option>`).join("")}</select><label class="btn upbtn" for="upsg">Choose XLSX / ZIP / TAR.GZ</label><input type="file" id="upsg" accept=".xlsx,.zip,.gz,.tgz" multiple class="vh"><div id="upsgmsg"></div></div>` : "";
+  if (!C.length && !sg) return `<div class="empty sm">No upload permission.</div>`;
+  return `<div class="uploads">${sg}${C.map(([, ttl, hint, id, acc, multi, btn, msg]) => `<div class="drop"><b>${ttl}</b><span class="sub">${hint}</span><label class="btn upbtn" for="${id}">${btn}</label><input type="file" id="${id}" accept="${acc}" ${multi ? "multiple" : ""} class="vh"><div id="${msg}"></div></div>`).join("")}</div>`;
 }
 function vData() { return subnav("report") + vDataBody(); }
 function vDataBody() {
