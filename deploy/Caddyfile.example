@@ -14,7 +14,7 @@ tera.pelindomultiterminal.co.id {
     request_body {
         max_size 50MB
     }
-    reverse_proxy tera-api:8000 {
+    reverse_proxy tera-api:9000 {
         transport http {
             response_header_timeout 900s   # sinkron manual (Panorama) bisa memakan beberapa menit
         }

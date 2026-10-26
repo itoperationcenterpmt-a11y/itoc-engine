@@ -39,7 +39,7 @@ Pemeriksaan otomatis konfigurasi: `docker compose exec api python -m app.cli sec
 ## 3. Yang harus dibereskan sebelum VAPT (butuh tindakan Anda)
 1. **Password akun uji.** Akun bawaan seed (`superadmin`, `admin`, `itoc`, `itcare`, `eos`, `management`, `superadmin1`) memakai `password123`. Ini temuan Critical. Reset lewat Admin → Pengguna (Reset password) atau nonaktifkan, dan jangan jalankan `seed-users` lagi.
 2. **`ITOC_ENV=production`** di `.env` server.
-3. **HTTPS di depan aplikasi:** sudah disediakan container `proxy` (Nginx, TLS 1.2/1.3, 80 dialihkan ke 443, IP asli klien diteruskan untuk lockout dan rate limit). Port 8000 tidak dipublikasikan. Pasang sertifikat resmi di `certs/` (lihat README). Contoh Nginx di bawah untuk proxy yang terpisah dari compose.
+3. **HTTPS di depan aplikasi:** sudah disediakan container `proxy` (Nginx, TLS 1.2/1.3, 80 dialihkan ke 443, IP asli klien diteruskan untuk lockout dan rate limit). Port 9000 tidak dipublikasikan. Pasang sertifikat resmi di `certs/` (lihat README). Contoh Nginx di bawah untuk proxy yang terpisah dari compose.
 4. **Rahasia**: `ITOC_JWT_SECRET` (min. 32 karakter acak), `ITOC_SECRET_KEY` terpisah, `DB_PASSWORD` kuat. Simpan `.env` dengan izin 600.
 5. **Verifikasi TLS konektor** saat ini Tidak (sertifikat internal). Pasang sertifikat CA internal di server lalu aktifkan verifikasi bila memungkinkan; bila tidak, catat sebagai risiko yang diterima (jaringan internal).
 6. **Jumlah Super Admin** dibatasi seperlunya, dan beri akun terpisah per orang.
@@ -71,9 +71,9 @@ server {
     ssl_prefer_server_ciphers off;
     client_max_body_size 45m;
 
-    location = /api/auth/login { limit_req zone=itoc_login burst=5 nodelay; proxy_pass http://127.0.0.1:8000; include /etc/nginx/itoc_proxy.conf; }
-    location /api/ { limit_req zone=itoc_api burst=60 nodelay; proxy_pass http://127.0.0.1:8000; include /etc/nginx/itoc_proxy.conf; }
-    location / { proxy_pass http://127.0.0.1:8000; include /etc/nginx/itoc_proxy.conf; }
+    location = /api/auth/login { limit_req zone=itoc_login burst=5 nodelay; proxy_pass http://127.0.0.1:9000; include /etc/nginx/itoc_proxy.conf; }
+    location /api/ { limit_req zone=itoc_api burst=60 nodelay; proxy_pass http://127.0.0.1:9000; include /etc/nginx/itoc_proxy.conf; }
+    location / { proxy_pass http://127.0.0.1:9000; include /etc/nginx/itoc_proxy.conf; }
 }
 # /etc/nginx/itoc_proxy.conf
 #   proxy_set_header Host $host;

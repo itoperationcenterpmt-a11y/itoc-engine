@@ -19,11 +19,11 @@ services:
       ITOC_RUN_SCHEDULER: "false"
     depends_on:
       db: {condition: service_healthy}
-    ports: ["127.0.0.1:8000:8000"]          # hanya untuk akses lokal di mesin ini; tidak terbuka ke jaringan
+    ports: ["127.0.0.1:9000:9000"]          # hanya untuk akses lokal di mesin ini; tidak terbuka ke jaringan
     networks:
       default: {}
-      edge: {aliases: [tera-api]}           # Caddy di compose lain bergabung ke jaringan tera-edge dan memanggil tera-api:8000
-    command: sh -c "python -m app.cli migrate && python -m app.cli seed-config && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --no-server-header --proxy-headers --forwarded-allow-ips='*'"
+      edge: {aliases: [tera-api]}           # Caddy di compose lain bergabung ke jaringan tera-edge dan memanggil tera-api:9000
+    command: sh -c "python -m app.cli migrate && python -m app.cli seed-config && uvicorn app.main:app --host 0.0.0.0 --port 9000 --workers 2 --no-server-header --proxy-headers --forwarded-allow-ips='*'"
   proxy:
     profiles: ["proxy"]                      # opsional, hanya bila server tidak punya Caddy/proxy lain: docker compose --profile proxy up -d
     image: nginx:1.27-alpine
@@ -58,7 +58,7 @@ services:
     environment:
       ITOC_DATABASE_URL: postgresql+psycopg://itoc:${DB_PASSWORD:-itoc}@db:5432/itoc
     depends_on: [api]
-    healthcheck: {disable: true}            # image memeriksa port 8000 yang hanya ada di api; worker tidak membuka port
+    healthcheck: {disable: true}            # image memeriksa port 9000 yang hanya ada di api; worker tidak membuka port
     command: python -m app.worker
 networks:
   edge:
