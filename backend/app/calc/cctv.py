@@ -19,8 +19,9 @@ def _has(words: list, *texts) -> bool:
     return any(w.lower() in t for w in words)
 
 
-def build(db, cfg, server: str = "", hw_name: str = "", state: str = "", kind: str = "") -> dict:
-    """Inventory with filters: server, hardware name, state (rec, norec, off, up, down, nozbx), and type (cam = cameras, pa = public announcers)."""
+def build(db, cfg, server: str = "", hw_name: str = "", state: str = "", kind: str = "", full: bool = True) -> dict:
+    """Inventory with filters: server, hardware name, state (rec, norec, off, up, down, nozbx), and type (cam = cameras, pa = public announcers).
+    full=False (Overview) skips the camera list and filter options, which only the Milestone page shows; the counts stay the same."""
     all_cams = db.query(CctvCamera).order_by(CctvCamera.server, CctvCamera.hardware, CctvCamera.channel, CctvCamera.name).all()
     all_hws = db.query(CctvHardware).order_by(CctvHardware.cameras.desc(), CctvHardware.name).all()
     src = db.get(DataSource, "milestone")
@@ -91,9 +92,9 @@ def build(db, cfg, server: str = "", hw_name: str = "", state: str = "", kind: s
     return {"configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled), "error": src.last_error if src else None,
             "total": len(cam_only), "ptz": sum(1 for c in cam_only if typ[c.id] == "ptz"), "fix": sum(1 for c in cam_only if typ[c.id] == "fix"), "camEnabled": sum(1 for c in cam_only if c.enabled), "recording": sum(1 for c in cam_only if c.recording), "noIp": sum(1 for c in cams if not c.ip),
             "pa": {"total": len(pa_only), "enabled": sum(1 for c in pa_only if c.enabled), "down": sum(1 for c in pa_only if z(c) == "down")},
-            "srv": srv, "serverErrors": ((src.cursor or {}).get("server_errors") or {}) if src else {}, "opts": opts, "zbx": {"matched": sum(1 for c in cam_only if z(c)), "up": sum(1 for c in cam_only if z(c) == "up"), "down": sum(1 for c in cam_only if z(c) == "down"),
+            "srv": srv, "serverErrors": ((src.cursor or {}).get("server_errors") or {}) if src else {}, "opts": opts if full else {}, "zbx": {"matched": sum(1 for c in cam_only if z(c)), "up": sum(1 for c in cam_only if z(c) == "up"), "down": sum(1 for c in cam_only if z(c) == "down"),
                                   "other": sum(1 for c in cam_only if z(c) in ("maintenance", "disabled", "degraded")), "none": sum(1 for c in cam_only if not z(c))},
             "nHw": len(hws), "servers": [{**s, "updated": ms(s["updated"] + (now - datetime.utcnow())) if s["updated"] else None} for s in sv.values()], "hwOff": sum(1 for h in hws if not h.enabled), "hw": hw,
-            "list": [{"name": c.name, "server": c.server, "hw": c.hardware or "-", "ip": hw_ip.get(c.hardware_id) or c.ip or "", "ch": c.channel, "enabled": c.enabled, "rec": c.recording, "fps": c.fps or "", "type": typ[c.id],
+            "list": [] if not full else [{"name": c.name, "server": c.server, "hw": c.hardware or "-", "ip": hw_ip.get(c.hardware_id) or c.ip or "", "ch": c.channel, "enabled": c.enabled, "rec": c.recording, "fps": c.fps or "", "type": typ[c.id],
                       "zbx": z(c), "zprob": (zrow[c.id].problem or "") if zrow.get(c.id) else "", "zsince": ms(zrow[c.id].down_since) if zrow.get(c.id) and zrow[c.id].down_since else None, "mod": ms(c.modified_at)} for c in cams],
             "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": bool(last) and (datetime.utcnow() - last).total_seconds() > every * 60 * 3}

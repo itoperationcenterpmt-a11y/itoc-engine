@@ -4,9 +4,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from .config import settings
-from .routers import auth, dashboard, admin, ingest, report, integrations, wifi, insight
+from .routers import auth, dashboard, admin, ingest, report, integrations, wifi, insight, system
 from . import jobs
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -30,6 +31,7 @@ app = FastAPI(title="Dashboard IT Pelindo Multi Terminal API", version="1.0", li
 _origins = [o.strip() for o in settings().cors_origins.split(",") if o.strip() and o.strip() != "*"]
 if _origins:
     app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type", "X-API-Key"])
+app.add_middleware(GZipMiddleware, minimum_size=1024)   # JSON data halaman dan file statis dikirim terkompresi
 CSP = "default-src 'self'; object-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self'; font-src 'self' data:; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 
 
@@ -53,7 +55,7 @@ async def security_headers(request, call_next):
     else:
         h["Cache-Control"] = "no-cache"      # file statis selalu divalidasi ulang (304 bila tidak berubah), supaya browser tidak memakai JS/CSS lama
     return resp
-for r in (auth.router, dashboard.router, admin.router, integrations.router, ingest.router, report.router, wifi.router, insight.router):
+for r in (auth.router, dashboard.router, admin.router, integrations.router, ingest.router, report.router, wifi.router, insight.router, system.router):
     app.include_router(r)
 
 

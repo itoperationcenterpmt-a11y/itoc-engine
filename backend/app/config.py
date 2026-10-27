@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     frontend_dir: str = "../frontend"
     run_scheduler: bool = True
     upload_max_mb: int = 40
+    restore_max_mb: int = 1024         # batas ukuran file .sql untuk Restore (Admin → System)
+    backup_dir: str = "/srv/backups"   # cadangan pengaman sebelum restore disimpan di sini
 
 
 @lru_cache

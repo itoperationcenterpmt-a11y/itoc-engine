@@ -5,7 +5,7 @@ const ADM = [
   ["sumber", "Data Sources", [["integrasi", "Integrations"], ["pemetaan", "Mapping"], ["dilengkapi", "Needs Completion"]]],
   ["operasional", "Operations", [["personel", "Personnel"], ["tim", "Teams & Shifts"], ["parameter", "Targets & Parameters"], ["rumus", "Formulas"]]],
   ["notifikasi", "Notifications", [["smtp", "Email"], ["webhooks", "Webhooks"]]],
-  ["sistem", "System", [["audit", "Audit Log"], ["status", "Source Status"], ["menu", "Menus & Widgets"], ["akses", "Page Access"]]]
+  ["sistem", "System", [["audit", "Audit Log"], ["status", "Source Status"], ["menu", "Menus & Widgets"], ["akses", "Page Access"], ["backup", "Backup & Restore"]]]
 ];
 const COLN = {id: "ID", name: "Name", kind: "Type", aliases: "Aliases", active: "Active", sort: "Order", lat: "Latitude", lon: "Longitude", sys_name: "System Name", unit: "Unit", job: "Job Title",
   team_code: "Team Code", branch: "Branch", phone: "Phone", is_coordinator: "Coordinator", is_shared: "Shared", exclude_rank: "Exclude from Ranking", code: "Code", label: "Label",
@@ -126,3 +126,46 @@ document.addEventListener("submit", async e => {
   try { await send(isNew ? "/api/admin/master/role" : "/api/admin/master/role/" + encodeURIComponent(body.key), body, isNew ? "POST" : "PUT"); INT.roleEdit = null; INT.roles = null; await reloadConfig(); INT.msg = {ok: true, t: "Role saved."}; render(false); }
   catch (er) { $("rMsg").textContent = er.message; }
 }, true);
+
+/* Admin → System → Backup & Restore: unduh cadangan .sql dan pulihkan dari .sql (hanya Super Admin). */
+const BK = {msg: null, busy: false};
+function vBackup() {
+  if (!CFG.me.is_admin) return `<div class="empty"><b>Hanya Super Admin</b><span>Backup dan restore database hanya untuk Super Admin.</span></div>`;
+  const m = BK.msg ? `<div class="msg ${BK.msg.ok ? "ok" : "err"}">${esc(BK.msg.t)}</div>` : "";
+  return `${m}<p class="sub">Cadangan berupa file .sql (pg_dump, format teks). Simpan di tempat aman: berisi data personel dan hash kata sandi.</p>
+    <form class="form formbox intform"><div class="fld wide"><span class="lbl">Backup</span></div>
+      <div class="acts wide"><button class="btn" type="button" data-bk="backup" ${BK.busy ? "disabled" : ""}>Download backup .sql</button></div></form>
+    <form class="form formbox intform" data-bk-form="restore"><div class="fld wide"><span class="lbl">Restore</span></div>
+      <p class="sub">Mengganti SELURUH isi database dengan isi file. Cadangan pengaman dibuat di server sebelum restore. Setelah restore, restart api dan worker.</p>
+      <div class="fld wide"><label for="bkFile">File .sql</label><input id="bkFile" type="file" accept=".sql" required></div>
+      <div class="fld wide"><label for="bkConfirm">Ketik RESTORE untuk konfirmasi</label><input id="bkConfirm" type="text" autocomplete="off" required></div>
+      <div class="acts wide"><button class="btn" type="submit" ${BK.busy ? "disabled" : ""}>Restore database</button></div></form>`;
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-bk]"); if (!b) return;
+  BK.busy = true; BK.msg = null; render(false);
+  try {
+    const r = await fetch("/api/admin/system/backup", {credentials: "same-origin", headers: {"X-Requested-With": "itoc"}});
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "HTTP " + r.status);
+    const name = (r.headers.get("content-disposition") || "").match(/filename="([^"]+)"/)?.[1] || "itoc-backup.sql";
+    const url = URL.createObjectURL(await r.blob()), a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    BK.msg = {ok: true, t: "Cadangan " + name + " diunduh."};
+  } catch (er) { BK.msg = {ok: false, t: er.message}; }
+  BK.busy = false; render(false);
+});
+document.addEventListener("submit", async e => {
+  const f = e.target.closest("[data-bk-form]"); if (!f) return; e.preventDefault();
+  const file = document.getElementById("bkFile").files[0], conf = document.getElementById("bkConfirm").value;
+  if (!file) { BK.msg = {ok: false, t: "Pilih file .sql dulu."}; render(false); return; }
+  if (conf.trim() !== "RESTORE") { BK.msg = {ok: false, t: "Ketik RESTORE untuk konfirmasi."}; render(false); return; }
+  if (!window.confirm("Restore akan MENGGANTI seluruh data database dengan isi " + file.name + ". Lanjutkan?")) return;
+  const fd = new FormData(); fd.append("file", file); fd.append("confirm", conf);
+  BK.busy = true; BK.msg = {ok: true, t: "Memulihkan database… jangan tutup halaman ini."}; render(false);
+  try {
+    const r = await send("/api/admin/system/restore", fd);
+    BK.msg = {ok: true, t: "Restore selesai. Cadangan pengaman: " + r.pre_backup + ". " + (r.warning ? "PERINGATAN: " + r.warning + " " : "") + "Restart api dan worker."};
+  } catch (er) { BK.msg = {ok: false, t: er.message}; }
+  BK.busy = false; render(false);
+});

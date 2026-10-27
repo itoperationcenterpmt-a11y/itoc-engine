@@ -153,7 +153,7 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
     if tab == "insight" or (tab in INSIGHT_TABS and ok("insight")):
         V["insight"] = INSIGHT.build(db, cfg, full=tab == "insight")
     if tab == "cctv" or (tab == "ringkasan" and ok("cctv")):
-        V["cctv"] = CCTV.build(db, cfg, f.grp, f.dtype, f.dstat, f.kind) if tab == "cctv" else CCTV.build(db, cfg)
+        V["cctv"] = CCTV.build(db, cfg, f.grp, f.dtype, f.dstat, f.kind) if tab == "cctv" else CCTV.build(db, cfg, full=False)
     if tab == "wifi":
         V["wifi"] = WIFI.build(db, cfg, user, zone=f.dtype, ssid=f.grp, band=f.kind, site=st, a=f.d_from, b=f.d_to)
     if tab in ("ringkasan", "network") and ok("wifi"):

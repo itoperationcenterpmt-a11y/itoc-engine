@@ -473,5 +473,6 @@ function vAdmin() {
   if (S.adm === "status") body = vSourceStatus();
   if (S.adm === "akses") body = vAccess();
   if (S.adm === "audit") body = vAudit();
+  if (S.adm === "backup") body = vBackup();
   return `<div class="grid"><section class="panel c12">${admNav()}${body}</section></div>`;
 }

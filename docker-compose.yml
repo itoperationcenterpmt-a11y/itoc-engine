@@ -17,6 +17,8 @@ services:
     environment:
       ITOC_DATABASE_URL: postgresql+psycopg://itoc:${DB_PASSWORD:-itoc}@db:5432/itoc
       ITOC_RUN_SCHEDULER: "false"
+    volumes:
+      - ./backups/manual:/srv/backups        # cadangan pengaman dari Admin → System → Restore (terpisah dari backup terjadwal)
     depends_on:
       db: {condition: service_healthy}
     ports: ["127.0.0.1:9000:9000"]          # hanya untuk akses lokal di mesin ini; tidak terbuka ke jaringan
