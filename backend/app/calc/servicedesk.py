@@ -61,11 +61,39 @@ def group(D, key, n_total):
     return sorted(out, key=lambda x: (-x["n"], x["k"]))
 
 
-def calc(rows: list[list], cfg: Config, d_from: date, d_to: date, shift: int = 0, people: list[dict] | None = None, now: datetime | None = None) -> dict:
+def group_names(cfg: Config) -> list[str]:
+    """Groups that tickets are ranked under: Team ITOC 1-4 and Head Office."""
+    return ["Team " + t["code"] for t in cfg.clock.teams] + ["Head Office"]
+
+
+def group_of(cfg: Config, ppl: list[dict]):
+    """Returns the function that gives a ticket's group (Team ITOC 1-4 or Head Office, None when unassigned). Tickets from shared duty accounts go to the team on duty when the ticket was created."""
+    clk, duty = cfg.clock, set(cfg.p("sd.duty_accounts") or [])
+    team_by_sys = {p["sys"]: p["team_code"] for p in ppl if p["team_code"]}
+    ho_sys = {p["sys"] for p in ppl if (p["branch"] or "").strip().lower() == "head office" and not p["is_shared"]}
+
+    def grp_of(d):
+        tech = d["t"][7]
+        if tech in team_by_sys:
+            return "Team " + team_by_sys[tech]
+        if tech in duty:
+            c = d["t"][12]
+            tm = clk.team_on(clk.duty_date(c), clk.shift_of(c.hour))
+            return "Team " + tm["code"] if tm else None
+        return "Head Office" if tech in ho_sys else None
+    return grp_of
+
+
+def calc(rows: list[list], cfg: Config, d_from: date, d_to: date, shift: int = 0, people: list[dict] | None = None, now: datetime | None = None, only_group: str = "", only_tech: str = "") -> dict:
     a = datetime.combine(d_from, datetime.min.time())
     b = datetime.combine(d_to, datetime.min.time()) + timedelta(days=1)
     clk = cfg.clock
     D = [derive(t, cfg) for t in rows if t[12] is not None and a <= t[12] < b and (not shift or clk.shift_of(t[12].hour) == shift)]
+    grp_of = group_of(cfg, people if people is not None else cfg.people)
+    if only_group:                                              # report per group: only that group's tickets
+        D = [d for d in D if grp_of(d) == only_group]
+    if only_tech:                                               # report per technician: only tickets assigned to that person (roster key, see report.build)
+        D = [d for d in D if d["t"][7] == only_tech]
     n, days = len(D), (b - a).days
     R = {"n": n, "days": days, "perDay": n / days if days else 0}
     daily, idx = [], {}
@@ -146,20 +174,9 @@ def calc(rows: list[list], cfg: Config, d_from: date, d_to: date, shift: int = 0
         unit = "" if not p else (p["unit"] + " · " + (p["branch"] or "") if p["branch"] else "Team " + p["team_code"] if p["team_code"] else p["unit"])
         rk.append({"name": p["name"] if p else sys, "unit": unit, **{k: g[k] for k in empty}, "high": sum(1 for d in L if d["t"][10] == high),
                    "inc": inc, "okPct": 1 - inc / g["n"] if g["n"] else None, "loc": loc["k"] if loc else ""})
-    # ranking grup: Team ITOC 1-4 dan Head Office. Tiket akun bersama tim jaga masuk ke tim yang bertugas saat tiket dibuat.
-    clk, duty = cfg.clock, set(cfg.p("sd.duty_accounts") or [])
-    team_by_sys = {p["sys"]: p["team_code"] for p in ppl if p["team_code"]}
+    # ranking grup: Team ITOC 1-4 dan Head Office (lihat group_of)
+    clk = cfg.clock
     ho_sys = {p["sys"] for p in ppl if (p["branch"] or "").strip().lower() == "head office" and not p["is_shared"]}
-
-    def grp_of(d):
-        tech = d["t"][7]
-        if tech in team_by_sys:
-            return "Team " + team_by_sys[tech]
-        if tech in duty:
-            c = d["t"][12]
-            tm = clk.team_on(clk.duty_date(c), clk.shift_of(c.hour))
-            return "Team " + tm["code"] if tm else None
-        return "Head Office" if tech in ho_sys else None
     gl = {}
     for d in D:
         k = grp_of(d)

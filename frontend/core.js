@@ -64,7 +64,7 @@ const prTone = v => ((CFG.params["ho.priorities"] || []).find(x => x.value === v
 const roleAccess = k => { const r = CFG.roles[k]; if (!r) return "–"; return r.modules.includes("*") ? "All" : r.modules.map(m => (MODS[m] || {label: m}).label).join(", "); };
 
 /* ---------- state + filter seragam ---------- */
-const S = {tab: "", pers: "", rkind: "", rpreset: "standar", layEdit: false, layRole: "", preset: "", from: "", to: "", sf: 0, site: "", kind: "", dstat: "", grp: "", dtype: "", cmp: false, dim: "kategori", sdim: "type", stop: "", sensor: "", hoSt: "open", adm: "pengguna", hoForm: false, closing: null, msg: "", addUser: false, params: null, mkey: "", mdata: null, medit: null};
+const S = {tab: "", pers: "", rkind: "", rpreset: "standar", layEdit: false, layRole: "", preset: "", from: "", to: "", sf: 0, site: "", kind: "", dstat: "", grp: "", dtype: "", rgrp: "", rtech: "", cmp: false, dim: "kategori", sdim: "type", stop: "", sensor: "", hoSt: "open", adm: "pengguna", hoForm: false, closing: null, msg: "", addUser: false, params: null, mkey: "", mdata: null, medit: null};
 function setPreset(p) {
   const t = nowShift().today, d = new Date(dayMs(t)); S.preset = p;
   if (p === "hari") S.from = S.to = t;

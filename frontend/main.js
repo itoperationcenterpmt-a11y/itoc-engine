@@ -4,12 +4,12 @@ try { if (localStorage.getItem("itoc.rail")) { document.addEventListener("DOMCon
 const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, devnet: vDevices, devcctv: vDevices, devops: vDevices, wifi: vWifi, xdr: vXdr, cctv: vCctv, internet: vInternet, insight: vInsight, network: vNetwork, cyber: vCyber, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
-const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype"];
+const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype", "rgrp", "rtech"];
 let seq = 0;
 async function render(reload) {
   writeHash(); renderShell();
   if (reload) {
-    const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset, kind: S.kind, dstat: S.dstat, grp: S.grp, dtype: S.dtype}), my = ++seq;
+    const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset, kind: S.kind, dstat: S.dstat, grp: S.grp, dtype: S.dtype, ...ticketQ()}), my = ++seq;
     $("view").classList.add("loading");
     try { const v = await api(`/api/view/${S.tab}?${q}`); if (my !== seq) return; V = v; }
     catch (e) { if (my === seq) $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty(esc(e.message))}</section></div>`; return; }
@@ -26,7 +26,7 @@ function lockAdmin() {
   v.insertAdjacentHTML("afterbegin", `<div class="msg" style="margin-bottom:10px">Read-only</div>`);
 }
 async function downloadReport(kind, btn) {
-  const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, kind: S.rkind === "custom" ? "custom:" + (S.rsecs || []).join(",") : S.rkind || "full", preset: S.rpreset}), old = btn.innerHTML;
+  const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, kind: S.rkind === "custom" ? "custom:" + (S.rsecs || []).join(",") : S.rkind || "full", preset: S.rpreset, ...ticketQ()}), old = btn.innerHTML;
   btn.disabled = true; btn.textContent = "Menyiapkan…";
   try {
     const r = await fetch(`/api/report/${kind}?${q}`, {credentials: "same-origin"});
@@ -158,6 +158,9 @@ const refresh = (o, keepMsg) => { Object.assign(S, o || {}); if (!keepMsg) S.msg
 async function reloadConfig() { applyConfig(await api("/api/config")); }
 
 /* ---------- Admin: parameter generik ---------- */
+/* Group and technician for the Ticketing section of a report: sent only when that section is part of the report. */
+const ticketOn = () => S.rkind === "servicedesk" || (S.rkind === "custom" && (S.rsecs || []).includes("servicedesk"));
+const ticketQ = () => ticketOn() ? {rgrp: S.rgrp || "", rtech: S.rtech || ""} : {};
 async function loadParams() { try { S.params = await api("/api/admin/params"); S.opts = await api("/api/admin/options").catch(() => null); S.ts = await api("/api/admin/turnstile").catch(() => null); } catch (e) { S.params = []; S.msg = e.message; } render(false); }
 /* Parameters that name things which already exist are chosen from live lists (GET /api/admin/options) instead of typed. */
 const PARAM_VAL = k => ((S.params || []).find(x => x.key === k) || {}).value || [];
@@ -334,6 +337,8 @@ document.addEventListener("change", async e => {
   if (t.id === "fFrom" || t.id === "fTo") { let f = $("fFrom").value, to = $("fTo").value; if (!f || !to) return; if (f > to) [f, to] = [to, f]; set({preset: "", from: f, to}); }
   else if (t.id === "fSite") set({site: t.value});
   else if (t.id === "fGrp") set(S.tab === "cctv" ? {grp: t.value, dtype: ""} : {grp: t.value});
+  else if (t.id === "rgrp") set({rgrp: t.value});
+  else if (t.id === "rtech") set({rtech: t.value});
   else if (t.id === "fTyp") set({dtype: t.value});
   else if (t.id === "fCmp") set({cmp: t.checked});
   else if (t.dataset.rkind) set({rkind: t.dataset.rkind});

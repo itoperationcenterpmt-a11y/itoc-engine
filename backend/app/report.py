@@ -9,7 +9,7 @@ Bentuk model (aman untuk JSON):
   kind angka: n = bulat, f0/f1/f2 = desimal, p0/p1/p2 = persen dari pecahan, t = teks."""
 from datetime import datetime, timedelta
 from . import views as VW
-from .calc import soc as SOC, soc_fw as SOCFW
+from .calc import soc as SOC, soc_fw as SOCFW, servicedesk as SD
 from .security import can_see
 
 SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)"), ("internet", "Internet Usage")]
@@ -115,7 +115,7 @@ def _pick(cfg, section, ids, preset, charts):
 
 # ---------------- bagian ----------------
 def _servicedesk(db, cfg, f, preset="standar"):
-    T = VW._tk(db, cfg, f.d_from, f.d_to, f.shift, f.site)
+    T = VW._tk(db, cfg, f.d_from, f.d_to, f.shift, f.site, getattr(f, "rgrp", ""), getattr(f, "rtech", ""))
     s = {"key": "servicedesk", "title": "Ticketing", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not T["n"]:
         s["notes"].append("No tickets in this period and filter.")
@@ -555,10 +555,14 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     if f.shift:
         filt.append("Shift: " + next((x["name"] for x in cfg.shifts if x["no"] == f.shift), str(f.shift)))
     filt.append("Location: " + (f.site or "All locations"))
+    if getattr(f, "rgrp", ""):
+        filt.append("Group: " + f.rgrp)
+    if getattr(f, "rtech", ""):
+        filt.append("Technician: " + next((p["name"].strip() for p in cfg.people if p["sys"] == f.rtech), f.rtech))
     summary = bool(spec.get("summary"))
     body = [overview] if summary else ([overview] if overview["kpis"] and len(secs) > 1 else []) + secs
     return {"title": cfg.p("ui.brand_name", "Dashboard"), "kind": spec["key"], "subtitle": spec["title"], "tagline": spec["subtitle"], "prefix": spec.get("prefix", ""),
             "company": cfg.p("report.company", ""), "contact": cfg.p("report.contact", {}), "period": _period(cfg, f.d_from, f.d_to),
             "preset": preset, "filters": filt, "generated": cfg.now().strftime("%d/%m/%Y %H.%M") + " WIB", "by": user.full_name, "sections": body,
             "kinds": [{"key": k, "label": v["label"], "desc": v["desc"], "sections": v["allowed"]} for k, v in ks.items()],
-            "avail": [{"key": x, "label": t} for x, t in SECTIONS if can_see(user, x)]}
+            "avail": [{"key": x, "label": t} for x, t in SECTIONS if can_see(user, x)], "groups": SD.group_names(cfg), "techs": [{"key": p["sys"], "label": p["name"].strip()} for p in sorted(cfg.people, key=lambda p: p["name"].strip()) if p["sys"] and not p["is_shared"] and not p["exclude_rank"]]}

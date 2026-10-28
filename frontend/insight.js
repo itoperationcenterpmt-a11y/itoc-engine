@@ -29,7 +29,9 @@ const INS_ONLY = {soc: "soc", xdr: "xdr"};                                  /* N
 const INS_ALWAYS = ["xdr", "soc", "wifi", "cctv", "servicedesk", "network", "cyber", "devices"];                      /* pages where the panel stays visible even with no findings */
 function insArea(tab = S.tab) {
   const I = V.insight, kinds = INS_AREA[tab];
-  return I && kinds && (INS_ALWAYS.includes(tab) || I.open.some(r => kinds.includes(r.kind) && (!INS_ONLY[tab] || r.tab === INS_ONLY[tab]))) ? `<div class="grid">${insightPanel(I, 4, "c12", kinds, INS_ONLY[tab])}</div>` : "";
+  if (!(I && kinds && (INS_ALWAYS.includes(tab) || I.open.some(r => kinds.includes(r.kind) && (!INS_ONLY[tab] || r.tab === INS_ONLY[tab]))))) return "";
+  const h = I.siteHealth, head = I.site ? `<div class="kpis k6">${kpi("Location", esc(I.site), "")}${kpi("Health score", h ? fmt(h.score) : "–", "")}${kpi("Link availability", h && h.link != null ? pc(h.link, 2) : "–", "")}${kpi("Devices down", h && h.devTotal ? fmt(h.devDown) + " / " + fmt(h.devTotal) : "–", "")}${kpi("Tickets past SLA", fmt(h ? h.overdue : 0), "", {cls: h && h.overdue ? "warnv" : ""})}</div>` : "";
+  return `${head}<div class="grid">${insightPanel(I, 4, "c12", kinds, INS_ONLY[tab])}</div>`;
 }
 async function insSum() {
   const sc = S.sumScope || "24h", q = "scope=" + sc + (S.sumDay && sc !== "24h" ? "&day=" + S.sumDay : "");

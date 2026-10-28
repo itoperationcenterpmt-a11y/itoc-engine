@@ -11,9 +11,10 @@ from .security import can_see, locked_pages
 
 
 class Filt:
-    def __init__(self, d_from: date, d_to: date, shift: int, site: str, cmp: bool, sensor: str = "", kind: str = "", dstat: str = "", grp: str = "", dtype: str = ""):
+    def __init__(self, d_from: date, d_to: date, shift: int, site: str, cmp: bool, sensor: str = "", kind: str = "", dstat: str = "", grp: str = "", dtype: str = "", rgrp: str = "", rtech: str = ""):
         self.d_from, self.d_to, self.shift, self.site, self.cmp, self.sensor = d_from, d_to, shift, site, cmp, sensor
         self.kind, self.dstat, self.grp, self.dtype = kind, dstat, grp, dtype       # filter kategori dan status (menu Devices)
+        self.rgrp, self.rtech = rgrp, rtech                                          # grup dan teknisi untuk laporan Ticketing
 
     @property
     def prev(self):
@@ -39,7 +40,7 @@ def _canon_counts(db, counts: dict) -> dict:
         out[c] = out.get(c, 0) + v
     return out
 
-def _tk(db, cfg: Config, a: date, b: date, shift: int, site: str):
+def _tk(db, cfg: Config, a: date, b: date, shift: int, site: str, group: str = "", tech: str = ""):
     def run():
         q = select(M.Ticket).where(M.Ticket.created_at >= datetime.combine(a, datetime.min.time()),
                                    M.Ticket.created_at < datetime.combine(b, datetime.min.time()) + timedelta(days=1))
@@ -47,8 +48,8 @@ def _tk(db, cfg: Config, a: date, b: date, shift: int, site: str):
             q = q.where(_tsite(db, site))
         rows = SD.as_rows(db.scalars(q.order_by(M.Ticket.created_at)))
         ppl = [p for p in cfg.people if not site or not p["branch"] or p["branch"] == site]
-        return SD.calc(rows, cfg, a, b, shift, ppl)
-    return cached(("tk", a, b, shift, site), run)
+        return SD.calc(rows, cfg, a, b, shift, ppl, only_group=group, only_tech=tech)
+    return cached(("tk", a, b, shift, site, group, tech), run)
 
 
 def _net_base(db, cfg, a, b, shift, site):
@@ -151,7 +152,7 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
     if tab in ("ringkasan", "servicedesk", "noc", "network", "cyber", "devices"):
         V["viz"] = VIZ.build(db, cfg, a, b, _tsite(db, st) if st else None)
     if tab == "insight" or (tab in INSIGHT_TABS and ok("insight")):
-        V["insight"] = INSIGHT.build(db, cfg, full=tab == "insight")
+        V["insight"] = INSIGHT.build(db, cfg, full=tab == "insight", site=st if tab in ("network", "noc") else "")
     if tab == "cctv" or (tab == "ringkasan" and ok("cctv")):
         V["cctv"] = CCTV.build(db, cfg, f.grp, f.dtype, f.dstat, f.kind) if tab == "cctv" else CCTV.build(db, cfg, full=False)
     if tab == "wifi":
