@@ -158,7 +158,7 @@ def _servicedesk(db, cfg, f, preset="standar"):
     if any(r["n"] for r in gr):
         s["tables"].append(_table("Group ranking", ["#", "Group", "Members", "Tickets", "Done", "Open", "Average (h)", "Within SLA"], ["n", "t", "n", "n", "n", "n", "f1", "p1"],
                                   [[r["rank"], r["name"], r["members"], r["n"], r["done"], r["open"], r["avg"], r["inPct"]] for r in gr]))
-    rk = [r for r in T["ranking"] if r["n"]][:15]
+    rk = list(T["ranking"])   # semua teknisi di roster, termasuk yang belum punya tiket
     if rk:
         s["tables"].append(_table("Technician ranking", ["#", "Name", "Unit", "Tickets", "Done", "Open", "Average (h)", "Within SLA"], ["n", "t", "t", "n", "n", "n", "f1", "p1"],
                                   [[r["rank"], r["name"], r["unit"], r["n"], r["done"], r["open"], r["avg"], r["inPct"]] for r in rk]))
