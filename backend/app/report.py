@@ -217,6 +217,7 @@ def _noc_links(db, cfg, f):
     for sid, t, ai, ao, mi, mo, dn, hrs in rows:
         by.setdefault(sid, []).append((t, ai or 0, ao or 0, max(mi or 0, mo or 0), dn or 0, hrs or 0))
     order = sorted(by, key=lambda i: (-sum(x[4] for x in by[i]), -sum(x[1] + x[2] for x in by[i])))
+    order.sort(key=lambda i: (sensors[i][1] or "").lower())                 # grouped by location, links with the most downtime first inside each group
     step = 3600 if hourly else 86400
     res = "1 h Average" if hourly else "1 d Average"
     summary = []
@@ -230,7 +231,7 @@ def _noc_links(db, cfg, f):
         n = max(len(pts), 1)
         mb = lambda v: sum(v) * step / 8                                    # Mbit/s over the step -> megabytes
         events = sum(1 for x in pts if x[4] > 0)
-        s["charts"].append({"title": name, "sub": dev, "kind": "prtg", "labels": [label(x[0]) for x in pts], "res": res, "sid": sid, "unit": "Mbit/s",
+        s["charts"].append({"title": name, "sub": dev, "kind": "prtg", "group": dev or "", "labels": [label(x[0]) for x in pts], "res": res, "sid": sid, "unit": "Mbit/s",
                             "series": [{"name": "Traffic Total", "color": "1F2A5C", "values": tot}, {"name": "Traffic In", "color": "5AA3A0", "values": tin}, {"name": "Traffic Out", "color": "D6558F", "values": tout}],
                             "down": [round(x[4] / step * 100, 3) for x in pts],
                             "rows": [["Traffic Total", f"{fmt_n(round(sum(tot) / n))} Mbit/s", f"{fmt_n(round(mb(tot)))} MB"], ["Traffic In", f"{fmt_n(round(sum(tin) / n))} Mbit/s", f"{fmt_n(round(mb(tin)))} MB"],

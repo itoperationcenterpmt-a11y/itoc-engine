@@ -312,7 +312,7 @@ def to_pdf(m: dict) -> bytes:
     hx = lambda c: colors.HexColor("#" + c)
     st = {"h1": ParagraphStyle("h1", fontName="Helvetica-Bold", fontSize=20, leading=24, textColor=hx(NAVY)),
           "h2": ParagraphStyle("h2", fontName="Helvetica-Bold", fontSize=14, leading=18, textColor=hx(NAVY), spaceBefore=4, spaceAfter=4),
-          "h3": ParagraphStyle("h3", fontName="Helvetica-Bold", fontSize=10.5, leading=14, textColor=hx(BLUE), spaceBefore=8, spaceAfter=3),
+          "h3": ParagraphStyle("h3", fontName="Helvetica-Bold", fontSize=10.5, leading=14, textColor=hx(BLUE), spaceBefore=8, spaceAfter=3, keepWithNext=1),
           "sub": ParagraphStyle("sub", fontName="Helvetica", fontSize=9, leading=12, textColor=hx(MUTED)),
           "lab": ParagraphStyle("lab", fontName="Helvetica", fontSize=7.5, leading=9, textColor=hx(MUTED)),
           "val": ParagraphStyle("val", fontName="Helvetica-Bold", fontSize=17, leading=20, textColor=hx(NAVY)),
@@ -342,7 +342,15 @@ def to_pdf(m: dict) -> bytes:
                                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F6F8FA")), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
             flow += [t, Spacer(1, 4)]
         cw = (W - 6) / 2
+        grp_n = {}
+        for c in s["charts"]:
+            if c["kind"] == "prtg":
+                grp_n[c["group"]] = grp_n.get(c["group"], 0) + 1
+        last = None
         for c in [c for c in s["charts"] if c["kind"] == "prtg"]:
+            if c["group"] != last:
+                last = c["group"]
+                flow.append(P(f"{last or 'Other'} · {grp_n[last]} link{'s' if grp_n[last] != 1 else ''}", "h3"))
             rows = [[P(h, "ch") for h in ("Channel", "Average", "Total")]] + [[P(v, "c") for v in r] for r in c["rows"]]
             tb = Table(rows, colWidths=[W * .30 * .30, W * .30 * .33, W * .30 * .37])
             tb.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), hx(NAVY)), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F6F8FA")]),
