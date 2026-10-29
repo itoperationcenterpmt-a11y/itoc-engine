@@ -56,7 +56,7 @@ def _coerce(col, v):
 
 ICONS = ["dashboard", "ticket", "activity", "wifi", "cctv", "xdr", "camera", "server", "shield", "users", "handover", "database", "sliders", "report", "calendar"]
 FILTERS = [("p", "Period"), ("s", "Shift"), ("l", "Location"), ("c", "Compare with previous period"), ("k", "Category / type buttons"), ("t", "Status buttons"), ("g", "Group list"), ("y", "Type list")]
-SECTIONS_ = [("servicedesk", "Ticketing"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)")]
+SECTIONS_ = [("servicedesk", "Ticketing"), ("performance", "Performance"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)")]
 
 
 def _distinct(db, col):

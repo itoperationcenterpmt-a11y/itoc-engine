@@ -12,7 +12,8 @@ from . import views as VW
 from .calc import soc as SOC, soc_fw as SOCFW, servicedesk as SD
 from .security import can_see
 
-SECTIONS = [("servicedesk", "Ticketing"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)"), ("internet", "Internet Usage")]
+PERM = {"performance": "servicedesk"}                                   # sections that share the access of another module
+SECTIONS = [("servicedesk", "Ticketing"), ("performance", "Performance"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)"), ("internet", "Internet Usage")]
 WEEKLY_AFTER = 31  # rentang harian lebih panjang dari ini diringkas per minggu (sama dengan dashboard Excel)
 _UK = {"type": "Threat type", "action": "Action", "severity": "Severity"}
 
@@ -174,6 +175,51 @@ def _servicedesk(db, cfg, f, preset="standar"):
         s["attention"].append(f"{fmt_n(T['open'])} tickets still open")
     return s
 
+
+
+def _performance(db, cfg, f, preset="standar"):
+    """Technician, team, and shift performance from the tickets assigned to them: volume, completion, resolution time, SLA, input quality, each against the previous period of the same length."""
+    g, tk = getattr(f, "rgrp", ""), getattr(f, "rtech", "")
+    T = VW._tk(db, cfg, f.d_from, f.d_to, f.shift, f.site, g, tk)
+    pa, pb = f.prev
+    P = VW._tk(db, cfg, pa, pb, f.shift, f.site, g, tk)
+    s = {"key": "performance", "title": "Performance", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    if not T["n"]:
+        s["notes"].append("No tickets in this period and filter.")
+        return s
+    s["notes"].append("Tickets are counted to the technician assigned in ManageEngine; tickets from shared duty accounts count to the team on duty. Changes compare with the previous period of the same length (" + _period(cfg, pa, pb) + ").")
+    diff = lambda a, b, k=1: None if a is None or b is None else (a - b) * k
+    prev_t, prev_g = {r["name"]: r for r in P["ranking"]}, {r["name"]: r for r in P["groupRanking"]}
+    rk = [r for r in T["ranking"] if r["n"]]
+    gr = [r for r in T["groupRanking"] if r["n"]]
+    sla_d = diff(T["slaPct"], P.get("slaPct"), 100)
+    s["kpis"] = [_kpi("Technicians with tickets", len(rk), "n", ""), _kpi("Tickets assigned", T["n"], "n", f"{T['n'] - P['n']:+,} vs previous period".replace(",", ".") if P.get("n") else ""),
+                 _kpi("Completion rate", T["doneRate"], "p1", fmt_n(T["open"]) + " still open"), _kpi("Within SLA target", T["slaPct"], "p1", (f"{sla_d:+.1f} pp vs previous period" if sla_d is not None else "")),
+                 _kpi("Average duration (hours)", T["avgH"], "f1", ""), _kpi("Incomplete input", T["incomplete"] / T["n"], "p1", fmt_n(T["incomplete"]) + " tickets")]
+    hrs = {}
+    for h, v in enumerate(T["hours"]):
+        no = cfg.clock.shift_of(h)
+        hrs[no] = hrs.get(no, 0) + v
+    names = {x["no"]: x["name"] for x in cfg.shifts}
+    s["charts"] = [c for c in (
+        _top("Tickets per technician", [(r["name"], r["n"]) for r in rk], "Tickets", 15),
+        _chart("Within SLA per team (%)", [r["name"] for r in gr], [{"name": "Within SLA", "values": [round((r["inPct"] or 0) * 100, 1) for r in gr]}]) if gr else None,
+        _chart("Tickets received per shift", [names.get(no, str(no)) for no in sorted(hrs)], [{"name": "Tickets", "values": [hrs[no] for no in sorted(hrs)]}]) if len(hrs) > 1 else None) if c]
+    dt = lambda r, pv: [r["n"] - pv["n"] if pv else None, diff(r["inPct"], pv["inPct"] if pv else None, 100)]
+    if gr:
+        s["tables"].append(_table("Team performance", ["#", "Team", "Members", "Tickets", "Done", "Open", "Completion", "Average (h)", "Within SLA", "Tickets vs prev.", "SLA vs prev. (pp)"],
+                                  ["n", "t", "n", "n", "n", "n", "p1", "f1", "p1", "n", "f1"],
+                                  [[r["rank"], r["name"], r["members"], r["n"], r["done"], r["open"], r["done"] / r["n"], r["avg"], r["inPct"], *dt(r, prev_g.get(r["name"]))] for r in gr]))
+    s["tables"].append(_table("Technician performance", ["#", "Technician", "Unit", "Tickets", "Done", "Open", "Completion", "Average (h)", "Within SLA", "High priority", "Incomplete input", "Zero-minute", "Tickets vs prev.", "SLA vs prev. (pp)"],
+                              ["n", "t", "t", "n", "n", "n", "p1", "f1", "p1", "n", "p1", "n", "n", "f1"],
+                              [[r["rank"], r["name"], r["unit"], r["n"], r["done"], r["open"], r["done"] / r["n"], r["avg"], r["inPct"], r["high"], 1 - r["okPct"] if r["okPct"] is not None else None, r["zero"], *dt(r, prev_t.get(r["name"]))] for r in rk]))
+    idle = [r for r in T["ranking"] if not r["n"]]
+    if idle and not (f.site or g or tk):
+        s["notes"].append(f"{len(idle)} technicians on the roster had no tickets in this period.")
+    low = [r for r in rk if r["n"] >= 5 and r["okPct"] is not None and r["okPct"] < 0.5]
+    if low:
+        s["attention"].append("Input is incomplete on more than half of the tickets of " + ", ".join(r["name"] for r in low[:5]))
+    return s
 
 
 def _isp_of(cfg, name):
@@ -533,12 +579,13 @@ def _internet(db, cfg, f, preset="standar"):
     return s
 
 
-_BUILD = {"servicedesk": _servicedesk, "internet": _internet, "noc": _noc, "soc": _soc, "devices": _devices, "wifi": _wifi, "xdr": _xdr}
+_BUILD = {"servicedesk": _servicedesk, "performance": _performance, "internet": _internet, "noc": _noc, "soc": _soc, "devices": _devices, "wifi": _wifi, "xdr": _xdr}
 
 # Jenis laporan (bisa diubah di Admin → Operasional → Target dan Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
     "summary": {"label": "Summary", "desc": "Management summary: key figures and main charts of all areas", "title": "IT Operation Center - Summary Report", "subtitle": "Management overview of all areas", "prefix": "Management", "sections": None, "summary": True},
     "noc": {"label": "Links (PRTG)", "desc": "Availability, downtime, problem links, utilization", "title": "IT Operation Center - Links (PRTG) Report", "subtitle": "Availability, downtime, and traffic of ISP links", "prefix": "Links", "sections": ["noc"]},
+    "performance": {"label": "Performance", "desc": "Per technician, team, and shift: tickets, completion, SLA, input quality, and change from the previous period", "title": "IT Operation Center - Performance Report", "subtitle": "Technician, team, and shift performance from ManageEngine tickets", "prefix": "Performance", "sections": ["performance"]},
     "soc": {"label": "NDR (Palo Alto)", "desc": "Threat events, severity, firewall actions, URLs", "title": "IT Operation Center - NDR (Palo Alto) Report", "subtitle": "Threats, firewall actions, and high/critical triage", "prefix": "NDR", "sections": ["soc"]},
     "servicedesk": {"label": "Ticketing", "desc": "Tickets received, SLA, categories, technician ranking, open tickets", "title": "IT Operation Center - Ticketing Report", "subtitle": "ManageEngine service desk performance", "prefix": "Ticketing", "sections": ["servicedesk"]},
     "xdr": {"label": "XDR (Trend Micro)", "desc": "Vision One alerts: severity, detection models, status, backlog", "title": "IT Operation Center - XDR (Trend Micro) Report", "subtitle": "Vision One Workbench alerts", "prefix": "XDR", "sections": ["xdr"]},
@@ -551,7 +598,7 @@ DEFAULT_KINDS = {
 }
 
 
-_ORDER = ["summary", "network", "cyber", "servicedesk", "noc", "wifi", "internet", "soc", "xdr", "devices", "full"]
+_ORDER = ["summary", "network", "cyber", "servicedesk", "performance", "noc", "wifi", "internet", "soc", "xdr", "devices", "full"]
 DEFAULT_KINDS = {k: DEFAULT_KINDS[k] for k in _ORDER}
 
 
@@ -560,7 +607,7 @@ def kinds_for(cfg, user):
     kd = {k: {**v, **((cfg.p("report.kinds") or {}).get(k) or {})} for k, v in DEFAULT_KINDS.items()}
     out = {}
     for k, v in kd.items():
-        keys = [x for x, _ in SECTIONS if (v.get("sections") is None or x in v["sections"]) and can_see(user, x)]
+        keys = [x for x, _ in SECTIONS if (v.get("sections") is None or x in v["sections"]) and can_see(user, PERM.get(x, x)) and not (x == "performance" and k in ("full", "summary"))]
         if keys and (k != "full" or len(keys) > 1):
             out[k] = {**v, "key": k, "allowed": keys}
     return out
@@ -584,11 +631,13 @@ def _compact(s, preset):
     if not lim:
         return
     k, c, t, r = lim
+    if s["key"] == "performance":                                    # the tables are the report: keep both, shorter
+        t, r = 2, 12 if preset == "ringkas" else 25
     s["kpis"], s["charts"] = s["kpis"][:k], s["charts"][:c]
     out, used = [], 0
     for tb in s["tables"][:t]:
         keep = min(len(tb["rows"]), r)
-        if out and used + keep > 24:                                 # a page holds about 24 table rows besides the figures: stop before a table spills over
+        if out and used + keep > 24 and s["key"] != "performance":                                 # a page holds about 24 table rows besides the figures: stop before a table spills over
             break
         used += keep
         out.append(tb)
@@ -602,7 +651,7 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     ks = kinds_for(cfg, user)
     if kind.startswith("custom:"):                                  # custom: any combination of sections the role may see, e.g. custom:servicedesk,devices
         titles = dict(SECTIONS)
-        keys = [x for x, _ in SECTIONS if x in kind[7:].split(",") and can_see(user, x)]
+        keys = [x for x, _ in SECTIONS if x in kind[7:].split(",") and can_see(user, PERM.get(x, x))]
         spec = {"key": "custom", "label": "Custom", "desc": "", "title": "IT Operation Center - Custom Report", "subtitle": " + ".join(titles[x] for x in keys), "prefix": "", "sections": keys, "allowed": keys} if keys else None
     else:
         spec = ks.get(kind) or ks.get("full") or (next(iter(ks.values())) if ks else None)
@@ -653,4 +702,4 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
             "company": cfg.p("report.company", ""), "contact": cfg.p("report.contact", {}), "period": _period(cfg, f.d_from, f.d_to),
             "preset": preset, "filters": filt, "generated": cfg.now().strftime("%d/%m/%Y %H.%M") + " WIB", "by": user.full_name, "sections": body,
             "kinds": [{"key": k, "label": v["label"], "desc": v["desc"], "sections": v["allowed"]} for k, v in ks.items()],
-            "avail": [{"key": x, "label": t} for x, t in SECTIONS if can_see(user, x)], "isps": isps, "groups": SD.group_names(cfg), "techs": [{"key": p["sys"], "label": p["name"].strip()} for p in sorted(cfg.people, key=lambda p: p["name"].strip()) if p["sys"] and not p["is_shared"] and not p["exclude_rank"]]}
+            "avail": [{"key": x, "label": t} for x, t in SECTIONS if can_see(user, PERM.get(x, x))], "isps": isps, "groups": SD.group_names(cfg), "techs": [{"key": p["sys"], "label": p["name"].strip()} for p in sorted(cfg.people, key=lambda p: p["name"].strip()) if p["sys"] and not p["is_shared"] and not p["exclude_rank"]]}
