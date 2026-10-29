@@ -163,7 +163,7 @@ async function audLoad(more) {
 }
 function vAudit() {
   if (!AUD.loaded) { audLoad(false); return intLoading(); }
-  const f = AUD.f, rows = AUD.rows.map(a => [a.at.replace("T", " ").slice(0, 19), a.by, a.t, a.ip || "–"]);
+  const f = AUD.f, rows = AUD.rows.map(a => [a.at.replace("T", " ").slice(0, 19), a.by, a.t]);
   return `${AUD.err ? `<div class="msg err">${esc(AUD.err)}</div>` : ""}
     <form class="toolbar mbar" data-int-form="audit">
       <label class="sub">Dari <input type="date" data-f="frm" value="${esc(f.frm)}"></label><label class="sub">Sampai <input type="date" data-f="to" value="${esc(f.to)}"></label>
@@ -172,7 +172,7 @@ function vAudit() {
       <button class="btn" type="submit">Terapkan</button><button class="btn ghost" type="button" data-int="audreset">Reset</button>
       <span class="mtools"><button class="btn" type="button" data-int="audexport">Ekspor CSV</button></span></form>
     <p class="sub">${fmt(AUD.total)} catatan${AUD.rows.length < AUD.total ? `, menampilkan ${fmt(AUD.rows.length)}` : ""}</p>
-    ${tbl(["Time (WIB)", "User", "Activity", "IP"], rows, {tall: true, empty: "No records for this filter."})}
+    ${tbl(["Time (WIB)", "User", "Activity"], rows, {tall: true, empty: "No records for this filter."})}
     ${AUD.rows.length < AUD.total ? `<div class="toolbar"><button class="btn ghost" type="button" data-int="audmore">Show more</button></div>` : ""}`;
 }
 document.addEventListener("click", e => {
