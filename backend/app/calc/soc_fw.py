@@ -78,7 +78,7 @@ def site_map(db, fws) -> dict:
     return {fw: (over[fw] or None) if fw in over else guess(fw, sites) for fw in fws}
 
 
-def build(db, cfg, a, b, site: str = "") -> dict:
+def build(db, cfg, a, b, site: str = "", only_fw: str = "") -> dict:
     rows = db.scalars(select(SocFwDay).where(SocFwDay.day >= a, SocFwDay.day <= b)).all()
     first, last = db.execute(select(func.min(SocFwDay.day), func.max(SocFwDay.day))).one()
     allfw = sorted({r.fw for r in db.scalars(select(SocFwDay))}) if rows or first else []
@@ -89,7 +89,7 @@ def build(db, cfg, a, b, site: str = "") -> dict:
     agg = {"cat": {}, "typ": {}, "app": {}, "sev": {}, "act": {}, "src": {}, "acat": {}, "urlc": {}, "webu": {}}
     for r in rows:
         st = smap.get(r.fw)
-        if want and st != want:
+        if (want and st != want) or (only_fw and r.fw != only_fw):
             continue
         x = fw.setdefault(r.fw, {"fw": r.fw, "site": st, "events": 0, "crit": 0, "high": 0, "med": 0, "low": 0, "blocked": 0, "bytes": 0, "sessions": 0, "days": set(), "tfrom": None})
         for k, src in (("cat", r.cat), ("typ", r.typ), ("app", r.app), ("src", r.src), ("acat", r.acat), ("urlc", r.urlc), ("webu", r.webu)):

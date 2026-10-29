@@ -296,12 +296,29 @@ def _noc(db, cfg, f, preset="standar"):
     return s
 
 
+def _fw_scope(f):
+    """(location, firewall) the NDR and Internet Usage sections are limited to: a whole location ("s:<site>"), one firewall, or the global Location filter."""
+    rf = getattr(f, "rfw", "")
+    return (rf[2:], "") if rf.startswith("s:") else (f.site, rf)
+
+
+def _fw_options(db, cfg, f):
+    """Panorama firewalls with data, grouped by the location they belong to, for the report's Firewall filter."""
+    from sqlalchemy import select
+    M = VW.M
+    allfw = sorted({fw for (fw,) in db.execute(select(M.SocFwDay.fw).distinct())})
+    smap = {k: SOCFW.canon(cfg, v) if v else v for k, v in SOCFW.site_map(db, allfw).items()}
+    want = SOCFW.canon(cfg, f.site) if f.site else ""
+    return [(fw, smap.get(fw) or "Unmapped") for fw in allfw if not want or smap.get(fw) == want]
+
+
 def _soc_site(db, cfg, f):
-    """NDR for one location: the firewalls that belong to it (Panorama device names), from the per-firewall data."""
-    F = SOCFW.build(db, cfg, f.d_from, f.d_to, f.site)
+    """NDR for one location or firewall: the firewalls that belong to it (Panorama device names), from the per-firewall data."""
+    site, fw = _fw_scope(f)
+    F = SOCFW.build(db, cfg, f.d_from, f.d_to, site, fw)
     s = {"key": "soc", "title": "NDR (Palo Alto)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not F["nFw"]:
-        s["notes"].append(f"No firewall data for {f.site} in this period. The location needs a firewall matched to it, and per-firewall data is collected from the first Panorama sync after the update.")
+        s["notes"].append(f"No firewall data for {fw or site} in this period. The location needs a firewall matched to it, and per-firewall data is collected from the first Panorama sync after the update.")
         return s
     T = F["total"]
     s["kpis"] = [_kpi("Threat events", T["events"], "n", fmt_n(F["nFw"]) + " firewall" + ("s" if F["nFw"] > 1 else "")), _kpi("Critical + High", T["ch"], "n", fmt_n(T["crit"]) + " critical"),
@@ -326,7 +343,7 @@ def _soc_site(db, cfg, f):
 
 
 def _soc(db, cfg, f, preset="standar"):
-    if f.site:
+    if any(_fw_scope(f)):
         return _soc_site(db, cfg, f)
     S = VW._soc(db, cfg, f.d_from, f.d_to)
     R = S["R"]
@@ -523,10 +540,11 @@ def _xdr(db, cfg, f, preset="standar"):
 
 def _internet(db, cfg, f, preset="standar"):
     """Internet usage from Palo Alto (Panorama): traffic, applications, web categories, and top users per location, taken from the per-firewall daily data."""
-    F = SOCFW.build(db, cfg, f.d_from, f.d_to, f.site)
+    site, fw = _fw_scope(f)
+    F = SOCFW.build(db, cfg, f.d_from, f.d_to, site, fw)
     s = {"key": "internet", "title": "Internet Usage", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not F["nFw"] or not F["total"]["bytes"]:
-        s["notes"].append("No Palo Alto traffic data" + (f" for {f.site}" if f.site else "") + " in this period.")
+        s["notes"].append("No Palo Alto traffic data" + (f" for {fw or site}" if fw or site else "") + " in this period.")
         return s
     T, d = F["total"], F["days"]
     busy = max(d, key=lambda x: x["bytes"])
@@ -534,11 +552,11 @@ def _internet(db, cfg, f, preset="standar"):
     s["kpis"] = [_kpi("Total traffic (TB)", T["bytes"] / 1e12, "f2", fmt_n(F["nFw"]) + " firewall" + ("s" if F["nFw"] > 1 else "")), _kpi("Average bandwidth (Mb/s)", T["bytes"] * 8 / secs / 1e6 if secs else None, "f1", "over the days with data"),
                  _kpi("Busiest day", busy["bytes"] / 1e9, "f1", _short(busy["date"]) + " (GB)"), _kpi("Sessions", T["sessions"], "n", ""), _kpi("Web requests", F["webTotal"] or None, "n", "all URL categories")]
     s["charts"] = [c for c in (_daily("Traffic (GB)", [x["date"] for x in d], [{"name": "GB", "values": [round(x["bytes"] / 1e9, 1) for x in d]}]),
-                               None if f.site else _top("Traffic per location (GB)", [(x["site"], round(x["bytes"] / 1e9, 1)) for x in sorted(F["bySite"], key=lambda x: -x["bytes"])], "GB"),
+                               None if site else _top("Traffic per location (GB)", [(x["site"], round(x["bytes"] / 1e9, 1)) for x in sorted(F["bySite"], key=lambda x: -x["bytes"])], "GB"),
                                _top("Top applications by volume (GB)", [(x["k"], round(x["n"] / 1e9, 1)) for x in F["app"]], "GB"), _top("Traffic by application category (GB)", [(x["k"], round(x["n"] / 1e9, 1)) for x in F["acat"]], "GB"),
                                _top("Top source networks by traffic (GB)", [(x["k"], round(x["n"] / 1e9, 1)) for x in F["src"]], "GB"), _top("Top source networks by web requests", [(x["k"], x["n"]) for x in F["webu"]], "Requests"),
                                _top("Web categories logged (requests)", [(x["k"], x["n"]) for x in F["urlc"]], "Requests")) if c]
-    if not f.site:
+    if not site:
         s["tables"].append(_table("Traffic per location", ["Location", "Traffic (GB)", "Share", "Firewalls"], ["t", "f1", "p1", "n"], [[x["site"], x["bytes"] / 1e9, x["bytes"] / T["bytes"], x["fw"]] for x in sorted(F["bySite"], key=lambda x: -x["bytes"])]))
     s["tables"].append(_table("Top source networks by traffic", ["Network (/24)", "Traffic (GB)"], ["t", "f1"], [[x["k"], x["n"] / 1e9] for x in F["src"]]))
     if F["detailFrom"] and F["detailFrom"] > f.d_from.isoformat():
@@ -628,6 +646,9 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     link_opts = [x for x in link_opts if not f.risp or x[2] == f.risp]
     if getattr(f, "rlink", "") not in [str(x[0]) for x in link_opts] + ["g:" + x[3] for x in link_opts]:
         f.rlink = ""
+    fws = _fw_options(db, cfg, f) if {"soc", "internet"} & set(spec["allowed"]) else []
+    if getattr(f, "rfw", "") not in [x[0] for x in fws] + ["s:" + x[1] for x in fws]:
+        f.rfw = ""
     zones = _wifi_zones(db) if "wifi" in spec["allowed"] else []
     if getattr(f, "rzone", "") not in zones:
         f.rzone = ""
@@ -636,6 +657,7 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
         f.rdgrp = ""
     secs = [_BUILD[k](db, cfg, f, preset) for k in spec["allowed"]]
     for s_ in secs:
+        s_["charts"] = [c for c in s_["charts"] if c["labels"]]                   # a filter can leave a chart without any data
         _compact(s_, preset)
     single = len(spec["allowed"]) == 1 and spec.get("sections")
     for s in secs:
@@ -661,6 +683,8 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
         filt.append("Technician: " + next((p["name"].strip() for p in cfg.people if p["sys"] == f.rtech), f.rtech))
     if f.rdgrp:
         filt.append("Host group: " + f.rdgrp)
+    if f.rfw:
+        filt.append(("Location firewalls: " + f.rfw[2:]) if f.rfw.startswith("s:") else "Firewall: " + f.rfw)
     if "wifi" in spec["allowed"] and f.rzone:
         filt.append("Zone: " + f.rzone)
     if f.risp:
@@ -675,4 +699,4 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
             "company": cfg.p("report.company", ""), "contact": cfg.p("report.contact", {}), "period": _period(cfg, f.d_from, f.d_to),
             "preset": preset, "filters": filt, "generated": cfg.now().strftime("%d/%m/%Y %H.%M") + " WIB", "by": user.full_name, "sections": body,
             "kinds": [{"key": k, "label": v["label"], "desc": v["desc"], "sections": v["allowed"]} for k, v in ks.items()],
-            "avail": [{"key": x, "label": t} for x, t in SECTIONS if can_see(user, x)], "zones": zones, "dgroups": dgroups, "isps": isps, "links": [{"key": str(i), "label": n, "group": g} for i, n, _, g in link_opts], "groups": SD.group_names(cfg), "techs": [{"key": p["sys"], "label": p["name"].strip()} for p in sorted(cfg.people, key=lambda p: p["name"].strip()) if p["sys"] and not p["is_shared"] and not p["exclude_rank"]]}
+            "avail": [{"key": x, "label": t} for x, t in SECTIONS if can_see(user, x)], "fws": [{"key": k, "label": k, "group": g} for k, g in fws], "zones": zones, "dgroups": dgroups, "isps": isps, "links": [{"key": str(i), "label": n, "group": g} for i, n, _, g in link_opts], "groups": SD.group_names(cfg), "techs": [{"key": p["sys"], "label": p["name"].strip()} for p in sorted(cfg.people, key=lambda p: p["name"].strip()) if p["sys"] and not p["is_shared"] and not p["exclude_rank"]]}
