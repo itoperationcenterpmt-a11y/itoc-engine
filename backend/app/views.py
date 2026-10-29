@@ -11,10 +11,12 @@ from .security import can_see, locked_pages
 
 
 class Filt:
-    def __init__(self, d_from: date, d_to: date, shift: int, site: str, cmp: bool, sensor: str = "", kind: str = "", dstat: str = "", grp: str = "", dtype: str = "", rgrp: str = "", rtech: str = "", rlink: str = "", risp: str = ""):
+    def __init__(self, d_from: date, d_to: date, shift: int, site: str, cmp: bool, sensor: str = "", kind: str = "", dstat: str = "", grp: str = "", dtype: str = "", rgrp: str = "", rtech: str = "", rlink: str = "", risp: str = "", rzone: str = "", rdgrp: str = ""):
         self.d_from, self.d_to, self.shift, self.site, self.cmp, self.sensor = d_from, d_to, shift, site, cmp, sensor
         self.kind, self.dstat, self.grp, self.dtype = kind, dstat, grp, dtype       # filter kategori dan status (menu Devices)
         self.risp = risp
+        self.rdgrp = rdgrp                                                           # host group Zabbix untuk laporan Devices
+        self.rzone = rzone                                                           # zone WiFi (Ruckus) untuk laporan WiFi
         self.rlink = rlink                                                           # link (sensor PRTG) untuk laporan Network
         self.rgrp, self.rtech = rgrp, rtech                                          # grup dan teknisi untuk laporan Ticketing
 

@@ -4,7 +4,7 @@ try { if (localStorage.getItem("itoc.rail")) { document.addEventListener("DOMCon
 const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, soc: vSoc, devices: vDevices, devnet: vDevices, devcctv: vDevices, devops: vDevices, wifi: vWifi, xdr: vXdr, cctv: vCctv, internet: vInternet, insight: vInsight, network: vNetwork, cyber: vCyber, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
-const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype", "rgrp", "rtech", "rlink", "risp"];
+const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype", "rgrp", "rtech", "rlink", "risp", "rzone", "rdgrp"];
 let seq = 0;
 async function render(reload) {
   writeHash(); renderShell();
@@ -161,7 +161,9 @@ async function reloadConfig() { applyConfig(await api("/api/config")); }
 /* Group and technician for the Ticketing section of a report: sent only when that section is part of the report. */
 const ticketOn = () => S.rkind === "servicedesk" || (S.rkind === "custom" && (S.rsecs || []).includes("servicedesk"));
 const linkOn = () => ["full", "network", "noc"].includes(S.rkind) || (S.rkind === "custom" && (S.rsecs || []).includes("noc"));
-const ticketQ = () => ({...(ticketOn() ? {rgrp: S.rgrp || "", rtech: S.rtech || ""} : {}), ...(linkOn() ? {rlink: S.rlink || "", risp: S.risp || ""} : {})});
+const zoneOn = () => ["full", "network", "wifi"].includes(S.rkind) || (S.rkind === "custom" && (S.rsecs || []).includes("wifi"));
+const devOn = () => ["full", "devices"].includes(S.rkind) || (S.rkind === "custom" && (S.rsecs || []).includes("devices"));
+const ticketQ = () => ({...(ticketOn() ? {rgrp: S.rgrp || "", rtech: S.rtech || ""} : {}), ...(linkOn() ? {rlink: S.rlink || "", risp: S.risp || ""} : {}), ...(zoneOn() ? {rzone: S.rzone || ""} : {}), ...(devOn() ? {rdgrp: S.rdgrp || ""} : {})});
 async function loadParams() { try { S.params = await api("/api/admin/params"); S.opts = await api("/api/admin/options").catch(() => null); S.ts = await api("/api/admin/turnstile").catch(() => null); } catch (e) { S.params = []; S.msg = e.message; } render(false); }
 /* Parameters that name things which already exist are chosen from live lists (GET /api/admin/options) instead of typed. */
 const PARAM_VAL = k => ((S.params || []).find(x => x.key === k) || {}).value || [];
@@ -341,6 +343,8 @@ document.addEventListener("change", async e => {
   else if (t.id === "rgrp") set({rgrp: t.value});
   else if (t.id === "rtech") set({rtech: t.value});
   else if (t.id === "rlink") set({rlink: t.value});
+  else if (t.id === "rzone") set({rzone: t.value});
+  else if (t.id === "rdgrp") set({rdgrp: t.value});
   else if (t.id === "risp") set({risp: t.value, rlink: ""});
   else if (t.id === "fTyp") set({dtype: t.value});
   else if (t.id === "fCmp") set({cmp: t.checked});

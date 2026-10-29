@@ -390,8 +390,9 @@ _GB = 1073741824
 def _devices(db, cfg, f, preset="standar"):
     """Status perangkat adalah kondisi terkini dari Zabbix saat laporan dibuat; periode tidak berlaku."""
     from .calc import devices as DEV
-    D = DEV.build(db, cfg, f.site, "", "", full=False)
-    H = DEV.history(db, cfg, f.d_from, f.d_to, f.site)
+    g = getattr(f, "rdgrp", "")
+    D = DEV.build(db, cfg, f.site, "", "", full=False, grp=g)
+    H = DEV.history(db, cfg, f.d_from, f.d_to, f.site, grp=g)
     s = {"key": "devices", "title": "Devices", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     A = D["all"]
     if not D["configured"] or not A["total"]:
@@ -430,11 +431,25 @@ def _devices(db, cfg, f, preset="standar"):
     return s
 
 
+def _device_groups(db):
+    """Zabbix host groups for the report's Host group filter."""
+    from sqlalchemy import select
+    return sorted({g for (gs,) in db.execute(select(VW.M.ZbxHost.groups)) for g in (gs or [])})
+
+
+def _wifi_zones(db):
+    """Ruckus zones that have clients or Access Points, for the report's Zone filter."""
+    from sqlalchemy import select
+    M = VW.M
+    return sorted({z for q in (select(M.WifiClient.zone), select(M.WifiAp.zone)) for (z,) in db.execute(q.distinct()) if z})
+
+
 def _wifi(db, cfg, f, preset="standar"):
     """Client WiFi aktif dan Access Point dari Ruckus vSZ: kondisi terkini saat laporan dibuat; usage = trafik sesi yang sedang berjalan."""
     from .calc import wifi as WIFI
-    W = WIFI.build(db, cfg)
-    Hh = WIFI.history(db, cfg, f.d_from, f.d_to, site=f.site)
+    zone = getattr(f, "rzone", "")
+    W = WIFI.build(db, cfg, zone=zone)
+    Hh = WIFI.history(db, cfg, f.d_from, f.d_to, zone=zone, site=f.site)
     s = {"key": "wifi", "title": "WiFi (Ruckus)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not W["configured"] or not (W["total"] or W["apTotal"]):
         s["notes"].append("No WiFi data from Ruckus vSZ yet." + (" Last sync failed: " + W["error"] if W["error"] else ""))
@@ -613,6 +628,12 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     link_opts = [x for x in link_opts if not f.risp or x[2] == f.risp]
     if getattr(f, "rlink", "") not in [str(x[0]) for x in link_opts] + ["g:" + x[3] for x in link_opts]:
         f.rlink = ""
+    zones = _wifi_zones(db) if "wifi" in spec["allowed"] else []
+    if getattr(f, "rzone", "") not in zones:
+        f.rzone = ""
+    dgroups = _device_groups(db) if "devices" in spec["allowed"] else []
+    if getattr(f, "rdgrp", "") not in dgroups:
+        f.rdgrp = ""
     secs = [_BUILD[k](db, cfg, f, preset) for k in spec["allowed"]]
     for s_ in secs:
         _compact(s_, preset)
@@ -638,6 +659,10 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
         filt.append("Group: " + f.rgrp)
     if getattr(f, "rtech", ""):
         filt.append("Technician: " + next((p["name"].strip() for p in cfg.people if p["sys"] == f.rtech), f.rtech))
+    if f.rdgrp:
+        filt.append("Host group: " + f.rdgrp)
+    if "wifi" in spec["allowed"] and f.rzone:
+        filt.append("Zone: " + f.rzone)
     if f.risp:
         filt.append("ISP: " + f.risp)
     if f.rlink:
@@ -650,4 +675,4 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
             "company": cfg.p("report.company", ""), "contact": cfg.p("report.contact", {}), "period": _period(cfg, f.d_from, f.d_to),
             "preset": preset, "filters": filt, "generated": cfg.now().strftime("%d/%m/%Y %H.%M") + " WIB", "by": user.full_name, "sections": body,
             "kinds": [{"key": k, "label": v["label"], "desc": v["desc"], "sections": v["allowed"]} for k, v in ks.items()],
-            "avail": [{"key": x, "label": t} for x, t in SECTIONS if can_see(user, x)], "isps": isps, "links": [{"key": str(i), "label": n, "group": g} for i, n, _, g in link_opts], "groups": SD.group_names(cfg), "techs": [{"key": p["sys"], "label": p["name"].strip()} for p in sorted(cfg.people, key=lambda p: p["name"].strip()) if p["sys"] and not p["is_shared"] and not p["exclude_rank"]]}
+            "avail": [{"key": x, "label": t} for x, t in SECTIONS if can_see(user, x)], "zones": zones, "dgroups": dgroups, "isps": isps, "links": [{"key": str(i), "label": n, "group": g} for i, n, _, g in link_opts], "groups": SD.group_names(cfg), "techs": [{"key": p["sys"], "label": p["name"].strip()} for p in sorted(cfg.people, key=lambda p: p["name"].strip()) if p["sys"] and not p["is_shared"] and not p["exclude_rank"]]}
