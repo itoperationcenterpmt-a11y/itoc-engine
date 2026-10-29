@@ -174,33 +174,36 @@ def _servicedesk(db, cfg, f, preset="standar"):
     return s
 
 
-LINKS_MAX = 30
+
+def _isp_of(cfg, name):
+    hit = next((i for i in cfg.isps if i["keyword"].lower() in name.lower()), None)
+    return hit["name"] if hit else cfg.p("net.other_isp_label")
 
 
-def _link_options(db, f):
-    """Active PRTG links (id, name) for the report's Link filter, within the chosen location."""
+def _link_options(db, cfg, f):
+    """Active PRTG links (id, name, ISP) within the chosen location, for the report's ISP and Link filters."""
     from sqlalchemy import select
     M = VW.M
     q = select(M.PrtgSensor.id, M.PrtgSensor.name).where(M.PrtgSensor.active.is_(True)).order_by(M.PrtgSensor.name)
     if f.site:
         q = q.where(VW.NET.site_cond(db, f.site))
-    return [(i, n) for i, n in db.execute(q)]
+    return [(i, n, _isp_of(cfg, n)) for i, n in db.execute(q)]
+
+
 HOURLY_UP_TO = 62          # days: longer periods are drawn per day
 
 
-def _noc_links(db, cfg, f, limit=LINKS_MAX):
+def _noc_links(db, cfg, f):
     """Per-link graphs in the PRTG style: one wide graph per link (traffic total, in and out, downtime as red lines on the right axis) with the channel table under it."""
     from sqlalchemy import func, select
     M = VW.M
     q = select(M.PrtgSensor.id, M.PrtgSensor.name, M.PrtgSensor.device, M.PrtgSensor.capacity_mbps).where(M.PrtgSensor.active.is_(True))
     if f.site:
         q = q.where(VW.NET.site_cond(db, f.site))
-    rl = getattr(f, "rlink", "")
-    if rl and rl != "all":
-        q = q.where(M.PrtgSensor.id == rl)
-    else:
-        limit = None if rl == "all" else limit
-    sensors = {i: (n, dv, c) for i, n, dv, c in db.execute(q)}
+    if getattr(f, "rlink", ""):
+        q = q.where(M.PrtgSensor.id == f.rlink)
+    isp = getattr(f, "risp", "")
+    sensors = {i: (n, dv, c) for i, n, dv, c in db.execute(q) if not isp or _isp_of(cfg, n) == isp}
     s = {"key": "noc_links", "title": "Links · Detail", "prefix": "Links", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not sensors:
         return None
@@ -213,7 +216,7 @@ def _noc_links(db, cfg, f, limit=LINKS_MAX):
     by: dict = {}
     for sid, t, ai, ao, mi, mo, dn, hrs in rows:
         by.setdefault(sid, []).append((t, ai or 0, ao or 0, max(mi or 0, mo or 0), dn or 0, hrs or 0))
-    order = sorted(by, key=lambda i: (-sum(x[4] for x in by[i]), -sum(x[1] + x[2] for x in by[i])))[:limit]
+    order = sorted(by, key=lambda i: (-sum(x[4] for x in by[i]), -sum(x[1] + x[2] for x in by[i])))
     step = 3600 if hourly else 86400
     res = "1 h Average" if hourly else "1 d Average"
     summary = []
@@ -236,8 +239,6 @@ def _noc_links(db, cfg, f, limit=LINKS_MAX):
         summary.append([name, 1 - down_s / seen_s if seen_s else None, down_s / 60, sum(x[1] for x in pts) / n, sum(x[2] for x in pts) / n, max(x[3] for x in pts), cap, max(x[3] for x in pts) / cap if cap else None])
     if summary:
         s["tables"].append(_table("Link summary", ["Link", "Availability", "Downtime (min)", "Avg in (Mbit/s)", "Avg out (Mbit/s)", "Peak (Mbit/s)", "Capacity (Mbit/s)", "Peak utilization"], ["t", "p2", "f0", "f1", "f1", "f1", "f0", "p1"], summary))
-    if limit and len(by) > limit:
-        s["notes"].append(f"The {limit} links with the most downtime are shown, of {len(by)} links with data. Pick a location or a single link in the report filter to see the others.")
     return s if s["charts"] else None
 
 
@@ -601,7 +602,13 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
         spec = ks.get(kind) or ks.get("full") or (next(iter(ks.values())) if ks else None)
     if spec is None:
         return {"title": cfg.p("ui.brand_name", "Dashboard"), "sections": [], "kinds": []}
-    link_opts = _link_options(db, f)
+    link_opts = _link_options(db, cfg, f)
+    isps = sorted({x[2] for x in link_opts})
+    if getattr(f, "risp", "") not in isps:
+        f.risp = ""
+    link_opts = [x for x in link_opts if not f.risp or x[2] == f.risp]
+    if getattr(f, "rlink", "") not in [str(x[0]) for x in link_opts]:
+        f.rlink = ""
     secs = [_BUILD[k](db, cfg, f, preset) for k in spec["allowed"]]
     for s_ in secs:
         _compact(s_, preset)
@@ -627,14 +634,16 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
         filt.append("Group: " + f.rgrp)
     if getattr(f, "rtech", ""):
         filt.append("Technician: " + next((p["name"].strip() for p in cfg.people if p["sys"] == f.rtech), f.rtech))
-    if getattr(f, "rlink", ""):
-        filt.append("Link: " + ("All links" if f.rlink == "all" else next((n for i, n in link_opts if str(i) == f.rlink), f.rlink)))
+    if f.risp:
+        filt.append("ISP: " + f.risp)
+    if f.rlink:
+        filt.append("Link: " + next((n for i, n, _ in link_opts if str(i) == f.rlink), f.rlink))
     summary = bool(spec.get("summary"))
-    if preset == "lengkap" or getattr(f, "rlink", ""):              # per-link graphs follow the PRTG section; the overview does not use them
+    if preset == "lengkap" or f.rlink or f.risp:              # per-link graphs follow the PRTG section; the overview does not use them
         secs = [x for s in secs for x in ([s] + [d for d in [_noc_links(db, cfg, f)] if d] if s["key"] == "noc" else [s])]
     body = [overview] if summary else ([overview] if overview["kpis"] and len(secs) > 1 else []) + secs
     return {"title": cfg.p("ui.brand_name", "Dashboard"), "kind": spec["key"], "subtitle": spec["title"], "tagline": spec["subtitle"], "prefix": spec.get("prefix", ""),
             "company": cfg.p("report.company", ""), "contact": cfg.p("report.contact", {}), "period": _period(cfg, f.d_from, f.d_to),
             "preset": preset, "filters": filt, "generated": cfg.now().strftime("%d/%m/%Y %H.%M") + " WIB", "by": user.full_name, "sections": body,
             "kinds": [{"key": k, "label": v["label"], "desc": v["desc"], "sections": v["allowed"]} for k, v in ks.items()],
-            "avail": [{"key": x, "label": t} for x, t in SECTIONS if can_see(user, x)], "links": [{"key": str(i), "label": n} for i, n in link_opts], "groups": SD.group_names(cfg), "techs": [{"key": p["sys"], "label": p["name"].strip()} for p in sorted(cfg.people, key=lambda p: p["name"].strip()) if p["sys"] and not p["is_shared"] and not p["exclude_rank"]]}
+            "avail": [{"key": x, "label": t} for x, t in SECTIONS if can_see(user, x)], "isps": isps, "links": [{"key": str(i), "label": n} for i, n, _ in link_opts], "groups": SD.group_names(cfg), "techs": [{"key": p["sys"], "label": p["name"].strip()} for p in sorted(cfg.people, key=lambda p: p["name"].strip()) if p["sys"] and not p["is_shared"] and not p["exclude_rank"]]}
