@@ -200,8 +200,11 @@ def _noc_links(db, cfg, f):
     q = select(M.PrtgSensor.id, M.PrtgSensor.name, M.PrtgSensor.device, M.PrtgSensor.capacity_mbps).where(M.PrtgSensor.active.is_(True))
     if f.site:
         q = q.where(VW.NET.site_cond(db, f.site))
-    if getattr(f, "rlink", ""):
-        q = q.where(M.PrtgSensor.id == f.rlink)
+    rl = getattr(f, "rlink", "")
+    if rl.startswith("g:"):                                          # a whole branch: every link of it, whichever ISP
+        q = q.where(M.PrtgSensor.device == rl[2:])
+    elif rl:
+        q = q.where(M.PrtgSensor.id == rl)
     isp = getattr(f, "risp", "")
     sensors = {i: (n, dv, c) for i, n, dv, c in db.execute(q) if not isp or _isp_of(cfg, n) == isp}
     s = {"key": "noc_links", "title": "Links · Detail", "prefix": "Links", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
@@ -608,7 +611,7 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     if getattr(f, "risp", "") not in isps:
         f.risp = ""
     link_opts = [x for x in link_opts if not f.risp or x[2] == f.risp]
-    if getattr(f, "rlink", "") not in [str(x[0]) for x in link_opts]:
+    if getattr(f, "rlink", "") not in [str(x[0]) for x in link_opts] + ["g:" + x[3] for x in link_opts]:
         f.rlink = ""
     secs = [_BUILD[k](db, cfg, f, preset) for k in spec["allowed"]]
     for s_ in secs:
@@ -638,7 +641,7 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     if f.risp:
         filt.append("ISP: " + f.risp)
     if f.rlink:
-        filt.append("Link: " + next((n for i, n, *_ in link_opts if str(i) == f.rlink), f.rlink))
+        filt.append(("Branch: " + f.rlink[2:]) if f.rlink.startswith("g:") else "Link: " + next((n for i, n, *_ in link_opts if str(i) == f.rlink), f.rlink))
     summary = bool(spec.get("summary"))
     if preset == "lengkap" or f.rlink or f.risp:              # per-link graphs follow the PRTG section; the overview does not use them
         secs = [x for s in secs for x in ([s] + [d for d in [_noc_links(db, cfg, f)] if d] if s["key"] == "noc" else [s])]

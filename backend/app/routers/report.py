@@ -34,6 +34,6 @@ def export(fmt: str, d_from: date = Query(alias="from"), d_to: date = Query(alia
         raise HTTPException(500, f"A report library is not installed on the server ({e.name}). Rebuild the image.")
     audit(db, user.username, f"Downloaded report {kind} {fmt.upper()} {d_from} – {d_to}" + (f" ({site})" if site else "") + (f" [group {rgrp}]" if rgrp else "") + (f" [technician {rtech}]" if rtech else "") + (f" [link {rlink}]" if rlink else "") + (f" [ISP {risp}]" if risp else ""))
     db.commit()
-    tag = ("_" + rgrp.replace(" ", "") if rgrp else "") + ("_" + rtech.replace(" ", "") if rtech else "") + ("_" + risp.replace(" ", "") if risp else "") + ("_link" + rlink if rlink else "")
+    tag = ("_" + rgrp.replace(" ", "") if rgrp else "") + ("_" + rtech.replace(" ", "") if rtech else "") + ("_" + risp.replace(" ", "") if risp else "") + ("_" + rlink.replace("g:", "").replace(" ", "") if rlink else "")
     name = f"Report_{kind.split(':')[0]}{tag}_{d_from}_{d_to}.{fmt}"
     return Response(content=data, media_type=report_export.MIME[fmt], headers={"Content-Disposition": f'attachment; filename="{name}"'})
