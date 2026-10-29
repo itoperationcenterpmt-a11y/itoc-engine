@@ -71,9 +71,9 @@ server {
     ssl_prefer_server_ciphers off;
     client_max_body_size 45m;
 
-    location = /api/auth/login { limit_req zone=itoc_login burst=5 nodelay; proxy_pass http://127.0.0.1:9000; include /etc/nginx/itoc_proxy.conf; }
-    location /api/ { limit_req zone=itoc_api burst=60 nodelay; proxy_pass http://127.0.0.1:9000; include /etc/nginx/itoc_proxy.conf; }
-    location / { proxy_pass http://127.0.0.1:9000; include /etc/nginx/itoc_proxy.conf; }
+    location = /api/auth/login { limit_req zone=itoc_login burst=5 nodelay; proxy_pass http://127.0.0.1:8000; include /etc/nginx/itoc_proxy.conf; }
+    location /api/ { limit_req zone=itoc_api burst=60 nodelay; proxy_pass http://127.0.0.1:8000; include /etc/nginx/itoc_proxy.conf; }
+    location / { proxy_pass http://127.0.0.1:8000; include /etc/nginx/itoc_proxy.conf; }
 }
 # /etc/nginx/itoc_proxy.conf
 #   proxy_set_header Host $host;
