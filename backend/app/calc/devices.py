@@ -127,7 +127,7 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
             "list": lst, "listN": list_n, "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": stale,
             "configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled), "error": src.last_error if src else None}
 
-def history(db: Session, cfg: Config, a, b, site: str = "", kind: str = "", dtype: str = "", grp: str = "") -> dict:
+def history(db: Session, cfg: Config, a, b, site: str = "", kind: str = "", dtype: str = "") -> dict:
     """Riwayat down dari tabel zbx_event pada rentang tanggal a..b: kejadian, downtime (jam), perangkat terdampak, MTTR, per hari, lokasi, tipe, perangkat, dan masalah dominan."""
     from datetime import time as _t, timedelta
     labels = cfg.p("dev.kind_labels", {}) or {}
@@ -137,7 +137,7 @@ def history(db: Session, cfg: Config, a, b, site: str = "", kind: str = "", dtyp
     t0, t1 = datetime.combine(a, _t.min), min(datetime.combine(b + timedelta(days=1), _t.min), now)
     hosts = {h.hostid: h for h in db.query(M.ZbxHost)}
     loc_of = lambda c: cmap.get((c or "").lower()) or amap.get((c or "").lower()) or (c or "-")
-    base = [h for h in hosts.values() if (not site or loc_of(h.code) == site) and (not kind or h.kind == kind) and (not dtype or (h.dev_code or "-") == dtype) and (not grp or grp in (h.groups or []))]
+    base = [h for h in hosts.values() if (not site or loc_of(h.code) == site) and (not kind or h.kind == kind) and (not dtype or (h.dev_code or "-") == dtype)]
     ov = lambda s, e, x0, x1: max(0.0, (min(e, x1) - max(s, x0)).total_seconds()) / 3600
     evs = db.query(M.ZbxEvent).filter(M.ZbxEvent.start_at < t1, (M.ZbxEvent.end_at.is_(None)) | (M.ZbxEvent.end_at >= t0)).all()
     daily = {}
