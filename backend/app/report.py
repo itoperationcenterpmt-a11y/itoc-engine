@@ -506,7 +506,13 @@ def _internet(db, cfg, f, preset="standar"):
     F = SOCFW.build(db, cfg, f.d_from, f.d_to, f.site)
     s = {"key": "internet", "title": "Internet Usage", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not F["nFw"] or not F["total"]["bytes"]:
-        s["notes"].append("No Palo Alto traffic data" + (f" for {f.site}" if f.site else "") + " in this period.")
+        from sqlalchemy import func, select
+        M = VW.M
+        q = select(func.min(M.SocFwDay.day)).where(M.SocFwDay.bytes > 0)
+        if F["nFw"]:
+            q = q.where(M.SocFwDay.fw.in_([x["fw"] for x in F["fw"]]))
+        since = db.execute(q).scalar()
+        s["notes"].append("No Palo Alto traffic data" + (f" for {f.site}" if f.site else "") + " in this period." + (f" Traffic data for this selection starts on {since:%d %b %Y}." if since and since > f.d_to else ""))
         return s
     T, d = F["total"], F["days"]
     busy = max(d, key=lambda x: x["bytes"])
