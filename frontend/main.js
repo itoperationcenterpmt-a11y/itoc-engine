@@ -159,7 +159,7 @@ async function reloadConfig() { applyConfig(await api("/api/config")); }
 
 /* ---------- Admin: parameter generik ---------- */
 /* Group and technician for the Ticketing section of a report: sent only when that section is part of the report. */
-const ticketOn = () => S.rkind === "servicedesk" || (S.rkind === "custom" && (S.rsecs || []).includes("servicedesk"));
+const ticketOn = () => ["servicedesk", "full", "summary"].includes(S.rkind) || (S.rkind === "custom" && (S.rsecs || []).includes("servicedesk"));
 const linkOn = () => ["full", "network", "noc"].includes(S.rkind) || (S.rkind === "custom" && (S.rsecs || []).includes("noc"));
 const ticketQ = () => ({...(ticketOn() ? {rgrp: S.rgrp || "", rtech: S.rtech || ""} : {}), ...(linkOn() && S.risp ? {risp: S.risp} : {})});
 async function loadParams() { try { S.params = await api("/api/admin/params"); S.opts = await api("/api/admin/options").catch(() => null); S.ts = await api("/api/admin/turnstile").catch(() => null); } catch (e) { S.params = []; S.msg = e.message; } render(false); }

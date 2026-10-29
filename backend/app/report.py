@@ -154,11 +154,12 @@ def _servicedesk(db, cfg, f, preset="standar"):
         rows = (T["dims"].get(key) or [])[:10]
         if rows and not (key == "lokasi" and f.site):
             s["tables"].append(_table("Tickets per " + label.lower(), [label] + heads[1:], kinds, [[r["k"], r["n"], r["pct"], r["done"], r["open"], r["inPct"]] for r in rows]))
-    gr = T.get("groupRanking") or []
+    scoped = bool(f.site or getattr(f, "rgrp", "") or getattr(f, "rtech", ""))
+    gr = [r for r in (T.get("groupRanking") or []) if r["n"] or not scoped]            # a filtered report lists only who actually worked on the selection
     if any(r["n"] for r in gr):
         s["tables"].append(_table("Group ranking", ["#", "Group", "Members", "Tickets", "Done", "Open", "Average (h)", "Within SLA"], ["n", "t", "n", "n", "n", "n", "f1", "p1"],
                                   [[r["rank"], r["name"], r["members"], r["n"], r["done"], r["open"], r["avg"], r["inPct"]] for r in gr]))
-    rk = list(T["ranking"])   # semua teknisi di roster, termasuk yang belum punya tiket
+    rk = [r for r in T["ranking"] if r["n"] or not scoped or (f.site and str(r["unit"]).endswith(f.site))]   # whole roster only for an unfiltered report; a location keeps its own technicians
     if rk:
         s["tables"].append(_table("Technician ranking", ["#", "Name", "Unit", "Tickets", "Done", "Open", "Average (h)", "Within SLA"], ["n", "t", "t", "n", "n", "n", "f1", "p1"],
                                   [[r["rank"], r["name"], r["unit"], r["n"], r["done"], r["open"], r["avg"], r["inPct"]] for r in rk]))
@@ -612,11 +613,13 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     if getattr(f, "risp", "") not in isps:
         f.risp = ""
     link_opts = [x for x in link_opts if not f.risp or x[2] == f.risp]
-    secs = [_BUILD[k](db, cfg, f, preset) for k in spec["allowed"]]
+    person = bool(getattr(f, "rgrp", "") or getattr(f, "rtech", "")) and "servicedesk" in spec["allowed"]   # a group or technician is about tickets only: the other sections are not person-scoped
+    allowed = ["servicedesk"] if person else spec["allowed"]
+    secs = [_BUILD[k](db, cfg, f, preset) for k in allowed]
     for s_ in secs:
         s_["charts"] = [c for c in s_["charts"] if c["labels"]]                   # a filter can leave a chart without any data
         _compact(s_, preset)
-    single = len(spec["allowed"]) == 1 and spec.get("sections")
+    single = len(allowed) == 1 and spec.get("sections")
     for s in secs:
         s["prefix"] = spec["prefix"] if single and spec.get("prefix") else s["title"]
     overview = {"key": "ringkasan", "title": "Summary", "kpis": [], "charts": [], "tables": [], "notes": []}
@@ -636,6 +639,8 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     filt.append("Location: " + (f.site or "All locations"))
     if getattr(f, "rgrp", ""):
         filt.append("Group: " + f.rgrp)
+    if person:
+        filt.append("Sections: Ticketing only")
     if getattr(f, "rtech", ""):
         filt.append("Technician: " + next((p["name"].strip() for p in cfg.people if p["sys"] == f.rtech), f.rtech))
     if f.risp:
