@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from .. import vault
 from ..models import DataSource, WifiAp, WifiClient, WifiSession, WifiStat, ZbxLocMap
 from ..store import Config
+from ..calc.network import site_resolver
 
 FALLBACK = ["v9_1", "v9_0", "v8_2", "v8_1", "v8_0", "v7_1"]
 
@@ -155,14 +156,14 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     return len(rows), f"{len(rows)} client WiFi, {len(aps)} AP, {n_ses} sesi tercatat (vSZ API {ver})"
 
 
-def loc_of(ap_name, zone, cmap):
-    """Lokasi dari kode di awal nama AP (mis. SRG-RUANG IT) lewat pemetaan kode lokasi Zabbix; selain itu nama zone."""
-    return cmap.get((ap_name or "").split("-")[0].strip().lower()) or zone
+def loc_of(ap_name, zone, to_site):
+    """Lokasi dari kode di awal nama AP (mis. SRG-RUANG IT), lalu nama zone, lewat pemetaan kode lokasi dan alias master Lokasi; selain itu nama zone."""
+    return to_site((ap_name or "").split("-")[0], zone) or zone
 
 
 def save_sessions(db: Session, cfg: Config, rows: dict, aps: dict, hist_raw: list) -> int:
     now, tz = cfg.now(), cfg.p("tz_offset_hours", 7)
-    cmap = {m.code.lower(): m.site for m in db.query(ZbxLocMap) if m.site}
+    cmap = site_resolver(db)
     act = []
     for r in rows.values():
         if not r["started_at"]:

@@ -20,6 +20,25 @@ def device_names(db: Session, site: str) -> list[str]:
     return sorted(n for n in names if n)
 
 
+def site_resolver(db: Session):
+    """Function (code, zone, ...) -> master location, shared by systems that name things differently (WiFi AP code and zone, Zabbix code): Admin > Mapping Zabbix codes first, then site names and aliases. None when nothing matches."""
+    from ..models import Site, ZbxLocMap
+    cmap = {m.code.lower(): m.site for m in db.query(ZbxLocMap) if m.site}
+    amap: dict = {}
+    for s in db.query(Site).filter_by(active=True):
+        for n in device_names(db, s.name):
+            amap.setdefault(n, s.name)
+
+    def to_site(*tokens):
+        for t in tokens:
+            k = (t or "").strip().lower()
+            for v in (k, k.replace("_", " ")):
+                if v and (cmap.get(v) or amap.get(v)):
+                    return cmap.get(v) or amap.get(v)
+        return None
+    return to_site
+
+
 def shared_isp(db: Session, site: str) -> list[str]:
     """Locations that use the same ISP links (parameter net.shared_isp, e.g. Head Office and Belawan): choosing one shows the links of all. Tickets and WiFi are not affected."""
     from ..models import Parameter

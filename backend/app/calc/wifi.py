@@ -3,6 +3,7 @@ from datetime import date, datetime, time as dtime, timedelta
 from sqlalchemy import func
 from ..models import DataSource, WifiAp, WifiClient, WifiSession, WifiStat, ZbxLocMap
 from ..store import Config
+from .network import site_resolver
 from ..timeutil import ms
 
 
@@ -61,13 +62,14 @@ def history(db, cfg: Config, a: date, b: date, zone: str = "", ssid: str = "", s
 
 def build(db, cfg: Config, user=None, zone: str = "", ssid: str = "", band: str = "", site: str = "", a: date | None = None, b: date | None = None) -> dict:
     every_row = db.query(WifiClient).order_by(WifiClient.username, WifiClient.mac).all()
-    cmap = {m.code.lower(): m.site for m in db.query(ZbxLocMap) if m.site}
-    loc = lambda r: cmap.get((r.ap_name or "").split("-")[0].strip().lower()) or r.zone or "-"      # kode lokasi di awal nama AP (mis. SRG-RUANG IT) -> lokasi master
+    to_site = site_resolver(db)
+    ap_loc = lambda name, zone: to_site((name or "").split("-")[0], zone) or zone or "-"            # kode di awal nama AP (mis. SRG-RUANG IT), lalu zone -> lokasi master (nama atau alias)
+    loc = lambda r: ap_loc(r.ap_name, r.zone)
     pats = [p.lower() for p in (cfg.p("wifi.portal_auth", ["hotspot", "guest access"]) or [])]
     is_portal = lambda r: any(p in str((r.raw or {}).get("authMethod") or "").lower() for p in pats)
     opts = {"zones": sorted({r.zone for r in every_row if r.zone}), "ssids": sorted({r.ssid for r in every_row if r.ssid}), "locs": sorted({loc(r) for r in every_row if loc(r) != "-"})}
     rows = [r for r in every_row if (not zone or r.zone == zone) and (not ssid or r.ssid == ssid) and (not band or _band(r) == band) and (not site or loc(r) == site)]
-    aps = [a for a in db.query(WifiAp).all() if not zone or a.zone == zone]
+    aps = [a for a in db.query(WifiAp).all() if (not zone or a.zone == zone) and (not site or ap_loc(a.name, a.zone) == site)]
     src = db.get(DataSource, "ruckus")
     last = max((r.updated_at for r in rows), default=None) or max((a.updated_at for a in aps), default=None)
     every = (src.interval_min if src else 5) or 5
@@ -93,7 +95,7 @@ def build(db, cfg: Config, user=None, zone: str = "", ssid: str = "", band: str 
     for r in rows:
         locs.setdefault(loc(r), {"k": loc(r), "clients": 0, "apTotal": 0, "apOnline": 0})["clients"] += 1
     for ap in aps:
-        x = locs.setdefault(cmap.get((ap.name or "").split("-")[0].strip().lower()) or ap.zone or "-", {"k": "", "clients": 0, "apTotal": 0, "apOnline": 0})
+        x = locs.setdefault(ap_loc(ap.name, ap.zone), {"k": "", "clients": 0, "apTotal": 0, "apOnline": 0})
         x["apTotal"] += 1
         x["apOnline"] += 1 if isup(ap) else 0
     for k, x in locs.items():
