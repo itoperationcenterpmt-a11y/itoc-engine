@@ -18,7 +18,7 @@ NAVY, BLUE, CYAN, GRAY, LINE, ZEBRA = "0B2F6B", "0B75BB", "25B7E5", "6B7280", "D
 BAND = {"servicedesk": NAVY, "noc": BLUE, "soc": CYAN}
 PAL = ["4F81BD", "9BBB59", "4BACC6", "2C4D75", "F79646", "8064A2", "C0504D", "7F7F7F"]
 CHART = {"bar": XL_CHART_TYPE.COLUMN_CLUSTERED, "stack": XL_CHART_TYPE.COLUMN_STACKED, "hbar": XL_CHART_TYPE.BAR_CLUSTERED,
-         "donut": XL_CHART_TYPE.DOUGHNUT, "line": XL_CHART_TYPE.LINE}
+         "donut": XL_CHART_TYPE.DOUGHNUT, "line": XL_CHART_TYPE.LINE, "prtg": XL_CHART_TYPE.LINE, "area": XL_CHART_TYPE.AREA}
 X0, W0, Y0, Y1 = 40, 1361, 101, 735  # area isi (pt): sama dengan tabel KPI di template
 
 
@@ -158,12 +158,19 @@ def _chart(slide, ch, x, y, w, h, fs=11):
     if kind == "hbar":
         c.category_axis.reverse_order = True
     for j, se in enumerate(plot.series):
-        if kind == "line":
-            se.format.line.color.rgb = rgb(PAL[j % len(PAL)])
+        if kind in ("line", "prtg"):
+            se.format.line.color.rgb = rgb(ch["series"][j].get("color") or PAL[j % len(PAL)])
             se.smooth = False
         else:
             se.format.fill.solid()
-            se.format.fill.fore_color.rgb = rgb(PAL[j % len(PAL)])
+            se.format.fill.fore_color.rgb = rgb(ch["series"][j].get("color") or PAL[j % len(PAL)])
+            if kind == "area":                                          # see-through fill so the two directions can overlap, as in PRTG graphs
+                try:
+                    from pptx.oxml.ns import qn
+                    from lxml import etree
+                    etree.SubElement(se._element.find(".//" + qn("a:srgbClr")), qn("a:alpha")).set("val", "55000")
+                except Exception:
+                    pass
     return c
 
 

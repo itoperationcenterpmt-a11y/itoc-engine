@@ -15,7 +15,7 @@ MIME = {"xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.she
 # ---------------------------------------------------------------- Excel
 def to_xlsx(m: dict) -> bytes:
     from openpyxl import Workbook
-    from openpyxl.chart import BarChart, DoughnutChart, LineChart, Reference
+    from openpyxl.chart import AreaChart, BarChart, DoughnutChart, LineChart, Reference
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
     head_fill, thin = PatternFill("solid", fgColor=NAVY), Side(style="thin", color=LINE)
@@ -77,8 +77,10 @@ def to_xlsx(m: dict) -> bytes:
             if kind == "donut":
                 bc = DoughnutChart()
                 bc.holeSize = 55
-            elif kind == "line":
+            elif kind in ("line", "prtg"):
                 bc = LineChart()
+            elif kind == "area":
+                bc = AreaChart()
             else:
                 bc = BarChart()
                 bc.type = "bar" if kind == "hbar" else "col"
@@ -89,6 +91,10 @@ def to_xlsx(m: dict) -> bytes:
             bc.title, bc.height, bc.width = ch["title"], 7.4, 14.2
             bc.add_data(Reference(ws, min_col=gcol + 1, max_col=gcol + nser, min_row=hdr, max_row=hdr + nlab), titles_from_data=True)
             bc.set_categories(Reference(ws, min_col=gcol, min_row=hdr + 1, max_row=hdr + nlab))
+            if kind in ("area", "bar", "stack", "hbar"):
+                for j, se in enumerate(ch["series"]):
+                    if se.get("color") and j < len(bc.series):
+                        bc.series[j].graphicalProperties.solidFill = se["color"]
             if nser == 1 and kind != "donut":
                 bc.legend = None
             ws.add_chart(bc, f"{'A' if idx % 2 == 0 else 'G'}{cr + (idx // 2) * 16}")
@@ -115,6 +121,101 @@ def to_xlsx(m: dict) -> bytes:
 
 
 # ---------------------------------------------------------------- PDF
+def _pdf_area(ch, w, h):
+    """Traffic graph in the PRTG style: filled areas under the lines, light grid, few date labels, legend underneath."""
+    import math
+    from reportlab.graphics.shapes import Drawing, Line, Polygon, PolyLine, Rect, String
+    from reportlab.lib import colors
+    col = lambda c, a=1.0: (lambda x: colors.Color(x.red, x.green, x.blue, alpha=a))(colors.HexColor("#" + c))
+    d = Drawing(w, h)
+    d.add(String(4, h - 10, ch["title"], fontName="Helvetica-Bold", fontSize=8.5, fillColor=col(NAVY)))
+    labels, series, n = ch["labels"], ch["series"], len(ch["labels"])
+    x0, y0, pw, ph = 40, 34, w - 52, h - 58
+    vmax = max([v or 0 for s in series for v in s["values"]] + [0.0001])
+    raw = vmax / 4
+    mag = 10 ** math.floor(math.log10(raw))
+    step = next(m * mag for m in (1, 2, 2.5, 5, 10) if m * mag >= raw)
+    top = step * math.ceil(vmax / step)
+    nice = lambda v: ("%.2f" % v).rstrip("0").rstrip(".") if v < 10 else "%d" % round(v)
+    for k in range(int(round(top / step)) + 1):
+        y = y0 + ph * k * step / top
+        d.add(Line(x0, y, x0 + pw, y, strokeColor=col("E1E7EF"), strokeWidth=.5))
+        d.add(String(x0 - 4, y - 2.5, nice(k * step), fontName="Helvetica", fontSize=6.5, textAnchor="end", fillColor=col("5B6B7F")))
+    xs = [x0 + (pw * i / (n - 1) if n > 1 else pw / 2) for i in range(n)]
+    for j, se in enumerate(series):
+        c = se.get("color") or PAL[j % len(PAL)]
+        pts = [(xs[i], y0 + ph * (v or 0) / top) for i, v in enumerate(se["values"])]
+        flat = [p for xy in pts for p in xy]
+        d.add(Polygon([xs[0], y0] + flat + [xs[-1], y0], fillColor=col(c, .38), strokeColor=None))
+        d.add(PolyLine(flat, strokeColor=col(c), strokeWidth=1.1))
+    d.add(Line(x0, y0, x0 + pw, y0, strokeColor=col("9AA7B8"), strokeWidth=.7))
+    idx = sorted({round(i * (n - 1) / 6) for i in range(7)}) if n > 7 else range(n)
+    for i in idx:
+        d.add(String(xs[i], y0 - 10, labels[i], fontName="Helvetica", fontSize=6.5, textAnchor="middle", fillColor=col("5B6B7F")))
+    lx = x0
+    for j, se in enumerate(series):
+        d.add(Rect(lx, 6, 8, 6, fillColor=col(se.get("color") or PAL[j % len(PAL)], .6), strokeColor=None))
+        d.add(String(lx + 11, 6, se["name"], fontName="Helvetica", fontSize=7, fillColor=col("33445C")))
+        lx += 24 + len(se["name"]) * 4
+    return d
+
+
+def _pdf_prtg(ch, w, h):
+    """One link in the PRTG style: traffic lines with the highest and lowest point marked, downtime as red vertical lines in the same graph, caption and footer."""
+    import math
+    from reportlab.graphics.shapes import Circle, Drawing, Line, PolyLine, Rect, String
+    from reportlab.lib import colors
+    col = lambda c: colors.HexColor("#" + c)
+    d = Drawing(w, h)
+    labels, series, down, n = ch["labels"], ch["series"], ch["down"], len(ch["labels"])
+    d.add(String(4, h - 10, ch["title"], fontName="Helvetica-Bold", fontSize=9, fillColor=col(NAVY)))
+    if ch.get("sub"):
+        d.add(String(w - 4, h - 10, ch["sub"], fontName="Helvetica", fontSize=7, textAnchor="end", fillColor=col("5B6B7F")))
+    x0, y0, pw, ph = 40, 44, w - 78, h - 68
+    vmax = max([v or 0 for s in series for v in s["values"]] + [0.0001])
+    raw = vmax / 4
+    mag = 10 ** math.floor(math.log10(raw))
+    step = next(m * mag for m in (1, 2, 2.5, 5, 10) if m * mag >= raw)
+    top = step * math.ceil(vmax / step)
+    nice = lambda v: ("%.2f" % v).rstrip("0").rstrip(".") if v < 10 else "%d" % round(v)
+    for k in range(int(round(top / step)) + 1):
+        y = y0 + ph * k * step / top
+        d.add(Line(x0, y, x0 + pw, y, strokeColor=col("DDDDDD"), strokeWidth=.5))
+        d.add(String(x0 - 4, y - 2.5, nice(k * step), fontName="Helvetica", fontSize=6.5, textAnchor="end", fillColor=col("5B6B7F")))
+    for k in range(5):
+        d.add(String(x0 + pw + 4, y0 + ph * k / 4 - 2.5, f"{k * 25}%", fontName="Helvetica", fontSize=6.5, fillColor=col("D6558F")))
+    d.add(String(x0 - 4, y0 + ph + 5, ch.get("unit", ""), fontName="Helvetica", fontSize=6.5, textAnchor="end", fillColor=col("5B6B7F")))
+    xs = [x0 + (pw * i / (n - 1) if n > 1 else pw / 2) for i in range(n)]
+    for i, v in enumerate(down):
+        if v and v > 0:
+            bw = max(pw / max(n, 1), .7)
+            d.add(Rect(xs[i] - bw / 2, y0, bw, ph, fillColor=colors.Color(.85, .33, .33, alpha=.13), strokeColor=None))
+            d.add(Rect(xs[i] - bw / 2, y0, bw, ph * min(max(v, 6), 100) / 100, fillColor=colors.Color(.85, .33, .33, alpha=.45), strokeColor=None))
+    for j, se in reversed(list(enumerate(series))):
+        pts = [p for i, v in enumerate(se["values"]) for p in (xs[i], y0 + ph * (v or 0) / top)]
+        d.add(PolyLine(pts, strokeColor=col(se["color"]), strokeWidth=1.0 if j else 1.3))
+    tot = series[0]["values"]
+    if tot:
+        up = [v for v in tot if v and v > 0] or tot
+        for fn, tag in ((max, "Max"), (min, "Min")):
+            i = tot.index(fn(up))
+            x, y = xs[i], y0 + ph * tot[i] / top
+            d.add(Circle(x, y, 2.2, fillColor=col(series[0]["color"]), strokeColor=colors.white, strokeWidth=.6))
+            d.add(String(min(max(x, x0 + 30), x0 + pw - 30), y + 4, f"{tag}: {nice(tot[i])} {ch.get('unit', '')}", fontName="Helvetica-Bold", fontSize=6.5, textAnchor="middle", fillColor=col("33445C")))
+    d.add(Line(x0, y0, x0 + pw, y0, strokeColor=col("9AA7B8"), strokeWidth=.7))
+    for i in (sorted({round(k * (n - 1) / 7) for k in range(8)}) if n > 8 else range(n)):
+        d.add(String(xs[i], y0 - 9, labels[i], fontName="Helvetica", fontSize=6, textAnchor="middle", fillColor=col("5B6B7F")))
+    lx = x0
+    for se in series:
+        d.add(Line(lx, 24, lx + 10, 24, strokeColor=col(se["color"]), strokeWidth=1.6))
+        d.add(String(lx + 13, 21.5, se["name"], fontName="Helvetica", fontSize=7, fillColor=col("33445C")))
+        lx += 30 + len(se["name"]) * 3.6
+    d.add(Rect(lx, 20, 6, 8, fillColor=colors.Color(.85, .33, .33, alpha=.5), strokeColor=None))
+    d.add(String(lx + 10, 21.5, "Downtime (right axis: share of the hour or day that was down)", fontName="Helvetica", fontSize=7, fillColor=col("33445C")))
+    d.add(String(x0, 6, f"TERA · {ch.get('res', '')} · ID {ch.get('sid', '')}", fontName="Helvetica", fontSize=6, fillColor=col("8A96A6")))
+    return d
+
+
 def _pdf_chart(ch, w, h):
     """Satu grafik reportlab (batang, tumpuk, horizontal, donut, garis) dalam Drawing berukuran w x h."""
     from reportlab.graphics.charts.barcharts import HorizontalBarChart, VerticalBarChart
@@ -126,6 +227,10 @@ def _pdf_chart(ch, w, h):
     d = Drawing(w, h)
     d.add(String(4, h - 10, ch["title"], fontName="Helvetica-Bold", fontSize=8.5, fillColor=hx(NAVY)))
     kind, series = ch["kind"], ch["series"]
+    if kind == "prtg":
+        return _pdf_prtg(ch, w, h)
+    if kind == "area":
+        return _pdf_area(ch, w, h)
     labels = [(l if len(l) <= 34 else l[:33] + "…") for l in ch["labels"]]
     data = [[v or 0 for v in se["values"]] for se in series]
     if kind == "donut":
@@ -164,6 +269,10 @@ def _pdf_chart(ch, w, h):
         for i in range(len(data)):
             b.lines[i].strokeColor = hx(PAL[i % len(PAL)])
             b.lines[i].strokeWidth = 1.5
+        if len(labels) > 8:
+            b.categoryAxis.labels.angle = 50
+            b.categoryAxis.labels.boxAnchor = "ne"
+            b.categoryAxis.labels.dx, b.categoryAxis.labels.dy = -2, -2
     else:
         b = VerticalBarChart()
         b.x, b.y, b.width, b.height = 36, 34, w - 50, h - 60
@@ -181,7 +290,7 @@ def _pdf_chart(ch, w, h):
             b.categoryAxis.labels.dx, b.categoryAxis.labels.dy = -2, -2
     if kind != "line":
         for j in range(len(data)):
-            b.bars[j].fillColor = hx(PAL[j % len(PAL)])
+            b.bars[j].fillColor = hx(series[j].get("color") or PAL[j % len(PAL)])
             b.bars[j].strokeColor = None
     d.add(b)
     if len(series) > 1:
@@ -233,6 +342,15 @@ def to_pdf(m: dict) -> bytes:
                                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F6F8FA")), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
             flow += [t, Spacer(1, 4)]
         cw = (W - 6) / 2
+        for c in [c for c in s["charts"] if c["kind"] == "prtg"]:
+            rows = [[P(h, "ch") for h in ("Channel", "Average", "Total")]] + [[P(v, "c") for v in r] for r in c["rows"]]
+            tb = Table(rows, colWidths=[W * .30 * .30, W * .30 * .33, W * .30 * .37])
+            tb.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), hx(NAVY)), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F6F8FA")]),
+                                    ("LINEBELOW", (0, 0), (-1, -1), .25, hx(LINE)), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+            lt = Table([[_pdf_chart(c, W * .68, 178), tb]], colWidths=[W * .70, W * .30])
+            lt.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
+            flow.append(lt)
+        s = {**s, "charts": [c for c in s["charts"] if c["kind"] != "prtg"]}
         for i in range(0, len(s["charts"]), 2):
             row = [_pdf_chart(c, cw, 165) for c in s["charts"][i:i + 2]]
             row += [""] * (2 - len(row))

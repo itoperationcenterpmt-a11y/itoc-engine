@@ -65,7 +65,7 @@ def config(user: User = Depends(current_user), db: Session = Depends(get_db)):
 
 @router.get("/view/{tab}")
 def view(tab: str, d_from: date = Query(alias="from"), d_to: date = Query(alias="to"), shift: int = 0, site: str = "", cmp: bool = False,
-         sensor: str = "", preset: str = "standar", kind: str = "", dstat: str = "", grp: str = "", dtype: str = "", rgrp: str = "", rtech: str = "", user: User = Depends(current_user), db: Session = Depends(get_db)):
+         sensor: str = "", preset: str = "standar", kind: str = "", dstat: str = "", grp: str = "", dtype: str = "", rgrp: str = "", rtech: str = "", rlink: str = "", user: User = Depends(current_user), db: Session = Depends(get_db)):
     if not can_see(user, tab):
         raise HTTPException(403, "You have no access to this page")
     c = load_config(db)
@@ -75,7 +75,7 @@ def view(tab: str, d_from: date = Query(alias="from"), d_to: date = Query(alias=
     if (d_to - d_from).days > max_days:
         raise HTTPException(400, f"Rentang maksimal {max_days} hari")
     site = effective_site(user, db) or site  # IT Care (kantor pusat) dan EOS (lokasi sendiri) dikunci ke lokasinya
-    flt = views.Filt(d_from, d_to, shift, site, cmp, sensor, kind, dstat, grp, dtype, rgrp, rtech)
+    flt = views.Filt(d_from, d_to, shift, site, cmp, sensor, kind, dstat, grp, dtype, rgrp, rtech, rlink)
     flt.preset = preset
     return views.bundle(db, c, tab, flt, user)
 
