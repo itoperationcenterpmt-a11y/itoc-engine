@@ -41,7 +41,7 @@ def _canon_counts(db, counts: dict) -> dict:
         out[c] = out.get(c, 0) + v
     return out
 
-def _tk(db, cfg: Config, a: date, b: date, shift: int, site: str, group: str = "", tech: str = ""):
+def _tk(db, cfg: Config, a: date, b: date, shift: int, site: str, group: str = "", tech: str = "", with_list: bool = False):
     def run():
         q = select(M.Ticket).where(M.Ticket.created_at >= datetime.combine(a, datetime.min.time()),
                                    M.Ticket.created_at < datetime.combine(b, datetime.min.time()) + timedelta(days=1))
@@ -49,8 +49,8 @@ def _tk(db, cfg: Config, a: date, b: date, shift: int, site: str, group: str = "
             q = q.where(_tsite(db, site))
         rows = SD.as_rows(db.scalars(q.order_by(M.Ticket.created_at)))
         ppl = [p for p in cfg.people if not site or not p["branch"] or p["branch"] == site]
-        return SD.calc(rows, cfg, a, b, shift, ppl, only_group=group, only_tech=tech)
-    return cached(("tk", a, b, shift, site, group, tech), run)
+        return SD.calc(rows, cfg, a, b, shift, ppl, only_group=group, only_tech=tech, with_list=with_list)
+    return cached(("tk", a, b, shift, site, group, tech, with_list), run)
 
 
 def _net_base(db, cfg, a, b, shift, site):

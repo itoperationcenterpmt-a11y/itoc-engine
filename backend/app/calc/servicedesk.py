@@ -84,7 +84,7 @@ def group_of(cfg: Config, ppl: list[dict]):
     return grp_of
 
 
-def calc(rows: list[list], cfg: Config, d_from: date, d_to: date, shift: int = 0, people: list[dict] | None = None, now: datetime | None = None, only_group: str = "", only_tech: str = "") -> dict:
+def calc(rows: list[list], cfg: Config, d_from: date, d_to: date, shift: int = 0, people: list[dict] | None = None, now: datetime | None = None, only_group: str = "", only_tech: str = "", with_list: bool = False) -> dict:
     a = datetime.combine(d_from, datetime.min.time())
     b = datetime.combine(d_to, datetime.min.time()) + timedelta(days=1)
     clk = cfg.clock
@@ -218,4 +218,9 @@ def calc(rows: list[list], cfg: Config, d_from: date, d_to: date, shift: int = 0
     R["openList"] = [{**row(d), "age": round((now - d["t"][12]).total_seconds() / 8640) / 10} for d in D if d["open"]][:15]
     R["longest"] = [{**row(d), "days": d["dur"] / 24, "pola": polas.get(d["pola"], "")}
                     for d in sorted((d for d in D if d["dur"] is not None), key=lambda d: -d["dur"])[:25]]
+    if with_list:                                               # every ticket of the selection, newest first, for the downloadable report
+        lab = {"in": "Within target", "out": "Over target", "none": "No SLA", "na": "No duration"}
+        f_ = lambda x: x.strftime("%Y-%m-%d %H:%M") if x else ""
+        R["all"] = [[d["t"][0], f_(d["t"][12]), f_(d["t"][13]), d["t"][6], d["t"][2], d["t"][3], d["t"][4], d["t"][7], d["t"][10], d["t"][15], lab.get(d["sla"], ""), d["dur"]]
+                    for d in sorted(D, key=lambda d: d["t"][12], reverse=True)]
     return R

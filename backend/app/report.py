@@ -115,8 +115,29 @@ def _pick(cfg, section, ids, preset, charts):
 
 
 # ---------------- bagian ----------------
+TICKET_LIST_MAX = 20000
+
+
+def _wants_list(f, preset):
+    """Every ticket of the selection goes into the file for a Team or Technician report and for the Full size; never for Compact."""
+    return preset != "ringkas" and (preset == "lengkap" or bool(getattr(f, "rgrp", "") or getattr(f, "rtech", "")))
+
+
+def _ticket_list(T):
+    """The 'All tickets' table, added after the size limits so it is never cut. Large lists are left out of PowerPoint."""
+    rows = T.get("all")
+    if not rows:
+        return []
+    t = _table("All tickets", ["ID", "Created", "Resolved", "Subject", "Requester", "Site", "Category", "Technician", "Priority", "Status", "SLA", "Duration (h)"],
+               ["t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "f1"], rows[:TICKET_LIST_MAX])
+    t["bulk"] = True
+    t["widths"] = [.8, 1.5, 1.5, 3.9, 2.3, 2.2, 1.3, 2.2, 1.2, 1, 1.4, 1.2]
+    return [t]
+
+
 def _servicedesk(db, cfg, f, preset="standar"):
-    T = VW._tk(db, cfg, f.d_from, f.d_to, f.shift, f.site, getattr(f, "rgrp", ""), getattr(f, "rtech", ""))
+    wl = _wants_list(f, preset)
+    T = VW._tk(db, cfg, f.d_from, f.d_to, f.shift, f.site, getattr(f, "rgrp", ""), getattr(f, "rtech", ""), wl)
     s = {"key": "servicedesk", "title": "Ticketing", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not T["n"]:
         s["notes"].append("No tickets in this period and filter.")
@@ -164,6 +185,7 @@ def _servicedesk(db, cfg, f, preset="standar"):
     if rk:
         s["tables"].append(_table("Technician ranking", ["#", "Name", "Unit", "Tickets", "Done", "Open", "Average (h)", "Within SLA"], ["n", "t", "t", "n", "n", "n", "f1", "p1"],
                                   [[r["rank"], r["name"], r["unit"], r["n"], r["done"], r["open"], r["avg"], r["inPct"]] for r in rk]))
+    s["extra"] = _ticket_list(T)
     if T["openList"]:
         s["tables"].append(_table("Open tickets (latest)", ["ID", "Subject", "Location", "Technician", "Priority", "Status", "Age (days)"], ["t", "t", "t", "t", "t", "t", "f1"],
                                   [[r["id"], r["subj"], r["loc"], r["tech"], r["prio"], r["status"], r["age"]] for r in T["openList"][:10]]))
@@ -180,7 +202,7 @@ def _servicedesk(db, cfg, f, preset="standar"):
 def _performance(db, cfg, f, preset="standar"):
     """Technician, team, and shift performance from the tickets assigned to them: volume, completion, resolution time, SLA, input quality, each against the previous period of the same length."""
     g, tk = getattr(f, "rgrp", ""), getattr(f, "rtech", "")
-    T = VW._tk(db, cfg, f.d_from, f.d_to, f.shift, f.site, g, tk)
+    T = VW._tk(db, cfg, f.d_from, f.d_to, f.shift, f.site, g, tk, _wants_list(f, preset))
     pa, pb = f.prev
     P = VW._tk(db, cfg, pa, pb, f.shift, f.site, g, tk)
     s = {"key": "performance", "title": "Performance", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
@@ -213,6 +235,7 @@ def _performance(db, cfg, f, preset="standar"):
     s["tables"].append(_table("Technician performance", ["#", "Technician", "Unit", "Tickets", "Done", "Open", "Completion", "Average (h)", "Within SLA", "High priority", "Incomplete input", "Zero-minute", "Tickets vs prev.", "SLA vs prev. (pp)"],
                               ["n", "t", "t", "n", "n", "n", "p1", "f1", "p1", "n", "p1", "n", "n", "f1"],
                               [[r["rank"], r["name"], r["unit"], r["n"], r["done"], r["open"], r["done"] / r["n"], r["avg"], r["inPct"], r["high"], 1 - r["okPct"] if r["okPct"] is not None else None, r["zero"], *dt(r, prev_t.get(r["name"]))] for r in rk]))
+    s["extra"] = _ticket_list(T)
     idle = [r for r in T["ranking"] if not r["n"]]
     if idle and not (f.site or g or tk):
         s["notes"].append(f"{len(idle)} technicians on the roster had no tickets in this period.")
@@ -668,6 +691,7 @@ def build(db, cfg, user, f, kind="full", preset="standar"):
     for s_ in secs:
         s_["charts"] = [c for c in s_["charts"] if c["labels"]]                   # a filter can leave a chart without any data
         _compact(s_, preset)
+        s_["tables"] += s_.pop("extra", [])
     single = len(allowed) == 1 and spec.get("sections")
     for s in secs:
         s["prefix"] = spec["prefix"] if single and spec.get("prefix") else s["title"]

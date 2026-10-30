@@ -238,6 +238,8 @@ def build_from_template(m: dict) -> bytes:
 
     def tables_of(sec, pre):
         for t in sec["tables"]:
+            if t.get("bulk"):                                           # the full ticket list lives in the Excel and PDF files
+                continue
             for start in range(0, len(t["rows"]), 14):
                 part = t["rows"][start:start + 14]
                 ts = page(f"{pre} · {t['title']}" + (f" ({start // 14 + 1}/{-(-len(t['rows']) // 14)})" if len(t["rows"]) > 14 else ""))

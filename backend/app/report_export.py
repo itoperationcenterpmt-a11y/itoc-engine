@@ -317,6 +317,7 @@ def to_pdf(m: dict) -> bytes:
           "lab": ParagraphStyle("lab", fontName="Helvetica", fontSize=7.5, leading=9, textColor=hx(MUTED)),
           "val": ParagraphStyle("val", fontName="Helvetica-Bold", fontSize=17, leading=20, textColor=hx(NAVY)),
           "c": ParagraphStyle("c", fontName="Helvetica", fontSize=7.5, leading=9),
+          "cb": ParagraphStyle("cb", fontName="Helvetica", fontSize=6.5, leading=7.6),
           "ch": ParagraphStyle("ch", fontName="Helvetica-Bold", fontSize=7.5, leading=9, textColor=colors.white),
           "note": ParagraphStyle("note", fontName="Helvetica-Oblique", fontSize=9, leading=12, textColor=hx(MUTED))}
     P = lambda t, s: Paragraph(escape(str(t)), st[s])
@@ -367,12 +368,14 @@ def to_pdf(m: dict) -> bytes:
             flow.append(gt)
         for t in s["tables"]:
             ttl = P(t["title"], "h3")
-            data = [[P(h, "ch") for h in t["heads"]]] + [[P(fmt(v, t["kinds"][c]), "c") for c, v in enumerate(row)] for row in t["rows"]]
-            wts = [3.4 if k == "t" else 1.2 for k in t["kinds"]]
-            wts[0] = max(wts[0], 2.6)
+            bulk = bool(t.get("bulk"))
+            data = [[P(h, "ch") for h in t["heads"]]] + [[P((fmt(v, t["kinds"][c]) if not bulk or c != 3 else str(v or "")[:110]), "cb" if bulk else "c") for c, v in enumerate(row)] for row in t["rows"]]
+            wts = t.get("widths") or [3.4 if k == "t" else 1.2 for k in t["kinds"]]
+            if not t.get("widths"):
+                wts[0] = max(wts[0], 2.6)
             tb = Table(data, colWidths=[W * w / sum(wts) for w in wts], repeatRows=1)
             tb.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), hx(NAVY)), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F6F8FA")]),
-                                    ("LINEBELOW", (0, 0), (-1, -1), .25, hx(LINE)), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+                                    ("LINEBELOW", (0, 0), (-1, -1), .25, hx(LINE)), ("TOPPADDING", (0, 0), (-1, -1), 1.2 if bulk else 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.2 if bulk else 3)]))
             flow.append(KeepTogether([ttl, tb]) if len(t["rows"]) <= 14 else [ttl, tb][0])
             if len(t["rows"]) > 14:
                 flow.append(tb)
@@ -483,6 +486,8 @@ def _to_pptx_plain(m: dict) -> bytes:
                 se.format.fill.fore_color.rgb = rgb(PAL[j % len(PAL)])
             break  # satu grafik per slide ringkas; grafik lain ada di Excel
         for t in s["tables"]:
+            if t.get("bulk"):
+                continue
             for start in range(0, len(t["rows"]), 12):
                 rows = t["rows"][start:start + 12]
                 ts = prs.slides.add_slide(blank)
