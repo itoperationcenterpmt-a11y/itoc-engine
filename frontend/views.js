@@ -77,6 +77,7 @@ const ICO = {
   bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
   router: '<rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 16.5h.01M11 16.5h.01M8 13V9M16 13V9M6 9a8 8 0 0 1 4-3M18 9a8 8 0 0 0-4-3"/>',
   wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3 17.7 6.3 21l6.3-6.3a4 4 0 0 0 5.1-5.4l-2.4 2.4-2.4-.6-.6-2.4z"/>',
+  pulse: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 10h2l1.5-3 2 6 1.5-3h3M9 20h6M12 16v4"/>',
   calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>'
 };
 const icon = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICO[(MODS[k] || {}).icon] || '<circle cx="12" cy="12" r="4"/>'}</svg>`;const topOf = k => { const p = (MODS[k] || {}).parent; return p && MODS[p] ? p : k; };
@@ -156,7 +157,7 @@ const fold = (title, body) => `<details class="fold"><summary>${title}</summary>
 const attRow = a => `<li class="${a[0]}"><span>${a[1]}</span>${go(a[2], "View")}</li>`;
 
 function vRingkasan() {
-  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total), Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)), Xd = V.xdr, hasX = !!(Xd && Xd.configured && (Xd.total || Xd.backlogCH)), Cc = V.cctv, hasC = !!(Cc && Cc.configured && Cc.total), In = V.insight, hasI = !!(In && In.open.length), Iu = V.inet, hasU = !!(Iu && Iu.nFw && Iu.total.bytes);
+  const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total), Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)), Xd = V.xdr, hasX = !!(Xd && Xd.configured && (Xd.total || Xd.backlogCH)), Cc = V.cctv, hasC = !!(Cc && Cc.configured && Cc.total), In = V.insight, hasI = !!(In && In.open.length), Iu = V.inet, hasU = !!(Iu && Iu.nFw && Iu.total.bytes), Ku = V.kuma, hasK = !!(Ku && Ku.configured && Ku.total);
   const T = hasT ? tkR() : null, N = hasN ? netR() : null, R = hasS ? socR() : null, chk = hasS ? socCheck() : [], okDays = chk.filter(x => x.s === "ok" || x.s === "dup").length, now = nowShift();
   const P = S.cmp ? prevRange() : null, Tp = P && tkR(P), Np = P && netR(P), Rp = P && socR(P);
   const openOld = V.open_old || [], oldD = CFG.params["sd.open_alert_days"], badLinks = N ? N.rank.filter(s => s.status === NST.bad) : [], hoOpen = V.ho_open || [], hiCrit = hoOpen.filter(h => prTone(h.prio) === "crit").length;
@@ -171,6 +172,7 @@ function vRingkasan() {
   if (R && R.chAlert) att.push(["warn", `<b>${fmt(R.chAlert)} critical/high events were alert-only</b>, not blocked by the firewall.`, "soc"]);
   if (hasD && D.all.down) att.push(["warn", `<b>${fmt(D.all.down)} devices down</b> (CCTV and Gate System), ${fmt(D.chronic)} of them for more than 30 days.`, "devices"]);
   if (hasX && Xd.backlogCH) att.push(["warn", `<b>${Xd.backlogCH} critical/high XDR alerts</b> are still open.`, "xdr"]);
+  if (hasK && Ku.down) att.push(["warn", `<b>${pl(Ku.down, "Uptime Kuma monitor")} down</b>: ${Ku.mons.filter(m => m.status === 0).slice(0, 3).map(m => esc(m.name)).join(", ")}${Ku.down > 3 ? ", …" : ""}.`, "kuma"]);
   if (apOff > 0) att.push(["warn", `<b>${apOff} of ${Wf.apTotal} WiFi Access Points</b> are offline.`, "wifi"]);
   if (N && N.nodata) dq.push(["dq", `<b>${pl(N.nodata, "link")} with insufficient data</b> (monitoring coverage below ${pc(PAR.minCov, 0)}), not assessed against SLA.`, "noc"]);
   if (R && R.unknown && Object.keys(R.unknown).length) dq.push(["dq", `<b>Cyber Security: new values outside the parameter list</b> (${Object.entries(R.unknown).map(([k, r]) => ({type: "type", action: "action", severity: "severity"}[k]) + ": " + r.map(x => esc(x[0])).join(", ")).join("; ")})`, "soc"]);
@@ -184,6 +186,7 @@ function vRingkasan() {
   const nowTiles = [
     hasD ? stile("devices", "Devices", D.all.down ? "warn" : "good", D.all.down ? fmt(D.all.down) + " devices down" : "All online", "Availability " + (D.all.avail != null ? pc(D.all.avail, 1) : "-") + " · " + fmt(D.all.total) + " devices", {tip: D.chronic ? fmt(D.chronic) + " down for more than 30 days" : ""}) : "",
     hasW ? stile("wifi", "WiFi", apOff ? "warn" : "good", Wf.apTotal ? (apOff ? apOff + " APs offline" : "All APs online") : "No AP data", fmt(Wf.total) + " clients connected" + (Wf.weak ? " · " + fmt(Wf.weak) + " weak signal" : ""), {tip: Wf.apTotal ? fmt(Wf.apOnline) + " of " + fmt(Wf.apTotal) + " access points online" : ""}) : "",
+    hasK ? stile("kuma", "Uptime Kuma", Ku.down ? "warn" : "good", Ku.down ? pl(Ku.down, "monitor") + " down" : "All monitors up", fmt(Ku.up) + " of " + fmt(Ku.total) + " up · availability " + (Ku.avail != null ? pc(Ku.avail, 2) : "–")) : "",
     hasC ? stile("cctv", "Milestone", Cc.srv.failed.length ? "warn" : "good", Cc.srv.ok + " of " + Cc.srv.total + " servers syncing", fmt(Cc.zbx.up + Cc.zbx.other) + " cameras online" + (Cc.zbx.down ? " · " + fmt(Cc.zbx.down) + " offline" : "") + " · " + fmt(Cc.total) + " cameras") : "",
     hasH ? stile("serahterima", "Handover", hiCrit ? "crit" : hoOpen.length ? "warn" : "good", hoOpen.length ? hoOpen.length + " open handovers" : "None open", hiCrit ? hiCrit + " high priority" : "all under control") : ""
   ].filter(Boolean);

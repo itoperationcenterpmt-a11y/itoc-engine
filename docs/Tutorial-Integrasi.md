@@ -113,3 +113,14 @@ Dashboard memakai REST API Vision One v3 untuk menarik **alert Workbench** dan m
 Sinkron pertama menarik 30 hari ke belakang (`backfill_days`, maksimal 365); berikutnya hanya alert yang baru atau berubah (interval 15 menit). Halaman XDR membaca dari database, bukan langsung dari Vision One.
 
 **Catatan**: bentuk jawaban API ditulis mengikuti dokumentasi Vision One v3. Tombol Test menampilkan nama field yang benar-benar diterima, jadi bila ada perbedaan versi, kirim hasil Test-nya untuk disesuaikan.
+
+## 7. Uptime Kuma (Network)
+
+Uptime Kuma dibaca lewat halaman Prometheus-nya (`/metrics`), hanya baca.
+
+1. Di Uptime Kuma: **Settings > API Keys**, buat satu API key (boleh tanpa kedaluwarsa). Alternatifnya pakai username dan password akun Kuma.
+2. Di TERA: **Admin > Data Sources > Integrations > Uptime Kuma**. Isi **Base URL** (alamat Kuma saja, contoh `http://10.1.1.5:3001`, tanpa `/metrics`).
+3. Kredensial: kalau memakai API key, kosongkan Username dan isi API key di kolom Password. Kalau memakai akun, isi keduanya. Nilainya disimpan terenkripsi.
+4. Klik **Test**, lalu nyalakan sumbernya. Sinkron berjalan tiap 5 menit; setiap sinkron menambah satu sampel per monitor, dan ketersediaan dihitung dari sampel itu (1 − sampel down ÷ semua sampel). Monitor yang sedang maintenance tidak dihitung.
+5. Menu **Network > Uptime Kuma** muncul untuk role yang punya akses PRTG (role lain diatur di **Admin > Access > Roles**). Report tersedia sebagai jenis **Uptime Kuma** dan ikut jenis **Network**.
+6. Lokasi monitor diambil dari nama atau host monitor yang cocok dengan nama atau alias lokasi (Admin > Data Sources > Mapping, kolom Aliases). Monitor yang tidak cocok tampil di bagian "Unmapped"; beri nama monitor awalan kode lokasi (contoh `BDJ - Website`) atau tambahkan alias lokasinya.

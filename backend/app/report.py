@@ -13,7 +13,7 @@ from .calc import soc as SOC, soc_fw as SOCFW, servicedesk as SD
 from .security import can_see
 
 PERM = {"performance": "servicedesk"}                                   # sections that share the access of another module
-SECTIONS = [("servicedesk", "Ticketing"), ("performance", "Performance"), ("noc", "Networking (PRTG)"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)"), ("internet", "Internet Usage")]
+SECTIONS = [("servicedesk", "Ticketing"), ("performance", "Performance"), ("noc", "Networking (PRTG)"), ("kuma", "Uptime Kuma"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)"), ("internet", "Internet Usage")]
 WEEKLY_AFTER = 31  # rentang harian lebih panjang dari ini diringkas per minggu (sama dengan dashboard Excel)
 _UK = {"type": "Threat type", "action": "Action", "severity": "Severity"}
 
@@ -507,6 +507,40 @@ def _devices(db, cfg, f, preset="standar"):
     return s
 
 
+KUMA_IDS = ["kuma_status", "kuma_daily", "kuma_loc", "kuma_slow"]
+
+
+def _kuma(db, cfg, f, preset="standar"):
+    """Uptime Kuma monitors: status now, and availability and response time over the report period."""
+    from .calc import kuma as KUMA
+    K = KUMA.build(db, cfg, f.d_from, f.d_to, f.site)
+    s = {"key": "kuma", "title": "Uptime Kuma", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    if not K["configured"] or not K["total"]:
+        s["notes"].append("No Uptime Kuma data" + (f" for {f.site}" if f.site else "") + " yet." + (" Last sync failed: " + K["error"] if K["error"] else ""))
+        return s
+    s["notes"].append("Status is the latest sample; availability and response time follow the report period" + (" (recorded since " + K["since"][:10] + ")" if K.get("since") else "") + ". Monitors in maintenance are not counted in availability.")
+    s["kpis"] = [_kpi("Monitors", K["total"], "n", f"{fmt_n(K['up'])} up"), _kpi("Down now", K["down"], "n", f"{fmt_n(K['pending'])} pending, {fmt_n(K['maint'])} in maintenance"),
+                 _kpi("Availability", K["avail"], "p2", "all samples in the period"), _kpi("Average response (ms)", K["avgMs"], "f0", "monitors with a response time"),
+                 _kpi("Certificates expiring", K["certSoon"], "n", f"within {K['certWarn']} days")]
+    mons, d = K["mons"], K["daily"]
+    slow = sorted((m for m in mons if m["avgMs"]), key=lambda m: -m["avgMs"])
+    s["charts"] = _pick(cfg, "kuma", KUMA_IDS, preset, [
+        _chart("Monitor status", ["Up", "Down", "Pending", "Maintenance"], [{"name": "Monitors", "values": [K["up"], K["down"], K["pending"], K["maint"]]}], "donut"),
+        _daily("Availability (%)", [x["date"] for x in d if x["avail"] is not None], [{"name": "Availability", "values": [round(x["avail"] * 100, 2) for x in d if x["avail"] is not None]}], "line", mean=True),
+        None if f.site else _top("Locations with the lowest availability (%)", [(r["k"], round((1 - r["avail"]) * 100, 2)) for r in K["byLoc"] if r["avail"] is not None], "Unavailable %"),
+        _top("Slowest monitors (average ms)", [(m["name"], round(m["avgMs"])) for m in slow], "ms")])
+    s["tables"].append(_table("Monitors", ["Monitor", "Type", "Target", "Location", "Status", "Availability", "Downtime (h)", "Average (ms)", "Max (ms)", "Cert (days)"], ["t", "t", "t", "t", "t", "p2", "f1", "f0", "f0", "n"],
+                              [[m["name"], m["type"], m["target"], m["loc"], m["label"], m["avail"], m["downH"], m["avgMs"], m["maxMs"], m["cert"]] for m in _cap(mons, preset, 30)]))
+    if not f.site:
+        s["tables"].append(_table("Per location", ["Location", "Monitors", "Down now", "Availability", "Average (ms)"], ["t", "n", "n", "p2", "f0"], [[r["k"], r["n"], r["down"], r["avail"], r["avgMs"]] for r in _cap(K["byLoc"], preset, 20)]))
+    s["tables"].append(_table("Per type", ["Type", "Monitors", "Down now", "Availability", "Average (ms)"], ["t", "n", "n", "p2", "f0"], [[r["k"], r["n"], r["down"], r["avail"], r["avgMs"]] for r in K["byType"]]))
+    if K["down"]:
+        s["attention"].append(f"{K['down']} monitors down now: " + ", ".join(m["name"] for m in mons if m["status"] == 0)[:200])
+    if K["unmapped"]:
+        s["attention"].append(f"{len(K['unmapped'])} monitors do not match a location (add the location name or code as a site alias)")
+    return s
+
+
 def _wifi(db, cfg, f, preset="standar"):
     """Client WiFi aktif dan Access Point dari Ruckus vSZ: kondisi terkini saat laporan dibuat; usage = trafik sesi yang sedang berjalan."""
     from .calc import wifi as WIFI
@@ -614,7 +648,7 @@ def _internet(db, cfg, f, preset="standar"):
     return s
 
 
-_BUILD = {"servicedesk": _servicedesk, "performance": _performance, "internet": _internet, "noc": _noc, "soc": _soc, "devices": _devices, "wifi": _wifi, "xdr": _xdr}
+_BUILD = {"servicedesk": _servicedesk, "performance": _performance, "internet": _internet, "kuma": _kuma, "noc": _noc, "soc": _soc, "devices": _devices, "wifi": _wifi, "xdr": _xdr}
 
 # Jenis laporan (bisa diubah di Admin → Operasional → Target dan Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
@@ -626,14 +660,15 @@ DEFAULT_KINDS = {
     "xdr": {"label": "XDR (Trend Micro)", "desc": "Vision One alerts: severity, detection models, status, backlog", "title": "IT Operation Center - XDR (Trend Micro) Report", "subtitle": "Vision One Workbench alerts", "prefix": "XDR", "sections": ["xdr"]},
     "devices": {"label": "Devices", "desc": "Zabbix device status: category, type, location, devices down", "title": "IT Operation Center - Devices Report", "subtitle": "Device status from Zabbix", "prefix": "Devices", "sections": ["devices"]},
     "wifi": {"label": "WiFi (Ruckus)", "desc": "Active clients, Access Points, usage per SSID and AP", "title": "IT Operation Center - WiFi (Ruckus) Report", "subtitle": "Clients and Access Points from Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
-    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links and Ruckus WiFi together", "title": "IT Operation Center - Network Report", "subtitle": "ISP links, WiFi, and internet usage", "prefix": "Network", "sections": ["noc", "wifi", "internet"]},
+    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links and Ruckus WiFi together", "title": "IT Operation Center - Network Report", "subtitle": "ISP links, WiFi, and internet usage", "prefix": "Network", "sections": ["noc", "wifi", "internet", "kuma"]},
     "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Palo Alto NDR and Trend Micro XDR together", "title": "IT Operation Center - Cyber Security Report", "subtitle": "Palo Alto NDR and Trend Micro XDR", "prefix": "Cyber", "sections": ["soc", "xdr"]},
+    "kuma": {"label": "Uptime Kuma", "desc": "Monitor status, availability, and response time of the watched services", "title": "IT Operation Center - Uptime Kuma Report", "subtitle": "Services watched by Uptime Kuma", "prefix": "Kuma", "sections": ["kuma"]},
     "internet": {"label": "Internet Usage", "desc": "Traffic, applications, web categories, and top users per location (Palo Alto)", "title": "IT Operation Center - Internet Usage Report", "subtitle": "Traffic, applications, and users per location", "prefix": "Internet Usage", "sections": ["internet"]},
     "full": {"label": "Full", "desc": "Summary and details of all areas in one file", "title": "IT Operation Center - Full Report", "subtitle": "Summary and details of all areas", "prefix": "", "sections": None},
 }
 
 
-_ORDER = ["summary", "network", "cyber", "servicedesk", "performance", "noc", "wifi", "internet", "soc", "xdr", "devices", "full"]
+_ORDER = ["summary", "network", "cyber", "servicedesk", "performance", "noc", "wifi", "internet", "kuma", "soc", "xdr", "devices", "full"]
 DEFAULT_KINDS = {k: DEFAULT_KINDS[k] for k in _ORDER}
 
 

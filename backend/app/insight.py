@@ -384,6 +384,20 @@ def d_ndr_mix(db: Session, cfg: Config) -> list[dict]:
                  {"events": fresh[0][1], "new_categories": len(fresh)})]
 
 
+def d_kuma(db: Session, cfg: Config) -> list[dict]:
+    """Uptime Kuma monitors that are down now and were already down in the previous sample hour (so a single failed check does not raise a finding)."""
+    now = cfg.now()
+    hour = now.replace(minute=0, second=0, microsecond=0)
+    out = []
+    for m in db.scalars(select(M.KumaMonitor).where(M.KumaMonitor.status == 0, M.KumaMonitor.updated_at >= now - timedelta(minutes=30))).all()[:20]:
+        prev = db.scalar(select(M.KumaHourly.down).where(M.KumaHourly.monitor_key == m.key, M.KumaHourly.ts == hour - timedelta(hours=1)))
+        cur = db.scalar(select(M.KumaHourly.down).where(M.KumaHourly.monitor_key == m.key, M.KumaHourly.ts == hour))
+        if (prev or 0) > 0 and (cur or 0) > 0:
+            out.append(_ins(f"kuma_down:{m.key}", "links", "warn", f"Uptime Kuma: {m.name} has been down for over an hour",
+                            "The monitor failed in the last two sample hours. Check the service or the link it depends on, and the other findings for the same location.", "kuma", {"response_ms": m.response_ms or 0}))
+    return out
+
+
 def d_wifi_zones(db: Session, cfg: Config) -> list[dict]:
     """Offline Access Points concentrated in one zone, and Access Points offline for a long time."""
     rows = db.execute(select(M.WifiAp.zone, func.count(), func.count().filter(~func.lower(func.coalesce(M.WifiAp.status, "")).startswith("online")))
@@ -546,7 +560,7 @@ def d_data_quality(db: Session, cfg: Config) -> list[dict]:
     return out
 
 
-DETECTORS = [d_tickets, d_ticket_sites, d_ticket_trends, d_sla_risk, d_links, d_availability, d_capacity, d_ndr, d_ndr_traffic, d_xdr, d_xdr_tickets, d_ndr_mix, d_devices, d_flapping_devices, d_incidents, d_wifi, d_wifi_zones, d_milestone, d_site_multi, d_data_quality]
+DETECTORS = [d_tickets, d_ticket_sites, d_ticket_trends, d_sla_risk, d_links, d_availability, d_capacity, d_ndr, d_ndr_traffic, d_xdr, d_xdr_tickets, d_ndr_mix, d_devices, d_flapping_devices, d_incidents, d_wifi, d_wifi_zones, d_kuma, d_milestone, d_site_multi, d_data_quality]
 
 
 # ---------------- rankings, health, summary (computed on request) ----------------

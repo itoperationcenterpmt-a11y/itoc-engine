@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .. import mailer, notify, vault
 from ..db import get_db
 from ..netguard import check_url
-from ..ingest import zabbix, ruckus, panorama_api, trendmicro, milestone
+from ..ingest import zabbix, ruckus, panorama_api, trendmicro, milestone, uptimekuma
 from ..models import ApiKey, CctvCamera, CctvHardware, DataSource, Role, User, Webhook, ZbxHost
 from ..security import rate_limit, require_admin, require_admin_area
 from ..store import audit, bump_config
@@ -22,6 +22,7 @@ CREDS = {
     "manageengine": [("me.token", "API token", "token_env", "ME_AUTHTOKEN")],
     "prtg": [("prtg.user", "Username", "user_env", "PRTG_USER"), ("prtg.passhash", "Passhash", "passhash_env", "PRTG_PASSHASH")],
     "zabbix": [("zabbix.token", "API token", "token_env", "ZABBIX_TOKEN")],
+    "uptimekuma": [("kuma.user", "Username (leave empty when the password is an API key)", "user_env", "KUMA_USER"), ("kuma.pass", "API key, or the password of the username", "pass_env", "KUMA_PASS")],
     "trendmicro": [("tm.token", "API key Vision One", "token_env", "TMV1_TOKEN")],
     "milestone": [("ms.user", "Username Basic user Milestone (hak baca)", "user_env", "MS_USER"), ("ms.pass", "Password Basic user Milestone", "pass_env", "MS_PASS")],
     "panorama": [("pano.user", "Panorama API account username", "user_env", "PANO_USER"), ("pano.pass", "Panorama API account password", "pass_env", "PANO_PASS")],
@@ -147,6 +148,13 @@ def integration_test(key: str, server: str = "", db: Session = Depends(get_db), 
             s.config = {**c, "base_url": url[: -len("/api_jsonrpc.php")]}                  # simpan alamat yang terbukti benar
             db.commit()
             return {"ok": True, "msg": f"Terhubung ke Zabbix {ver} di {s.config['base_url']}, token valid, {len(g)} host group cocok prefix"}
+        if key == "uptimekuma":
+            try:
+                mons = uptimekuma.fetch(c["base_url"], vault.cred(db, "kuma.user", c.get("user_env", "KUMA_USER")), vault.cred(db, "kuma.pass", c.get("pass_env", "KUMA_PASS")), c.get("verify_tls", True), 15)
+            except RuntimeError as e:
+                raise HTTPException(422, str(e))
+            down = sum(1 for m in mons.values() if m["status"] == 0)
+            return {"ok": True, "msg": f"Connected to Uptime Kuma: {len(mons)} monitors found, {down} down now."}
         if key == "trendmicro":
             tok = vault.cred(db, "tm.token", c.get("token_env", "TMV1_TOKEN"))
             if not tok:

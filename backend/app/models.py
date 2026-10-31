@@ -439,6 +439,34 @@ class WifiClient(Base):
     raw: Mapped[dict | None] = mapped_column(JSONB)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
+class KumaMonitor(Base):
+    """Uptime Kuma monitor: the latest status as read from its /metrics page (key = name|type)."""
+    __tablename__ = "kuma_monitor"
+    key: Mapped[str] = mapped_column(String(240), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    type: Mapped[str | None] = mapped_column(String(30))
+    url: Mapped[str | None] = mapped_column(String(300))
+    hostname: Mapped[str | None] = mapped_column(String(200))
+    port: Mapped[str | None] = mapped_column(String(10))
+    status: Mapped[int] = mapped_column(SmallInteger, default=1)          # 0 down, 1 up, 2 pending, 3 maintenance
+    response_ms: Mapped[float | None] = mapped_column(Float)
+    cert_days: Mapped[int | None] = mapped_column(Integer)
+    updated_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class KumaHourly(Base):
+    """Uptime Kuma samples per monitor and hour: how many samples, how many were down, and the response times. Availability = 1 - down / samples."""
+    __tablename__ = "kuma_hourly"
+    monitor_key: Mapped[str] = mapped_column(String(240), primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, primary_key=True)      # start of the hour
+    samples: Mapped[int] = mapped_column(Integer, default=0)
+    down: Mapped[int] = mapped_column(Integer, default=0)
+    sum_ms: Mapped[float] = mapped_column(Float, default=0)
+    n_ms: Mapped[int] = mapped_column(Integer, default=0)
+    max_ms: Mapped[float | None] = mapped_column(Float)
+    __table_args__ = (Index("ix_kuma_hourly_ts", "ts"),)
+
+
 class WifiAp(Base):
     """Access Point dari Ruckus vSZ: snapshot status terkini."""
     __tablename__ = "wifi_ap"

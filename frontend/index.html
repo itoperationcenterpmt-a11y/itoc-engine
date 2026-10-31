@@ -58,7 +58,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sub{color:var(--muted);font-size:calc(12px*var(--fs))}
 
 /* layout: sidebar (desktop) + bottom nav (mobile) */
-.shell{display:grid;grid-template-columns:268px minmax(0,1fr);min-height:100vh}
+.shell{display:grid;grid-template-columns:calc(268px*var(--fs)) minmax(0,1fr);min-height:100vh}
 .side{background:var(--side-bg);color:var(--side-ink);position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:12px 10px;gap:8px;z-index:6}
 .brand{display:flex;gap:10px;align-items:center;padding:2px 4px}.brand .g2{height:46px;width:auto;max-width:100%;min-width:0}.railbtn{position:absolute;top:26px;right:-13px;z-index:8;width:26px;height:26px;border-radius:50%;background:var(--side-bg);border:1px solid var(--side-line);color:var(--side-ink);cursor:pointer;display:grid;place-items:center;font-size:calc(17px*var(--fs));line-height:1;padding:0 0 2px;opacity:.9;box-shadow:0 2px 8px -2px rgba(0,0,0,.5)}.railbtn:hover{opacity:1;color:#fff;background:#1b2c46}
 .brand .mk{width:44px;height:44px;flex:none;display:grid;place-items:center;background:#fff;border-radius:12px;box-shadow:0 6px 16px -6px rgba(0,0,0,.45)}
@@ -87,10 +87,10 @@ button,input,select,textarea{font:inherit;color:inherit}
 .iconbtn:hover{background:rgba(255,255,255,.14);color:#fff}
 .side-act{display:flex;gap:6px}.side-act .iconbtn{flex:none}
 @media (min-width:901px){
-.shell.rail{grid-template-columns:78px minmax(0,1fr)}
+.shell.rail{grid-template-columns:calc(78px*var(--fs)) minmax(0,1fr)}
 .shell.rail .side{padding:12px 6px;align-items:center}
 .shell.rail .brand h1,.shell.rail .tabs :is(button,a) span,.shell.rail .who-t,.shell.rail .tb,.shell.rail #duty span{display:none}
-.shell.rail .brand{justify-content:center;padding:0}.shell.rail .brand .g2{width:46px;height:46px;object-fit:cover;object-position:left center}
+.shell.rail .brand{justify-content:center;padding:0}.shell.rail .brand .g2{width:calc(46px*var(--fs));height:calc(46px*var(--fs));object-fit:cover;object-position:left center}
 .shell.rail .tabs :is(button,a){justify-content:center;padding:11px}.shell.rail .tabs :is(button,a) svg{width:21px;height:21px}.shell.rail #duty{padding:8px;justify-content:center}
 .shell.rail .side-foot{align-items:center}.shell.rail .who{flex-direction:column}.shell.rail .side-act{flex-direction:column}
 }
@@ -447,7 +447,7 @@ tbody tr:hover td{background:var(--wash)}
 .lg-bg:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(236,241,248,.80),rgba(226,234,244,.74))}
 :root[data-theme="dark"] .lg-bg:after{background:linear-gradient(180deg,rgba(8,16,30,.86),rgba(8,16,30,.8))}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lg-bg:after{background:linear-gradient(180deg,rgba(8,16,30,.86),rgba(8,16,30,.8))}}
-.lg-wrap{position:relative;width:min(1120px,100%);display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr);gap:24px;align-items:stretch}
+.lg-wrap{position:relative;width:min(calc(1120px*var(--fs)),100%);display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr);gap:24px;align-items:stretch}
 .lg-card{background:rgba(255,255,255,.72);backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2);border:1px solid rgba(255,255,255,.75);border-radius:28px;box-shadow:0 30px 70px -30px rgba(15,40,80,.45);padding:44px 48px}
 :root[data-theme="dark"] .lg-card{background:rgba(20,27,38,.72);border-color:rgba(255,255,255,.1)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lg-card{background:rgba(20,27,38,.72);border-color:rgba(255,255,255,.1)}}
@@ -460,7 +460,7 @@ tbody tr:hover td{background:var(--wash)}
 .lg-pts{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:12px}
 .lg-pts li{display:flex;align-items:center;gap:12px;font-size:calc(16px*var(--fs));color:var(--ink)}.lg-pts li:before{content:"";width:9px;height:9px;border-radius:50%;background:var(--accent);flex:none}
 .lg-form{display:flex;flex-direction:column;justify-content:center;gap:6px}
-.lg-logo{display:block;width:min(340px,86%);height:auto;margin:0 auto 20px}
+.lg-logo{display:block;width:min(calc(340px*var(--fs)),86%);height:auto;margin:0 auto 20px}
 .lg-d{display:none}:root[data-theme="dark"] .lg-l{display:none}:root[data-theme="dark"] .lg-d{display:block}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lg-l{display:none}:root:not([data-theme="light"]) .lg-d{display:block}}
 .lg-info h2 .b1,.lg-info h2 .b2{display:block;white-space:nowrap}.lg-info h2{font-size:clamp(22px,3.3vw,44px)}
@@ -506,11 +506,11 @@ tbody tr:hover td{background:var(--wash)}
 @media (max-width:700px){.vz-tlh,.vz-tlr{grid-template-columns:84px 1fr 44px;gap:6px}.vz-hl{font-size:calc(9px*var(--fs))}.vz-heat{gap:1px}}
 /* TERA brand: icon + wordmark in the sidebar, lockup on the login page. The wordmark is text (Montserrat 800) so it stays sharp at any size. */
 .wm{font-family:"Montserrat",var(--f-head,sans-serif);font-weight:800;letter-spacing:.09em}.wm .e{color:#5BB5E2}
-.brand-tera{flex-direction:row;align-items:center;gap:14px;padding:8px 8px 10px}.brand-tera .g2{width:66px;height:66px;max-width:none;flex:none;object-fit:contain}
+.brand-tera{flex-direction:row;align-items:center;gap:14px;padding:8px 8px 10px}.brand-tera .g2{width:calc(66px*var(--fs));height:calc(66px*var(--fs));max-width:none;flex:none;object-fit:contain}
 .brand-tera .bt{display:flex;flex-direction:column;min-width:0;line-height:1.15}
 .brand-tera h1{font-family:"Montserrat",var(--f-head,sans-serif);font-size:calc(29px*var(--fs));font-weight:800;letter-spacing:.09em;color:#fff;line-height:1}.brand-tera h1 .e{color:#5BB5E2}
 .brand-tera .bprod{font-size:calc(11.5px*var(--fs));font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#8FCFEE;margin-top:6px}.brand-tera .bby{font-size:calc(11.5px*var(--fs));color:var(--side-ink);opacity:.75;margin-top:2px;white-space:nowrap}
-.shell.rail .brand-tera .bt{display:none}.shell.rail .brand-tera{padding:2px 0}.shell.rail .brand-tera .g2{width:50px;height:50px;object-fit:contain;object-position:center}
+.shell.rail .brand-tera .bt{display:none}.shell.rail .brand-tera{padding:2px 0}.shell.rail .brand-tera .g2{width:calc(50px*var(--fs));height:calc(50px*var(--fs));object-fit:contain;object-position:center}
 .mtop .brand-tera{gap:9px;padding:0}.mtop .brand-tera .g2{width:42px;height:42px}.mtop .brand-tera h1{font-size:calc(20px*var(--fs))}.mtop .brand-tera .bprod{font-size:calc(9.5px*var(--fs));margin-top:3px}
 .lg-info h2.brandName .b1{font-family:"Montserrat",var(--f-head,sans-serif);font-weight:800;letter-spacing:.09em}.lg-info h2 .e{color:#5BB5E2}
 :root[data-theme="light"] .lg-info h2 .e{color:#0067B4}@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .lg-info h2 .e{color:#0067B4}}
@@ -617,7 +617,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
   <button class="more" id="moreBtn" type="button" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Menu</span></button>
   <div class="side-foot">
     <span id="duty"></span>
-    <div class="who"><span class="av" id="av"></span><div class="who-t"><div id="me"></div><small id="role"></small></div><div class="side-act"><button class="iconbtn" id="theme" type="button" aria-label="Ganti tema terang/gelap" title="Tema terang/gelap">◐</button><button class="iconbtn" id="logout" type="button" aria-label="Sign out" title="Sign out">⏻</button></div></div>
+    <div class="who"><span class="av" id="av"></span><div class="who-t"><div id="me"></div><small id="role"></small></div><div class="side-act"><button class="iconbtn" id="theme" type="button" aria-label="Switch light or dark theme" title="Light or dark theme">◐</button><button class="iconbtn" id="logout" type="button" aria-label="Sign out" title="Sign out">⏻</button></div></div>
   </div>
 </aside>
 <div class="main">
@@ -661,6 +661,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
 <script src="xdr.js"></script>
 <script src="cctv.js"></script>
 <script src="internet.js"></script>
+<script src="kuma.js"></script>
 <script src="insight.js"></script>
 <script src="groups.js"></script>
 <script src="widgets.js"></script>

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from . import models as M
 from .store import Config, cached
 from .timeutil import ms
-from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR, cctv as CCTV, soc_fw as SOCFW, insight as INSIGHT, viz as VIZ
+from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR, cctv as CCTV, soc_fw as SOCFW, insight as INSIGHT, viz as VIZ, kuma as KUMA
 from .calc.common import iso
 from .security import can_see, locked_pages
 
@@ -112,7 +112,7 @@ def _open_tickets(db, cfg, site, limit=None, older_than_days=None):
 
 
 # ---------------- page bundles ----------------
-INSIGHT_TABS = ("ringkasan", "servicedesk", "network", "noc", "wifi", "cyber", "soc", "xdr", "devices", "devnet", "devcctv", "devops", "cctv")   # pages that show an Insights panel for their own area
+INSIGHT_TABS = ("ringkasan", "servicedesk", "network", "noc", "kuma", "wifi", "cyber", "soc", "xdr", "devices", "devnet", "devcctv", "devops", "cctv")   # pages that show an Insights panel for their own area
 def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
     V: dict = {}
     ok = lambda k: tab == k or can_see(user, k)  # Ringkasan hanya memuat bagian yang boleh dilihat role ini (mis. IT Care/EOS tanpa SOC)
@@ -131,6 +131,8 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
     if tab in ("internet", "ringkasan", "network") and ok("internet"):
         V["inet"] = SOCFW.build(db, cfg, a, b, st)
         V["inet_prev"] = SOCFW.build(db, cfg, pa, pb, st) if f.cmp and tab == "internet" else None
+    if tab in ("kuma", "ringkasan", "network") and ok("kuma"):
+        V["kuma"] = KUMA.build(db, cfg, a, b, st)
     if tab == "soc" and ok("soc"):
         V["socfw"] = SOCFW.build(db, cfg, a, b, st)
     if tab == "ringkasan":
