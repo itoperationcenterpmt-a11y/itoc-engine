@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     jobs.stop()
 
 
-app = FastAPI(title="Dashboard IT Pelindo Multi Terminal API", version="1.0", lifespan=lifespan,
+app = FastAPI(title="TERA Dashboard API", version="1.0", lifespan=lifespan,
               docs_url="/docs" if settings().docs else None, redoc_url="/redoc" if settings().docs else None, openapi_url="/openapi.json" if settings().docs else None)
 _origins = [o.strip() for o in settings().cors_origins.split(",") if o.strip() and o.strip() != "*"]
 if _origins:

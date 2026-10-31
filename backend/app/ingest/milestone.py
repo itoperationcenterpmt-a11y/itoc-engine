@@ -10,7 +10,7 @@ from ..models import DataSource, CctvCamera, CctvHardware
 from ..store import Config
 
 # daftar yang dicoba saat Test: path REST -> nama tampilan (tidak semua ada di semua versi XProtect)
-PROBES = [("cameras", "Kamera"), ("recordingServers", "Recording server"), ("hardware", "Hardware"), ("sites", "Site"), ("cameraGroups", "Camera group"), ("alarms", "Alarm"), ("events", "Event")]
+PROBES = [("cameras", "Camera"), ("recordingServers", "Recording server"), ("hardware", "Hardware"), ("sites", "Site"), ("cameraGroups", "Camera group"), ("alarms", "Alarm"), ("events", "Event")]
 
 
 def root(base: str) -> str:

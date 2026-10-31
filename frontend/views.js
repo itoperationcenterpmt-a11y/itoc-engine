@@ -1,4 +1,4 @@
-/* IT PMT Dashboard: components and page views, reading the API bundle. */
+/* TERA Dashboard: components and page views, reading the API bundle. */
 "use strict";
 /* ---------- komponen ---------- */
 function nice(v) { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))), f = v / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
@@ -71,6 +71,12 @@ const ICO = {
   database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
   sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
   report: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 17v-3M12 17v-6M15 17v-4"/>',
+  network: '<circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v4M12 11.5L6.5 17M12 11.5L17.5 17"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
+  router: '<rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 16.5h.01M11 16.5h.01M8 13V9M16 13V9M6 9a8 8 0 0 1 4-3M18 9a8 8 0 0 0-4-3"/>',
+  wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3 17.7 6.3 21l6.3-6.3a4 4 0 0 0 5.1-5.4l-2.4 2.4-2.4-.6-.6-2.4z"/>',
   calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>'
 };
 const icon = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICO[(MODS[k] || {}).icon] || '<circle cx="12" cy="12" r="4"/>'}</svg>`;const topOf = k => { const p = (MODS[k] || {}).parent; return p && MODS[p] ? p : k; };
@@ -405,7 +411,7 @@ function vJadwal() {
   return bar + body;
 }const rangeMonth = d => MB[+d.slice(5, 7) - 1] + " " + d.slice(0, 4);
 /* ---------- Handover ---------- */
-function vHo() { return subnav("report") + vHoBody(); }
+function vHo() { return vHoBody(); }
 function vHoBody() {
   const inF = h => h.date >= S.from && h.date <= S.to && (!S.sf || h.shift === S.sf) && (!S.site || h.site === S.site);
   const L = (V.handover || []).filter(h => inF(h) && (S.hoSt === "all" || (S.hoSt === "open") === h.open)).sort((a, b) => b.at - a.at);
@@ -417,7 +423,7 @@ function vHoBody() {
     <div class="fld"><label for="hPr">Priority *</label><select id="hPr" required><option value="">Select…</option>${CFG.params["ho.priorities"].map(x => `<option>${esc(x.value)}</option>`).join("")}</select></div>
     <div class="fld"><label for="hSite">Location *</label><select id="hSite" required><option value="">Select…</option>${CFG.sites.map(s => `<option ${s === S.site ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></div>
     <div class="fld"><label for="hTk">Related Ticket</label><select id="hTk"><option value="">None</option>${openT.map(t => `<option value="${esc(t.id)}">#${esc(t.id)} · ${esc(String(t.subject).slice(0, 48))}</option>`).join("")}</select></div>
-    <div class="fld wide"><label for="hTitle">Judul * <span class="sub">min. ${CFG.params["ho.rules"].min_title} karakter</span></label><input type="text" id="hTitle" maxlength="120" placeholder="Contoh: Link Astinet Meulaboh down, menunggu ISP"></div>
+    <div class="fld wide"><label for="hTitle">Title * <span class="sub">min. ${CFG.params["ho.rules"].min_title} characters</span></label><input type="text" id="hTitle" maxlength="120" placeholder="Example: Astinet link Meulaboh down, waiting for the ISP"></div>
     <div class="fld wide"><label for="hBody">Situation and actions taken * <span class="sub">min. ${CFG.params["ho.rules"].min_body} characters</span></label><textarea id="hBody" placeholder="What happened, since when, who it was escalated to"></textarea></div>
     <div class="fld wide"><label for="hNext">Follow-up for Next Shift</label><input type="text" id="hNext" placeholder="What should be checked or done"></div>
     <div class="acts wide"><button class="btn" type="submit">Save Handover</button><button class="btn ghost" type="button" data-hoform="0">Cancel</button><span class="msg err" id="hMsg"></span></div></form>`;

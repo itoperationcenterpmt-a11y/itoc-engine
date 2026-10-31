@@ -452,6 +452,7 @@ tbody tr:hover td{background:var(--wash)}
 :root[data-theme="dark"] .lg-card{background:rgba(20,27,38,.72);border-color:rgba(255,255,255,.1)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lg-card{background:rgba(20,27,38,.72);border-color:rgba(255,255,255,.1)}}
 .lg-info{position:relative;display:flex;flex-direction:column;justify-content:center;gap:14px}
+.lg-lang{position:absolute;top:22px;right:72px;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink2);cursor:pointer;font-weight:600;font-size:calc(12px*var(--fs))}
 .lg-theme{position:absolute;top:22px;right:24px;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink2);cursor:pointer;font-size:calc(16px*var(--fs))}
 .lg-eyebrow{font-size:calc(14px*var(--fs));font-weight:600;letter-spacing:.02em;color:var(--accent)}
 .lg-info h2{font-family:var(--f-display);font-weight:800;font-size:clamp(28px,3.6vw,44px);line-height:1.1;letter-spacing:-.02em;margin:0;color:var(--ink)}
@@ -539,7 +540,7 @@ body.dragging{user-select:none;cursor:grabbing}
 .lg-form .loginbox .lhead{display:none}
 .lg-form .loginbox .fld label{font-weight:600;font-size:calc(14px*var(--fs));color:var(--ink)}
 .lg-form .loginfoot{margin-top:10px}
-@media (max-width:900px){.lg-wrap{grid-template-columns:1fr}.lg-card{padding:28px 24px;border-radius:22px}.lg-theme{top:16px;right:16px}}
+@media (max-width:900px){.lg-wrap{grid-template-columns:1fr}.lg-card{padding:28px 24px;border-radius:22px}.lg-theme{top:16px;right:16px}.lg-lang{top:16px;right:64px}}
 .loginbox .btn{padding:11px 16px;margin-top:4px}
 .loginbox input{padding:10px 12px!important;border-radius:10px!important}
 input[type=password]{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}

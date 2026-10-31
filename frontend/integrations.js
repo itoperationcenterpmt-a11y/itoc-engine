@@ -1,4 +1,4 @@
-/* IT Pelindo Multi Terminal Dashboard — Admin: Integrations, API Keys, Email (SMTP), Webhooks. Secrets are write-only and never shown again. */
+/* TERA Dashboard — Admin: Integrations, API Keys, Email (SMTP), Webhooks. Secrets are write-only and never shown again. */
 "use strict";
 const INT = {integrations: null, apikeys: null, smtp: null, webhooks: null, msg: null, newKey: null, hookEdit: null, keyForm: false, busy: {}};
 const intReset = () => { if (typeof AUD !== "undefined") AUD.loaded = false; INT.integrations = INT.apikeys = INT.smtp = INT.webhooks = INT.msg = INT.newKey = INT.hookEdit = INT.todo = INT.status = INT.roles = INT.roleEdit = null; INT.keyForm = false; };

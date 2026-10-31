@@ -29,7 +29,7 @@ CREDS = {
               ("vsz.kill_user", "Disconnect account username (optional, a role with disconnect rights)", "kill_user_env", "VSZ_KILL_USER"), ("vsz.kill_pass", "Disconnect account password", "kill_pass_env", "VSZ_KILL_PASS")],
 }
 # isian daftar tambahan per konektor (disimpan di config sumber data): (kunci, label)
-EXTRA = {"milestone": [("servers", "Milestone servers (one per line, format Name|address, e.g. Belawan|https://10.181.3.1). The same Basic user account is used on all servers")], "panorama": [("test_reports", "Panorama report names for the test (one per line, exactly as in Monitor > Manage Custom Reports)")], "zabbix": [("group_prefixes", "Prefix host group (satu per baris)"), ("down_patterns", "Trigger names that mean a device is down (one per line, partial match)")]}
+EXTRA = {"milestone": [("servers", "Milestone servers (one per line, format Name|address, e.g. Belawan|https://10.181.3.1). The same Basic user account is used on all servers")], "panorama": [("test_reports", "Panorama report names for the test (one per line, exactly as in Monitor > Manage Custom Reports)")], "zabbix": [("group_prefixes", "Host group prefixes (one per line)"), ("down_patterns", "Trigger names that mean a device is down (one per line, partial match)")]}
 
 
 def _cred_state(db: Session, src: DataSource):
@@ -368,7 +368,7 @@ def smtp_test(body: TestMail, db: Session = Depends(get_db), user: User = Depend
     if "@" not in body.to:
         raise HTTPException(422, "Invalid email address")
     try:
-        mailer.send(db, [body.to.strip()], "Uji email - Dashboard IT Pelindo Multi Terminal", "Pengaturan SMTP berfungsi.")
+        mailer.send(db, [body.to.strip()], "TERA Dashboard test email", "The SMTP settings work.")
     except Exception as e:
         raise HTTPException(502, "Failed to send: " + str(e)[:200])
     return {"ok": True, "msg": "Email uji terkirim ke " + body.to}
@@ -455,7 +455,7 @@ def hook_test(wid: int, db: Session = Depends(get_db), user: User = Depends(requ
     if not w or not url:
         raise HTTPException(404, "Webhook not found or its URL cannot be read")
     try:
-        st = notify.post(w.kind, url, "test", "Test message from the IT Pelindo Multi Terminal Dashboard")
+        st = notify.post(w.kind, url, "test", "Test message from the TERA Dashboard")
     except Exception as e:
         w.last_status, w.last_at = ("Failed: " + str(e))[:190], datetime.utcnow()
         db.commit()

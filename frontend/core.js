@@ -11,7 +11,7 @@ const pad = n => String(n).padStart(2, "0");
 const dayMs = s => Date.parse(s + "T00:00:00Z"), iso = ms => new Date(ms).toISOString().slice(0, 10);
 const addDays = (s, n) => iso(dayMs(s) + n * 864e5);
 
-let CFG = null, V = {}, PAR, MB = [], HR = [], TABS = [], APPLY = {}, PRESETS = [], SN = [], SC = [], NS = 3, CODES = [], OFFC = "O", OFF = 3, TEAMS = [], ROLES = {}, RUMUS = {}, DIMS = {}, MODS = {}, NST = {}, UST = {}, GROUPS = [], BRAND = "Dashboard IT Pelindo Multi Terminal", BSPLIT = 2, FOOT = "";
+let CFG = null, V = {}, PAR, MB = [], HR = [], TABS = [], APPLY = {}, PRESETS = [], SN = [], SC = [], NS = 3, CODES = [], OFFC = "O", OFF = 3, TEAMS = [], ROLES = {}, RUMUS = {}, DIMS = {}, MODS = {}, NST = {}, UST = {}, GROUPS = [], BRAND = "TERA Dashboard", BSPLIT = 2, FOOT = "";
 const dmon = s => { const d = new Date(dayMs(s)); return d.getUTCDate() + " " + MB[d.getUTCMonth()]; };
 const dfull = s => { const d = new Date(dayMs(s)); return d.getUTCDate() + " " + MB[d.getUTCMonth()] + " " + d.getUTCFullYear(); };
 const dlong = s => { const d = new Date(dayMs(s)); return HR[d.getUTCDay()] + ", " + d.getUTCDate() + " " + MB[d.getUTCMonth()] + " " + d.getUTCFullYear(); };
