@@ -127,18 +127,18 @@ document.addEventListener("submit", async e => {
   catch (er) { $("rMsg").textContent = er.message; }
 }, true);
 
-/* Admin → System → Backup & Restore: unduh cadangan .sql dan pulihkan dari .sql (hanya Super Admin). */
+/* Admin → System → Backup & Restore: download a .sql backup and restore from one (Super Admin only). */
 const BK = {msg: null, busy: false};
 function vBackup() {
-  if (!CFG.me.is_admin) return `<div class="empty"><b>Hanya Super Admin</b><span>Backup dan restore database hanya untuk Super Admin.</span></div>`;
+  if (!CFG.me.is_admin) return `<div class="empty"><b>Super Admin only</b><span>Database backup and restore are only for the Super Admin.</span></div>`;
   const m = BK.msg ? `<div class="msg ${BK.msg.ok ? "ok" : "err"}">${esc(BK.msg.t)}</div>` : "";
-  return `${m}<p class="sub">Cadangan berupa file .sql (pg_dump, format teks). Simpan di tempat aman: berisi data personel dan hash kata sandi.</p>
+  return `${m}<p class="sub">A backup is a plain-text .sql file (pg_dump). Keep it somewhere safe: it contains personnel data and password hashes.</p>
     <form class="form formbox intform"><div class="fld wide"><span class="lbl">Backup</span></div>
       <div class="acts wide"><button class="btn" type="button" data-bk="backup" ${BK.busy ? "disabled" : ""}>Download backup .sql</button></div></form>
     <form class="form formbox intform" data-bk-form="restore"><div class="fld wide"><span class="lbl">Restore</span></div>
-      <p class="sub">Mengganti SELURUH isi database dengan isi file. Cadangan pengaman dibuat di server sebelum restore. Setelah restore, restart api dan worker.</p>
+      <p class="sub">This replaces the ENTIRE database with the content of the file. A safety backup is made on the server before the restore. After the restore, restart the api and worker.</p>
       <div class="fld wide"><label for="bkFile">File .sql</label><input id="bkFile" type="file" accept=".sql" required></div>
-      <div class="fld wide"><label for="bkConfirm">Ketik RESTORE untuk konfirmasi</label><input id="bkConfirm" type="text" autocomplete="off" required></div>
+      <div class="fld wide"><label for="bkConfirm">Type RESTORE to confirm</label><input id="bkConfirm" type="text" autocomplete="off" required></div>
       <div class="acts wide"><button class="btn" type="submit" ${BK.busy ? "disabled" : ""}>Restore database</button></div></form>`;
 }
 document.addEventListener("click", async e => {
@@ -151,21 +151,21 @@ document.addEventListener("click", async e => {
     const url = URL.createObjectURL(await r.blob()), a = document.createElement("a");
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    BK.msg = {ok: true, t: "Cadangan " + name + " diunduh."};
+    BK.msg = {ok: true, t: "Backup " + name + " downloaded."};
   } catch (er) { BK.msg = {ok: false, t: er.message}; }
   BK.busy = false; render(false);
 });
 document.addEventListener("submit", async e => {
   const f = e.target.closest("[data-bk-form]"); if (!f) return; e.preventDefault();
   const file = document.getElementById("bkFile").files[0], conf = document.getElementById("bkConfirm").value;
-  if (!file) { BK.msg = {ok: false, t: "Pilih file .sql dulu."}; render(false); return; }
-  if (conf.trim() !== "RESTORE") { BK.msg = {ok: false, t: "Ketik RESTORE untuk konfirmasi."}; render(false); return; }
-  if (!window.confirm("Restore akan MENGGANTI seluruh data database dengan isi " + file.name + ". Lanjutkan?")) return;
+  if (!file) { BK.msg = {ok: false, t: "Choose a .sql file first."}; render(false); return; }
+  if (conf.trim() !== "RESTORE") { BK.msg = {ok: false, t: "Type RESTORE to confirm."}; render(false); return; }
+  if (!window.confirm("The restore will REPLACE the entire database with the content of " + file.name + ". Continue?")) return;
   const fd = new FormData(); fd.append("file", file); fd.append("confirm", conf);
-  BK.busy = true; BK.msg = {ok: true, t: "Memulihkan database… jangan tutup halaman ini."}; render(false);
+  BK.busy = true; BK.msg = {ok: true, t: "Restoring the database… do not close this page."}; render(false);
   try {
     const r = await send("/api/admin/system/restore", fd);
-    BK.msg = {ok: true, t: "Restore selesai. Cadangan pengaman: " + r.pre_backup + ". " + (r.warning ? "PERINGATAN: " + r.warning + " " : "") + "Restart api dan worker."};
+    BK.msg = {ok: true, t: "Restore finished. Safety backup: " + r.pre_backup + ". " + (r.warning ? "WARNING: " + r.warning + " " : "") + "Restart the api and worker."};
   } catch (er) { BK.msg = {ok: false, t: er.message}; }
   BK.busy = false; render(false);
 });

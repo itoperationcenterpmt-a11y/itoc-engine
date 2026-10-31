@@ -191,7 +191,7 @@ def require_admin_area(request: Request, user: User = Depends(current_user), db:
 
 def require_admin(user: User = Depends(current_user)) -> User:
     if not user.role.is_admin:
-        raise HTTPException(403, "Hanya admin")
+        raise HTTPException(403, "Admins only")
     return user
 
 

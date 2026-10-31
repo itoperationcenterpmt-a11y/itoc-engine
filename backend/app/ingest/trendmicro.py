@@ -37,7 +37,7 @@ def get(cl: httpx.Client, url: str, token: str, params: dict | None = None, trie
                 msg = r.text[:120]
             raise RuntimeError(f"Vision One HTTP {r.status_code}: {msg[:160]}")
         return r.json()
-    raise RuntimeError("Vision One membatasi laju permintaan (429)")
+    raise RuntimeError("Vision One is rate limiting the requests (429)")
 
 
 def iso(dt: datetime) -> str:

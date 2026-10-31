@@ -1,10 +1,10 @@
-/* Uptime Kuma (Network menu): status now, and availability and response time of the watched services over the period. Period and location follow the top filter bar. */
+/* Link / Web Availability (Network menu, data from Uptime Kuma): status now, and availability and response time of the watched services over the period. Period and location follow the top filter bar. */
 "use strict";
 const KUMA_TONE = {0: "crit", 1: "good", 2: "warn", 3: "idle"};
 function vKuma() {
   const K = V.kuma, grid = h => `<div class="grid">${h}</div>`;
   if (!K) return grid(`<section class="panel c12">${empty()}</section>`);
-  if (!K.enabled) return grid(`<section class="panel c12">${empty("Uptime Kuma is not connected yet. Enter the Base URL and the API key in Admin → Data Sources → Integrations, then switch the source on.")}</section>`);
+  if (!K.enabled) return grid(`<section class="panel c12">${empty("Link / web availability needs Uptime Kuma, which is not connected yet. Enter the Base URL and the API key in Admin → Data Sources → Integrations, then switch the source on.")}</section>`);
   if (!K.total) return grid(`<section class="panel c12">${empty("No monitors" + (S.site ? " for " + S.site : "") + " yet. They appear after the first sync." + (K.error ? " The last sync failed: " + K.error : ""))}</section>`);
   const B = K.daily.map(x => ({label: dmon(x.date), full: dlong(x.date)})), slow = K.mons.filter(m => m.avgMs).sort((a, b) => b.avgMs - a.avgMs).slice(0, 10);
   const warnA = K.avail != null && K.avail < PAR.target ? "warnv" : "";

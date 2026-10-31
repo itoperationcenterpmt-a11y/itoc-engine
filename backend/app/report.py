@@ -13,7 +13,7 @@ from .calc import soc as SOC, soc_fw as SOCFW, servicedesk as SD
 from .security import can_see
 
 PERM = {"performance": "servicedesk"}                                   # sections that share the access of another module
-SECTIONS = [("servicedesk", "Ticketing"), ("performance", "Performance"), ("noc", "Networking (PRTG)"), ("kuma", "Uptime Kuma"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)"), ("internet", "Internet Usage")]
+SECTIONS = [("servicedesk", "Ticketing"), ("performance", "Performance"), ("noc", "Networking (PRTG)"), ("kuma", "Link / Web Availability"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)"), ("internet", "Internet Usage")]
 WEEKLY_AFTER = 31  # rentang harian lebih panjang dari ini diringkas per minggu (sama dengan dashboard Excel)
 _UK = {"type": "Threat type", "action": "Action", "severity": "Severity"}
 
@@ -514,9 +514,9 @@ def _kuma(db, cfg, f, preset="standar"):
     """Uptime Kuma monitors: status now, and availability and response time over the report period."""
     from .calc import kuma as KUMA
     K = KUMA.build(db, cfg, f.d_from, f.d_to, f.site)
-    s = {"key": "kuma", "title": "Uptime Kuma", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    s = {"key": "kuma", "title": "Link / Web Availability", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not K["configured"] or not K["total"]:
-        s["notes"].append("No Uptime Kuma data" + (f" for {f.site}" if f.site else "") + " yet." + (" Last sync failed: " + K["error"] if K["error"] else ""))
+        s["notes"].append("No link and web availability data from Uptime Kuma" + (f" for {f.site}" if f.site else "") + " yet." + (" Last sync failed: " + K["error"] if K["error"] else ""))
         return s
     s["notes"].append("Status is the latest sample; availability and response time follow the report period" + (" (recorded since " + K["since"][:10] + ")" if K.get("since") else "") + ". Monitors in maintenance are not counted in availability.")
     s["kpis"] = [_kpi("Monitors", K["total"], "n", f"{fmt_n(K['up'])} up"), _kpi("Down now", K["down"], "n", f"{fmt_n(K['pending'])} pending, {fmt_n(K['maint'])} in maintenance"),
@@ -660,9 +660,9 @@ DEFAULT_KINDS = {
     "xdr": {"label": "XDR (Trend Micro)", "desc": "Vision One alerts: severity, detection models, status, backlog", "title": "IT Operation Center - XDR (Trend Micro) Report", "subtitle": "Vision One Workbench alerts", "prefix": "XDR", "sections": ["xdr"]},
     "devices": {"label": "Devices", "desc": "Zabbix device status: category, type, location, devices down", "title": "IT Operation Center - Devices Report", "subtitle": "Device status from Zabbix", "prefix": "Devices", "sections": ["devices"]},
     "wifi": {"label": "WiFi (Ruckus)", "desc": "Active clients, Access Points, usage per SSID and AP", "title": "IT Operation Center - WiFi (Ruckus) Report", "subtitle": "Clients and Access Points from Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
-    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links and Ruckus WiFi together", "title": "IT Operation Center - Network Report", "subtitle": "ISP links, WiFi, and internet usage", "prefix": "Network", "sections": ["noc", "wifi", "internet", "kuma"]},
+    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links, WiFi, internet usage, and link / web availability together", "title": "IT Operation Center - Network Report", "subtitle": "ISP links, WiFi, internet usage, and web availability", "prefix": "Network", "sections": ["noc", "wifi", "internet", "kuma"]},
     "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Palo Alto NDR and Trend Micro XDR together", "title": "IT Operation Center - Cyber Security Report", "subtitle": "Palo Alto NDR and Trend Micro XDR", "prefix": "Cyber", "sections": ["soc", "xdr"]},
-    "kuma": {"label": "Uptime Kuma", "desc": "Monitor status, availability, and response time of the watched services", "title": "IT Operation Center - Uptime Kuma Report", "subtitle": "Services watched by Uptime Kuma", "prefix": "Kuma", "sections": ["kuma"]},
+    "kuma": {"label": "Link / Web Availability", "desc": "Status, availability, and response time of the links and web services watched by Uptime Kuma", "title": "IT Operation Center - Link / Web Availability Report", "subtitle": "Links and web services watched by Uptime Kuma", "prefix": "Availability", "sections": ["kuma"]},
     "internet": {"label": "Internet Usage", "desc": "Traffic, applications, web categories, and top users per location (Palo Alto)", "title": "IT Operation Center - Internet Usage Report", "subtitle": "Traffic, applications, and users per location", "prefix": "Internet Usage", "sections": ["internet"]},
     "full": {"label": "Full", "desc": "Summary and details of all areas in one file", "title": "IT Operation Center - Full Report", "subtitle": "Summary and details of all areas", "prefix": "", "sections": None},
 }

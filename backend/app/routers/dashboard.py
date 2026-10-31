@@ -31,7 +31,7 @@ router = APIRouter(prefix="/api", tags=["dashboard"])
 def public(db: Session = Depends(get_db)):
     """Tanpa login: hanya teks tampilan halaman login (nama, footer, kalimat, poin, keterangan lokasi). Nilainya dari parameter ui.* (Admin → Operasional → Target dan Parameter)."""
     c = load_config(db)
-    return {"build": BUILD, "brand": c.p("ui.brand_name", ""), "brand_split": c.p("ui.brand_split", 2), "footer": c.p("ui.footer", ""), "tagline": c.p("ui.login_tagline", ""), "points": c.p("ui.login_points", []), "place": c.p("ui.login_place", ""), "eyebrow": c.p("ui.login_eyebrow", ""), "acronym": c.p("ui.login_acronym", []), "id": c.p("ui.login_id", {}), "headline": c.p("ui.login_headline", ""), "badge": c.p("ui.login_badge", ""), "support_phone": c.p("ui.support_phone", ""), "turnstile": c.p("security.turnstile_site_key", "")}
+    return {"build": BUILD, "brand": c.p("ui.brand_name", ""), "brand_split": c.p("ui.brand_split", 2), "footer": c.p("ui.footer", ""), "tagline": c.p("ui.login_tagline", ""), "points": c.p("ui.login_points", []), "place": c.p("ui.login_place", ""), "eyebrow": c.p("ui.login_eyebrow", ""), "acronym": c.p("ui.login_acronym", []), "headline": c.p("ui.login_headline", ""), "badge": c.p("ui.login_badge", ""), "support_phone": c.p("ui.support_phone", ""), "turnstile": c.p("security.turnstile_site_key", "")}
 
 
 PARAM_MODULE = (("soc.", "soc"), ("net.", "noc"), ("sd.", "servicedesk"))
@@ -130,7 +130,7 @@ def ho_close(hid: int, body: HoClose, user: User = Depends(require_write), db: S
     if not h or not h.is_open:
         raise HTTPException(404, "Handover not found or already closed")
     if len(body.note.strip()) < c.p("ho.rules")["min_close"]:
-        raise HTTPException(422, f"Isi catatan penutupan minimal {c.p('ho.rules')['min_close']} karakter.")
+        raise HTTPException(422, f"The closing note needs at least {c.p('ho.rules')['min_close']} characters.")
     h.is_open, h.closed_by, h.closed_at, h.close_note = False, user.full_name, c.now(), body.note.strip()
     audit(db, user.username, "Menutup serah terima: " + h.title, tz=c.p("tz_offset_hours"))
     db.commit()

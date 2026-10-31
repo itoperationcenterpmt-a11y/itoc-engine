@@ -16,8 +16,13 @@ MIME = {"xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.she
 XL_SPLIT = 200          # a table longer than this goes on a sheet of its own so the section sheet stays readable
 
 
+def _sheet_title(title):
+    """Excel sheet names cannot contain [ ] : * ? / \\ and are at most 31 characters."""
+    return "".join(" - " if ch == "/" else "" if ch in '[]:*?\\' else ch for ch in title).replace("  ", " ")[:31]
+
+
 def _sheet_name(wb, section, title):
-    base = "".join(ch for ch in f"{section} - {title}" if ch not in '[]:*?/\\')[:31]
+    base = _sheet_title(f"{section} - {title}")
     name, i = base, 2
     while name in wb.sheetnames:
         name = base[:28] + f" {i}"
@@ -48,7 +53,7 @@ def to_xlsx(m: dict) -> bytes:
         return put
 
     for s in m["sections"]:
-        ws = wb.create_sheet(s["title"][:31])
+        ws = wb.create_sheet(_sheet_title(s["title"]))
         ws.sheet_view.showGridLines = False
         width = {}
 

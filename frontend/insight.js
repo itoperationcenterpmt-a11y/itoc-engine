@@ -37,7 +37,7 @@ function insArea(tab = S.tab) {
   return `${head}<div class="grid">${insightPanel(I, 4, "c12", kinds, INS_ONLY[tab])}</div>`;
 }
 async function insSum() {
-  const sc = S.sumScope || "24h", q = "scope=" + sc + (S.sumDay && !["24h", "7d", "30d"].includes(sc) ? "&day=" + S.sumDay : "") + "&kind=" + (S.sumKind || "full") + "&lang=" + (S.sumLang || "id");
+  const sc = S.sumScope || "24h", q = "scope=" + sc + (S.sumDay && !["24h", "7d", "30d"].includes(sc) ? "&day=" + S.sumDay : "") + "&kind=" + (S.sumKind || "full");
   try { const x = await api("/api/insights/summary?" + q); set({sumText: x.text}); } catch (er) { alert(er.message); }
 }
 const insBar = v => `<span class="hbar"><i style="width:${Math.max(2, v)}%;background:var(${v >= 80 ? "--good" : v >= 60 ? "--warn" : "--crit"})"></i></span>`;
@@ -66,7 +66,6 @@ function vInsight() {
     const sc = S.sumScope || "24h", wins = I.windows || [];
     body = `
       <div class="insbar"><label class="sub">Type <select id="sumKind" aria-label="Summary type">${[["full", "Full"], ["noc", "NOC"], ["soc", "SOC (NDR and XDR)"]].map(([k, l]) => `<option value="${k}" ${k === (S.sumKind || "full") ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-      <label class="sub">Language <select id="sumLang" aria-label="Summary language">${[["id", "Bahasa Indonesia"], ["en", "English"]].map(([k, l]) => `<option value="${k}" ${k === (S.sumLang || "id") ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label class="sub">Period <select id="sumScope" aria-label="Summary period">${wins.map(w => `<option value="${esc(w.key)}" ${w.key === sc ? "selected" : ""}>${esc(w.label)}</option>`).join("")}</select></label>
       ${["24h", "7d", "30d"].includes(sc) ? "" : `<label class="sub">Date <input type="date" id="sumDay" value="${esc(S.sumDay || nowShift().today)}" max="${esc(nowShift().today)}" min="${esc(CFG.params.data_start)}"></label>`}</div>
       <pre class="sumtxt" id="sumTxt">${esc(S.sumText || I.summary)}</pre><div class="acts"><button type="button" class="btn" data-ins-copy>Copy text</button><button type="button" class="btn ghost" data-ins-refresh>Regenerate</button></div>`;
@@ -98,5 +97,5 @@ document.addEventListener("click", async e => {
   } catch (er) { if (er) alert(er.message); }
 });
 document.addEventListener("change", e => {
-  if (["sumScope", "sumDay", "sumKind", "sumLang"].includes(e.target.id)) { S.sumScope = $("sumScope").value; S.sumDay = $("sumDay") ? $("sumDay").value : ""; S.sumKind = $("sumKind").value; S.sumLang = $("sumLang").value; insSum(); }
+  if (["sumScope", "sumDay", "sumKind"].includes(e.target.id)) { S.sumScope = $("sumScope").value; S.sumDay = $("sumDay") ? $("sumDay").value : ""; S.sumKind = $("sumKind").value; insSum(); }
 });

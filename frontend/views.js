@@ -83,8 +83,9 @@ const ICO = {
 const icon = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICO[(MODS[k] || {}).icon] || '<circle cx="12" cy="12" r="4"/>'}</svg>`;const topOf = k => { const p = (MODS[k] || {}).parent; return p && MODS[p] ? p : k; };
 /* Sub-menu: a parent page and its children (e.g. Report + Handover) as tabs inside the page */
 const SUBSUM = {network: "Summary", cyber: "Summary", devices: "Summary"};
+const SUBHIDE = ["serahterima"];                                       /* children that are shown inside their parent page instead of as a tab (Handover, below Personnel > ITOC) */
 function subnav(parent) {
-  const items = TABS.filter(t => t[0] === parent || (MODS[t[0]] || {}).parent === parent);
+  const items = TABS.filter(t => !SUBHIDE.includes(t[0]) && (t[0] === parent || (MODS[t[0]] || {}).parent === parent));
   return items.length < 2 ? "" : `<div class="subtabs">${items.map(([k, l]) => `<a href="#${k}" data-tab="${k}" aria-selected="${k === S.tab}">${esc(k === parent && SUBSUM[parent] ? SUBSUM[parent] : l)}</a>`).join("")}</div>`;
 }
 /* Running shift clock: called on render and every second so it never freezes. */
@@ -172,7 +173,7 @@ function vRingkasan() {
   if (R && R.chAlert) att.push(["warn", `<b>${fmt(R.chAlert)} critical/high events were alert-only</b>, not blocked by the firewall.`, "soc"]);
   if (hasD && D.all.down) att.push(["warn", `<b>${fmt(D.all.down)} devices down</b> (CCTV and Gate System), ${fmt(D.chronic)} of them for more than 30 days.`, "devices"]);
   if (hasX && Xd.backlogCH) att.push(["warn", `<b>${Xd.backlogCH} critical/high XDR alerts</b> are still open.`, "xdr"]);
-  if (hasK && Ku.down) att.push(["warn", `<b>${pl(Ku.down, "Uptime Kuma monitor")} down</b>: ${Ku.mons.filter(m => m.status === 0).slice(0, 3).map(m => esc(m.name)).join(", ")}${Ku.down > 3 ? ", …" : ""}.`, "kuma"]);
+  if (hasK && Ku.down) att.push(["warn", `<b>${pl(Ku.down, "monitor")} down in Link / Web Availability</b>: ${Ku.mons.filter(m => m.status === 0).slice(0, 3).map(m => esc(m.name)).join(", ")}${Ku.down > 3 ? ", …" : ""}.`, "kuma"]);
   if (apOff > 0) att.push(["warn", `<b>${apOff} of ${Wf.apTotal} WiFi Access Points</b> are offline.`, "wifi"]);
   if (N && N.nodata) dq.push(["dq", `<b>${pl(N.nodata, "link")} with insufficient data</b> (monitoring coverage below ${pc(PAR.minCov, 0)}), not assessed against SLA.`, "noc"]);
   if (R && R.unknown && Object.keys(R.unknown).length) dq.push(["dq", `<b>Cyber Security: new values outside the parameter list</b> (${Object.entries(R.unknown).map(([k, r]) => ({type: "type", action: "action", severity: "severity"}[k]) + ": " + r.map(x => esc(x[0])).join(", ")).join("; ")})`, "soc"]);
@@ -186,7 +187,7 @@ function vRingkasan() {
   const nowTiles = [
     hasD ? stile("devices", "Devices", D.all.down ? "warn" : "good", D.all.down ? fmt(D.all.down) + " devices down" : "All online", "Availability " + (D.all.avail != null ? pc(D.all.avail, 1) : "-") + " · " + fmt(D.all.total) + " devices", {tip: D.chronic ? fmt(D.chronic) + " down for more than 30 days" : ""}) : "",
     hasW ? stile("wifi", "WiFi", apOff ? "warn" : "good", Wf.apTotal ? (apOff ? apOff + " APs offline" : "All APs online") : "No AP data", fmt(Wf.total) + " clients connected" + (Wf.weak ? " · " + fmt(Wf.weak) + " weak signal" : ""), {tip: Wf.apTotal ? fmt(Wf.apOnline) + " of " + fmt(Wf.apTotal) + " access points online" : ""}) : "",
-    hasK ? stile("kuma", "Uptime Kuma", Ku.down ? "warn" : "good", Ku.down ? pl(Ku.down, "monitor") + " down" : "All monitors up", fmt(Ku.up) + " of " + fmt(Ku.total) + " up · availability " + (Ku.avail != null ? pc(Ku.avail, 2) : "–")) : "",
+    hasK ? stile("kuma", "Link / Web Availability", Ku.down ? "warn" : "good", Ku.down ? pl(Ku.down, "monitor") + " down" : "All monitors up", fmt(Ku.up) + " of " + fmt(Ku.total) + " up · availability " + (Ku.avail != null ? pc(Ku.avail, 2) : "–")) : "",
     hasC ? stile("cctv", "Milestone", Cc.srv.failed.length ? "warn" : "good", Cc.srv.ok + " of " + Cc.srv.total + " servers syncing", fmt(Cc.zbx.up + Cc.zbx.other) + " cameras online" + (Cc.zbx.down ? " · " + fmt(Cc.zbx.down) + " offline" : "") + " · " + fmt(Cc.total) + " cameras") : "",
     hasH ? stile("serahterima", "Handover", hiCrit ? "crit" : hoOpen.length ? "warn" : "good", hoOpen.length ? hoOpen.length + " open handovers" : "None open", hiCrit ? hiCrit + " high priority" : "all under control") : ""
   ].filter(Boolean);
@@ -411,12 +412,13 @@ function vJadwal() {
       return `<article class="bcard pcard" data-q="${esc((k + " " + ps.map(p => p.name).join(" ")).toLowerCase())}"><header><b>${esc(k.replace(/^Branch /, ""))}</b><span class="obadge ${tone}" title="Open tickets at this branch">${o} open</span></header>${ps.map(p => `<div class="brow">${pav(p.name, 1)}<span class="pb"><b>${esc(p.name)}</b></span>${p.phone ? `<a class="pph" href="${esc(telHref(p.phone))}">${esc(p.phone)}</a>` : ""}</div>`).join("")}</article>`; }).join("");
     body = `<div class="grid">${panel("c12", esc(G.label), `<span class="hchips"><span class="hchip"><i></i>${by.size} locations</span><span class="hchip"><i></i>${group.length} people</span><span class="hchip ${totOpen ? "warn" : ""}"><i></i>${totOpen} open tickets</span></span>`, `<input type="search" id="mq" class="msearch" placeholder="Search name or location" aria-label="Search"><div class="bcards">${cards || `<div class="empty sm">No members yet.</div>`}</div>`)}</div>`;
   }
+  if (G.kind === "shift" && TABS.some(t => t[0] === "serahterima")) body += vHoBody(true);
   return bar + body;
 }const rangeMonth = d => MB[+d.slice(5, 7) - 1] + " " + d.slice(0, 4);
 /* ---------- Handover ---------- */
 function vHo() { return vHoBody(); }
-function vHoBody() {
-  const inF = h => h.date >= S.from && h.date <= S.to && (!S.sf || h.shift === S.sf) && (!S.site || h.site === S.site);
+function vHoBody(embed) {
+  const inF = h => embed || (h.date >= S.from && h.date <= S.to && (!S.sf || h.shift === S.sf) && (!S.site || h.site === S.site));       // embedded under Personnel: the page has no filters, so it shows the last 14 days and everything still open
   const L = (V.handover || []).filter(h => inF(h) && (S.hoSt === "all" || (S.hoSt === "open") === h.open)).sort((a, b) => b.at - a.at);
   const now = nowShift(), nx = now.shift % NS + 1, openT = V.open_tickets || [];
   const form = `<form id="hoF" class="form" novalidate>
@@ -430,7 +432,7 @@ function vHoBody() {
     <div class="fld wide"><label for="hBody">Situation and actions taken * <span class="sub">min. ${CFG.params["ho.rules"].min_body} characters</span></label><textarea id="hBody" placeholder="What happened, since when, who it was escalated to"></textarea></div>
     <div class="fld wide"><label for="hNext">Follow-up for Next Shift</label><input type="text" id="hNext" placeholder="What should be checked or done"></div>
     <div class="acts wide"><button class="btn" type="submit">Save Handover</button><button class="btn ghost" type="button" data-hoform="0">Cancel</button><span class="msg err" id="hMsg"></span></div></form>`;
-  return `<div class="grid">${panel("c12", "Hand Over Shift", ctxTxt(), `<div class="toolbar"><div class="seg" id="hoSt">${[["open", "Open"], ["closed", "Closed"], ["all", "All"]].map(([k, l]) => `<button type="button" data-ho="${k}" aria-pressed="${S.hoSt === k}">${l}</button>`).join("")}</div>${S.hoForm ? "" : `<button class="btn" data-hoform="1">+ New Handover</button>`}</div>${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}${S.hoForm ? `<div class="formbox">${form}</div>` : ""}${hoList(L)}`)}</div>`;
+  return `<div class="grid">${panel("c12", "Hand Over Shift", embed ? "last 14 days and everything still open" : ctxTxt(), `<div class="toolbar"><div class="seg" id="hoSt">${[["open", "Open"], ["closed", "Closed"], ["all", "All"]].map(([k, l]) => `<button type="button" data-ho="${k}" aria-pressed="${S.hoSt === k}">${l}</button>`).join("")}</div>${S.hoForm ? "" : `<button class="btn" data-hoform="1">+ New Handover</button>`}</div>${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}${S.hoForm ? `<div class="formbox">${form}</div>` : ""}${hoList(L)}${embed ? go("serahterima", "Full history with filters") : ""}`)}</div>`;
 }
 
 /* ---------- Data (completeness + RAW upload) ---------- */

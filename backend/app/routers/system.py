@@ -33,7 +33,7 @@ def _pg_env() -> dict:
 def _pg_dump() -> bytes:
     r = subprocess.run(["pg_dump", "--clean", "--if-exists", "--no-owner", "--no-privileges"], env=_pg_env(), capture_output=True, timeout=PG_TIMEOUT)
     if r.returncode:
-        raise HTTPException(500, "pg_dump gagal: " + r.stderr.decode(errors="replace")[:300])
+        raise HTTPException(500, "pg_dump failed: " + r.stderr.decode(errors="replace")[:300])
     return r.stdout
 
 
@@ -60,14 +60,14 @@ def backup(user: User = Depends(require_admin), db: Session = Depends(get_db)):
 @router.post("/restore")
 async def restore(file: UploadFile = File(...), confirm: str = Form(""), user: User = Depends(require_admin), db: Session = Depends(get_db)):
     if confirm.strip() != "RESTORE":
-        raise HTTPException(422, "Ketik RESTORE untuk mengonfirmasi.")
+        raise HTTPException(422, "Type RESTORE to confirm.")
     if not (file.filename or "").lower().endswith(".sql"):
-        raise HTTPException(415, "Hanya file .sql")
+        raise HTTPException(415, "Only .sql files")
     data = await file.read()
     if len(data) > settings().restore_max_mb * 1024 * 1024:
-        raise HTTPException(413, f"File lebih dari {settings().restore_max_mb} MB")
+        raise HTTPException(413, f"The file is larger than {settings().restore_max_mb} MB")
     if b"PostgreSQL database dump" not in data[:4000]:
-        raise HTTPException(422, "Bukan file dump SQL dari pg_dump")
+        raise HTTPException(422, "This is not a pg_dump SQL file")
 
     # cadangan pengaman dulu; tanpa itu restore tidak dijalankan
     bdir = Path(settings().backup_dir)
@@ -76,7 +76,7 @@ async def restore(file: UploadFile = File(...), confirm: str = Form(""), user: U
         pre = bdir / f"pre-restore-{datetime.now():%Y%m%d-%H%M%S}.sql"
         pre.write_bytes(_pg_dump())
     except OSError as e:
-        raise HTTPException(500, f"Folder cadangan tidak bisa ditulis ({e}). Restore dibatalkan demi keamanan.")
+        raise HTTPException(500, f"The backup folder is not writable ({e}). The restore was cancelled for safety.")
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".sql")
     tmp.write(data)
@@ -89,7 +89,7 @@ async def restore(file: UploadFile = File(...), confirm: str = Form(""), user: U
     finally:
         os.unlink(tmp.name)
     if r.returncode:
-        raise HTTPException(500, f"Restore gagal dan dibatalkan, data tidak berubah. Cadangan sebelum restore: {pre.name}. Galat: "
+        raise HTTPException(500, f"The restore failed and was cancelled, the data is unchanged. Backup taken before the restore: {pre.name}. Error: "
                                  + r.stderr.decode(errors="replace")[-400:])
 
     db_ver, code_ver = _psql_scalar("select version_num from alembic_version"), _code_head()

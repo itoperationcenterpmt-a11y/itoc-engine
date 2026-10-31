@@ -166,7 +166,7 @@ function vAudit() {
   const f = AUD.f, rows = AUD.rows.map(a => [a.at.replace("T", " ").slice(0, 19), a.by, a.t, a.ip || "–"]);
   return `${AUD.err ? `<div class="msg err">${esc(AUD.err)}</div>` : ""}
     <form class="toolbar mbar" data-int-form="audit">
-      <label class="sub">Dari <input type="date" data-f="frm" value="${esc(f.frm)}"></label><label class="sub">Sampai <input type="date" data-f="to" value="${esc(f.to)}"></label>
+      <label class="sub">From <input type="date" data-f="frm" value="${esc(f.frm)}"></label><label class="sub">To <input type="date" data-f="to" value="${esc(f.to)}"></label>
       <label class="sub">User <select data-f="who"><option value="">All</option>${AUD.users.map(u => `<option ${u === f.who ? "selected" : ""}>${esc(u)}</option>`).join("")}</select></label>
       <input type="search" class="msearch" data-f="q" value="${esc(f.q)}" placeholder="Search activity or user" aria-label="Search">
       <button class="btn" type="submit">Terapkan</button><button class="btn ghost" type="button" data-int="audreset">Reset</button>

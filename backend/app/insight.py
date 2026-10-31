@@ -393,7 +393,7 @@ def d_kuma(db: Session, cfg: Config) -> list[dict]:
         prev = db.scalar(select(M.KumaHourly.down).where(M.KumaHourly.monitor_key == m.key, M.KumaHourly.ts == hour - timedelta(hours=1)))
         cur = db.scalar(select(M.KumaHourly.down).where(M.KumaHourly.monitor_key == m.key, M.KumaHourly.ts == hour))
         if (prev or 0) > 0 and (cur or 0) > 0:
-            out.append(_ins(f"kuma_down:{m.key}", "links", "warn", f"Uptime Kuma: {m.name} has been down for over an hour",
+            out.append(_ins(f"kuma_down:{m.key}", "links", "warn", f"Link / web availability: {m.name} has been down for over an hour",
                             "The monitor failed in the last two sample hours. Check the service or the link it depends on, and the other findings for the same location.", "kuma", {"response_ms": m.response_ms or 0}))
     return out
 
@@ -623,17 +623,11 @@ def site_health(db: Session, cfg: Config) -> list[dict]:
     return sorted(out, key=lambda r: r["score"])
 
 
-MONTHS = {"en": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], "id": ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]}
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
 KINDS_NOC = {"links", "capacity", "devices", "wifi", "cctv", "correlation"}
 KINDS_SOC = {"security"}
-# Text of the shift summary in both languages (it is pasted into WhatsApp, where the team writes Indonesian).
+# Text of the shift summary: Indonesian, because it is pasted into WhatsApp where the team writes Indonesian.
 TXT = {
-    "en": {"title": "*ITOC Shift Summary*", "noc": "NOC", "soc": "SOC", "not_started": "This period has not started yet, no data.", "data": "Data {a} – {b} · created {n}", "live": " (period still running)",
-           "tickets": "*Tickets*: {i} received, {d} resolved", "open": ", {o} still open", "old": " ({n} over {days} days)", "net": "*Network*: link availability {x}%.", "net_none": "*Network*: no hourly PRTG data for this period.",
-           "down": "- {name}: down {m} min", "wifi": "*WiFi*: {o} of {t} Access Points offline now.", "dev": "*Devices*: {n} new down events", "dev_now": ", {d} devices down now", "ho": "*Handover*: {n} created in this period", "ho_open": ", {o} still open",
-           "ndr": "*NDR (Palo Alto)*: {t} events, {c} critical/high ({a} alert-only, not blocked).", "ndr_cat": "- top critical/high categories: {x}", "ndr_days": " Daily data {f}–{t}.", "ndr_none": "*NDR (Palo Alto)*: no daily data for this period (NDR data is per day).",
-           "xdr": "*XDR (Trend Micro)*: {n} new alerts", "xdr_open": ", {o} critical/high still open", "xdr_model": "- top detection models: {x}", "find": "*Automatic findings*", "crit": "CRITICAL", "warn": "WARNING",
-           "d_full": "Full day {d}", "d_h1": "First half, {d} (00:00–12:00)", "d_h2": "Second half, {d} (12:00–24:00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "Last 24 hours", "d_7": "Last 7 days", "d_30": "Last 30 days", "d_month": "Month {m} {y}"},
     "id": {"title": "*Ringkasan Shift ITOC*", "noc": "NOC", "soc": "SOC", "not_started": "Periode ini belum dimulai, belum ada data.", "data": "Data {a} – {b} · dibuat {n}", "live": " (periode masih berjalan)",
            "tickets": "*Tiket*: {i} masuk, {d} selesai", "open": ", {o} masih open", "old": " ({n} lebih dari {days} hari)", "net": "*Jaringan*: availability link {x}%.", "net_none": "*Jaringan*: belum ada data PRTG per jam untuk periode ini.",
            "down": "- {name}: down {m} menit", "wifi": "*WiFi*: {o} dari {t} Access Point offline saat ini.", "dev": "*Perangkat*: {n} kejadian down baru", "dev_now": ", {d} perangkat down saat ini", "ho": "*Handover*: {n} dibuat pada periode ini", "ho_open": ", {o} masih open",
@@ -644,8 +638,8 @@ TXT = {
 SUMMARY_KINDS = ("full", "noc", "soc")
 
 
-def _dt(d: datetime, lang: str = "id") -> str:
-    return f"{d.day} {MONTHS[lang][d.month - 1]} {d:%H:%M}"
+def _dt(d: datetime) -> str:
+    return f"{d.day} {MONTHS[d.month - 1]} {d:%H:%M}"
 
 
 def summary_windows(cfg: Config) -> list[dict]:
@@ -658,11 +652,11 @@ def summary_windows(cfg: Config) -> list[dict]:
     return out + [{"key": "7d", "label": "Last 7 days"}, {"key": "30d", "label": "Last 30 days"}, {"key": "month", "label": "Whole month of the chosen date"}]
 
 
-def _window(cfg: Config, scope: str, day: date | None, lang: str = "id") -> tuple[datetime, datetime, str]:
-    now, t = cfg.now(), TXT[lang]
+def _window(cfg: Config, scope: str, day: date | None) -> tuple[datetime, datetime, str]:
+    now, t = cfg.now(), TXT["id"]
     d = day or now.date()
     mid = datetime(d.year, d.month, d.day)
-    dm = f"{d.day} {MONTHS[lang][d.month - 1]}"
+    dm = f"{d.day} {MONTHS[d.month - 1]}"
     if scope == "day":
         return mid, mid + timedelta(days=1), t["d_full"].format(d=f"{dm} {d.year}")
     if scope == "half1":
@@ -672,7 +666,7 @@ def _window(cfg: Config, scope: str, day: date | None, lang: str = "id") -> tupl
     if scope == "month":
         first = datetime(d.year, d.month, 1)
         nxt = datetime(d.year + (d.month == 12), d.month % 12 + 1, 1)
-        return first, nxt, t["d_month"].format(m=MONTHS[lang][d.month - 1], y=d.year)
+        return first, nxt, t["d_month"].format(m=MONTHS[d.month - 1], y=d.year)
     if scope in ("7d", "30d"):
         days = 7 if scope == "7d" else 30
         return now - timedelta(days=days), now, t["d_" + scope[:-1]]
@@ -683,8 +677,7 @@ def _window(cfg: Config, scope: str, day: date | None, lang: str = "id") -> tupl
                 end = sh[(i + 1) % len(sh)]["start"]
                 a = mid + timedelta(hours=s["start"])
                 b = mid + timedelta(hours=end) if end > s["start"] else mid + timedelta(days=1, hours=end)
-                sep = ":" if lang == "en" else "."
-                return a, b, t["d_shift"].format(n=s["name"], d=dm, s=f"{s['start']:02d}{sep}00", e=f"{end:02d}{sep}00")
+                return a, b, t["d_shift"].format(n=s["name"], d=dm, s=f"{s['start']:02d}.00", e=f"{end:02d}.00")
     return now - timedelta(hours=24), now, t["d_24"]
 
 
@@ -707,20 +700,19 @@ def _ndr_part(db: Session, a: datetime, end: datetime) -> dict | None:
     return {"from": rows[0][0], "to": rows[-1][0], "total": int(total), "ch": int(ch), "alert": int(alert), "cats": sorted(((c, int(v)) for c, v in cats.items() if c not in ("-", "N/A")), key=lambda x: -x[1])[:3]}
 
 
-def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope: str = "24h", day: date | None = None, kind: str = "full", lang: str = "id") -> str:
-    """Plain-text summary for the shift handover (WhatsApp friendly), in Indonesian or English, for everything, only the NOC side, or only the SOC side. Every number comes from stored data."""
-    lang = lang if lang in TXT else "id"
+def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope: str = "24h", day: date | None = None, kind: str = "full") -> str:
+    """Plain-text summary for the shift handover (WhatsApp friendly, Indonesian), for everything, only the NOC side, or only the SOC side. Every number comes from stored data."""
     kind = kind if kind in SUMMARY_KINDS else "full"
-    t = TXT[lang]
+    t = TXT["id"]
     now = cfg.now()
-    a, b, label = _window(cfg, scope, day, lang)
+    a, b, label = _window(cfg, scope, day)
     end = min(b, now)
     head = t["title"] + ("" if kind == "full" else " · " + t[kind])
     if a >= now:
         return f"{head} ({label})\n\n{t['not_started']}"
     live = b > now                                              # window still running: "open now" is meaningful
     noc, soc = kind in ("full", "noc"), kind in ("full", "soc")
-    L = [head, label, t["data"].format(a=_dt(a, lang), b=_dt(end, lang), n=_dt(now, lang)) + (t["live"] if live else ""), ""]
+    L = [head, label, t["data"].format(a=_dt(a), b=_dt(end), n=_dt(now)) + (t["live"] if live else ""), ""]
     if kind == "full":
         tk = lambda col: db.scalar(select(func.count()).select_from(M.Ticket).where(col >= a, col < end)) or 0
         n_in, n_done = tk(M.Ticket.created_at), tk(M.Ticket.resolved_at)
@@ -734,8 +726,7 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
         name = _sensor_names(db)
         tot_n, down_s = db.execute(select(func.count(), func.coalesce(func.sum(M.PrtgHourly.down_s), 0)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end, M.PrtgHourly.seen.is_(True))).one()
         avail = 1 - down_s / (tot_n * 3600) if tot_n else None
-        dec = "," if lang == "id" else "."
-        L.append(t["net"].format(x=fmt(avail * 100, 2).replace(".", dec) if lang == "id" else fmt(avail * 100, 2)) if avail is not None else t["net_none"])
+        L.append(t["net"].format(x=fmt(avail * 100, 2).replace(".", ",")) if avail is not None else t["net_none"])
         for sid, secs in link_rows:
             L.append(t["down"].format(name=name.get(sid, sid), m=fmt(secs / 60)))
         if live:

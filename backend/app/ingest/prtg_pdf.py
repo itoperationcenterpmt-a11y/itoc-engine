@@ -100,7 +100,7 @@ def read_pdfs(files: list[tuple[str, bytes]]) -> tuple[list[dict], list[str], di
                 notes.append(f"{name} p. {i}: sensor figures unreadable (ID/date/Up/Down), page skipped")
                 continue
             if r["end"] is None or (r["end"] - r["day"]).days != 1:
-                notes.append(f"{name} hal. {i}: periode laporan bukan 1 hari ({r['day']} – {r['end']}), dilewati. Gunakan laporan harian")
+                notes.append(f"{name} page {i}: the report period is not 1 day ({r['day']} – {r['end']}), skipped. Use the daily report")
                 continue
             rows.append(r)
     best = {}

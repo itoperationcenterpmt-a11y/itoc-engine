@@ -147,7 +147,7 @@ def integration_test(key: str, server: str = "", db: Session = Depends(get_db), 
                 g = zabbix.rpc(cl, url, "hostgroup.get", {"output": ["groupid"], "search": {"name": c.get("group_prefixes") or ["CCTV-"]}, "searchByAny": True, "startSearch": True}, tok)
             s.config = {**c, "base_url": url[: -len("/api_jsonrpc.php")]}                  # simpan alamat yang terbukti benar
             db.commit()
-            return {"ok": True, "msg": f"Terhubung ke Zabbix {ver} di {s.config['base_url']}, token valid, {len(g)} host group cocok prefix"}
+            return {"ok": True, "msg": f"Connected to Zabbix {ver} at {s.config['base_url']}, token valid, {len(g)} host groups match the prefixes"}
         if key == "uptimekuma":
             try:
                 mons = uptimekuma.fetch(c["base_url"], vault.cred(db, "kuma.user", c.get("user_env", "KUMA_USER")), vault.cred(db, "kuma.pass", c.get("pass_env", "KUMA_PASS")), c.get("verify_tls", True), 15)
@@ -164,11 +164,11 @@ def integration_test(key: str, server: str = "", db: Session = Depends(get_db), 
             with httpx.Client(timeout=30, verify=c.get("verify_tls", True), follow_redirects=False) as cl:
                 try:
                     j = trendmicro.get(cl, base + "/v3.0/healthcheck/connectivity", tok)
-                    out.append("Koneksi: %s." % (j.get("status") or "OK"))
+                    out.append("Connection: %s." % (j.get("status") or "OK"))
                 except RuntimeError as e:
                     if "HTTP 401" in str(e):
                         good = trendmicro.detect_region(cl, tok)
-                        raise HTTPException(422, ("API key valid di region lain: ubah Base URL menjadi %s lalu Test lagi." % good) if good and good.rstrip("/") != base.rstrip("/")
+                        raise HTTPException(422, ("The API key is valid in another region: change the Base URL to %s and test again." % good) if good and good.rstrip("/") != base.rstrip("/")
                                             else "The API key was rejected in all regions: wrong, expired, or disabled in Vision One. Create a new key (Administration > API Keys).")
                     out.append("Healthcheck: %s." % str(e)[:140])
                 now = _dt.now(_tz.utc)
@@ -247,7 +247,7 @@ def integration_test(key: str, server: str = "", db: Session = Depends(get_db), 
                     lst, total = ruckus.fetch_clients(cl, rt, ver, tk, limit=1, max_rows=1)
                 finally:
                     ruckus.logout(cl, rt, ver, tk)
-            return {"ok": True, "msg": f"Terhubung ke vSZ (API {ver}), login valid, {total} client WiFi aktif"}
+            return {"ok": True, "msg": f"Connected to vSZ (API {ver}), login valid, {total} active WiFi clients"}
         if key == "manageengine":
             tok = vault.cred(db, "me.token", c.get("token_env", "ME_AUTHTOKEN"))
             if not tok:
@@ -261,7 +261,7 @@ def integration_test(key: str, server: str = "", db: Session = Depends(get_db), 
             r = httpx.get(c["base_url"] + "/api/table.json", params={"content": "sensors", "columns": "objid", "count": 1, "username": u, "passhash": p},
                           timeout=15, verify=c.get("verify_tls", True))
         r.raise_for_status()
-        return {"ok": True, "msg": f"Terhubung (HTTP {r.status_code})"}
+        return {"ok": True, "msg": f"Connected (HTTP {r.status_code})"}
     except HTTPException:
         raise
     except httpx.HTTPStatusError as e:

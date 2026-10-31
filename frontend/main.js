@@ -300,7 +300,6 @@ document.addEventListener("click", async e => {
     else if (d.closeSheet !== undefined) { openSheet(false); }
     else if (d.tab) { openSheet(false); set({tab: d.tab, hoForm: false, closing: null}); window.scrollTo({top: 0}); }
     else if (d.go) { set({tab: d.go}); window.scrollTo({top: 0}); }
-    else if (b.id === "langL") { LLANG = LLANG === "id" ? "en" : "id"; try { localStorage.setItem("itoc.lang", LLANG); } catch (_) {} showLogin(); }
     else if (b.id === "pwT") { const i = $("lP"), show = i.type === "password"; i.type = show ? "text" : "password"; b.setAttribute("aria-pressed", String(show)); b.setAttribute("aria-label", show ? "Hide password" : "Show password"); }
     else if (b.id === "tsX") { await send("/api/admin/turnstile", {site_key: $("tsK").value, clear_secret: true}, "PUT"); S.params = null; refresh({msg: "Secret removed."}, true); }
     else if (d.pgdel !== undefined) { b.closest(".pgrp").remove(); }
@@ -436,26 +435,22 @@ document.addEventListener("focusout", () => { tip.hidden = true; });
 setInterval(() => { if (!CFG || $("app").hidden || document.hidden) return; renderDuty(); }, 1000);
 
 /* ---------- login & boot ---------- */
-const LTXT = {"Sign in": "Masuk", "Username": "Nama pengguna", "Password": "Kata sandi", "Forgot your password?": "Lupa kata sandi?", "Contact us": "Hubungi kami", "Security verification": "Verifikasi keamanan"};
-let LLANG = "en"; try { LLANG = localStorage.getItem("itoc.lang") === "id" ? "id" : "en"; } catch (_) {}
-const lt = k => LLANG === "id" && LTXT[k] || k;
 function showLogin(msg, change) {
-  const L = LLANG === "id" ? Object.assign({}, LOGIN, (LOGIN.id || {})) : LOGIN;
   $("app").hidden = true; $("login").hidden = false;
   const form = change
     ? `<form id="pwF" class="loginbox"><div class="brand"><span class="mk"><img src="assets/tera-icon-col.png" alt=""></span><h1>Change password</h1></div><span class="sub">The initial password must be changed before using the dashboard.</span>
       <div class="fld"><label for="oP">Current password</label><input type="password" id="oP" autocomplete="current-password"></div><div class="fld"><label for="nP">New password</label><input type="password" id="nP" autocomplete="new-password"></div><div class="fld"><label for="nP2">Repeat new password</label><input type="password" id="nP2" autocomplete="new-password"></div>
       <button class="btn" type="submit">Save</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`
-    : `<form id="loginF" class="loginbox"><div class="lhead"><h1>${lt("Sign in")}</h1></div>
-      <div class="fld"><label for="lU">${lt("Username")}</label><input type="text" id="lU" autocomplete="username"></div><div class="fld"><label for="lP">${lt("Password")}</label><div class="pw"><input type="password" id="lP" autocomplete="current-password"><button type="button" class="pwt" id="pwT" aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
-      ${LOGIN.turnstile ? `<div class="fld"><label>${lt("Security verification")}</label><div class="cf-turnstile" data-sitekey="${esc(LOGIN.turnstile)}"></div></div>` : ""}
-      <button class="btn" type="submit">${lt("Sign in")}</button><span class="msg err" id="lMsg" role="alert">${esc(msg || "")}</span>
-      <p class="lg-help">${lt("Forgot your password?")} ${LOGIN.support_phone ? `<a href="https://wa.me/${esc(String(LOGIN.support_phone).replace(/\D/g, ""))}?text=${encodeURIComponent("Hello IT Care, I forgot my TERA Dashboard password.")}" target="_blank" rel="noopener noreferrer">${lt("Contact us")}</a>` : lt("Contact us")}</p></form>`;
+    : `<form id="loginF" class="loginbox"><div class="lhead"><h1>Sign in</h1></div>
+      <div class="fld"><label for="lU">Username</label><input type="text" id="lU" autocomplete="username"></div><div class="fld"><label for="lP">Password</label><div class="pw"><input type="password" id="lP" autocomplete="current-password"><button type="button" class="pwt" id="pwT" aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+      ${LOGIN.turnstile ? `<div class="fld"><label>Security verification</label><div class="cf-turnstile" data-sitekey="${esc(LOGIN.turnstile)}"></div></div>` : ""}
+      <button class="btn" type="submit">Sign in</button><span class="msg err" id="lMsg" role="alert">${esc(msg || "")}</span>
+      <p class="lg-help">Forgot your password? ${LOGIN.support_phone ? `<a href="https://wa.me/${esc(String(LOGIN.support_phone).replace(/\D/g, ""))}?text=${encodeURIComponent("Hello IT Care, I forgot my TERA Dashboard password.")}" target="_blank" rel="noopener noreferrer">Contact us</a>` : "Contact us"}</p></form>`;
       $("login").innerHTML = `<div class="lg"><div class="lg-bg"></div><div class="lg-wrap">
-    <section class="lg-card lg-info"><button type="button" class="lg-lang" id="langL" aria-label="Language: English or Indonesian" title="Language">${LLANG === "id" ? "ID" : "EN"}</button><button type="button" class="lg-theme" id="themeL" aria-label="Switch light or dark theme">◐</button>
-      <div class="lg-top">${L.eyebrow ? `<span class="lg-eyebrow">${esc(L.eyebrow)}</span>` : ""}${L.badge ? `<span class="lg-prod">${esc(L.badge)}</span>` : ""}</div>
-      ${L.headline ? `<h2 class="lg-title">${esc(L.headline)}</h2>` : `<h2 class="brandName">${brandHtml()}</h2>`}${L.tagline ? `<p>${esc(L.tagline)}</p>` : ""}${L.acronym.length ? `<ul class="lg-acr" aria-label="What TERA stands for">${L.acronym.map(([l, w, d]) => `<li><b>${esc(l)}</b><span><strong>${esc(w)}</strong>${d ? ` ${esc(d)}` : ""}</span></li>`).join("")}</ul>` : ""}
-      ${L.points.length && !L.acronym.length ? `<ul class="lg-pts">${L.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>
+    <section class="lg-card lg-info"><button type="button" class="lg-theme" id="themeL" aria-label="Switch light or dark theme">◐</button>
+      <div class="lg-top">${LOGIN.eyebrow ? `<span class="lg-eyebrow">${esc(LOGIN.eyebrow)}</span>` : ""}${LOGIN.badge ? `<span class="lg-prod">${esc(LOGIN.badge)}</span>` : ""}</div>
+      ${LOGIN.headline ? `<h2 class="lg-title">${esc(LOGIN.headline)}</h2>` : `<h2 class="brandName">${brandHtml()}</h2>`}${LOGIN.tagline ? `<p>${esc(LOGIN.tagline)}</p>` : ""}${LOGIN.acronym.length ? `<ul class="lg-acr" aria-label="What TERA stands for">${LOGIN.acronym.map(([l, w, d]) => `<li><b>${esc(l)}</b><span><strong>${esc(w)}</strong>${d ? ` ${esc(d)}` : ""}</span></li>`).join("")}</ul>` : ""}
+      ${LOGIN.points.length && !LOGIN.acronym.length ? `<ul class="lg-pts">${LOGIN.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>
     <section class="lg-card lg-form"><img class="lg-logo lg-l" src="assets/tera-lockup-col.png" alt="TERA, Divisi Teknologi Informasi, Pelindo Multi Terminal"><img class="lg-logo lg-d" src="assets/tera-lockup-rev.png" alt="">${form}<div class="loginfoot">${esc(footText().replace(/ · build .*$/, "").split(" · ").slice(0, 2).join(" · "))}</div></section></div></div>`;
   const first = $("login").querySelector("input"); if (first) first.focus();
 }function logout(msg) { fetch("/api/auth/logout", {method: "POST", credentials: "same-origin", headers: {"X-Requested-With": "itoc"}}).catch(() => {}); CFG = null; showLogin(typeof msg === "string" ? msg : ""); }
@@ -464,8 +459,8 @@ const footText = () => FOOT.replace("{year}", new Date().getFullYear()) + (CFG &
 /* The name shown in the sidebar and login page is the first BSPLIT words ("Dashboard IT"); the full name is used in the tab title, reports, and email. */
 const brandHtml = () => { const w = BRAND.trim().split(/\s+/), n = Math.max(1, Math.min(typeof BSPLIT === "number" ? BSPLIT : 2, w.length)), t = w.slice(0, n).join(" "); return `<span class="b1">${/^tera$/i.test(t) ? `T<span class="e">E</span>RA` : esc(t)}</span>`; };
 function applyBrand() { document.title = BRAND; document.querySelectorAll(".brandName").forEach(e => e.innerHTML = brandHtml()); }
-let LOGIN = {tagline: "", points: [], place: "", eyebrow: "", acronym: [], headline: "", badge: "", support_phone: "", turnstile: "", id: {}};
-async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || "", acronym: r.acronym || [], headline: r.headline || "", badge: r.badge || "", support_phone: r.support_phone || "", turnstile: r.turnstile || "", id: r.id || {}}; } catch (_) {} applyBrand(); }
+let LOGIN = {tagline: "", points: [], place: "", eyebrow: "", acronym: [], headline: "", badge: "", support_phone: "", turnstile: ""};
+async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || "", acronym: r.acronym || [], headline: r.headline || "", badge: r.badge || "", support_phone: r.support_phone || "", turnstile: r.turnstile || ""}; } catch (_) {} applyBrand(); }
 async function boot() {
   await loadPublic();
   try { if ((await fetch("/api/auth/me", {credentials: "same-origin"})).status === 401) return showLogin(); } catch (_) { return showLogin(); }

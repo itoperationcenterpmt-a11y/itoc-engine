@@ -175,6 +175,10 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
         V["soc_dup"] = S["dup"]
         bt = SOC.batch_for(S["batches"], a, b)
         V["soc_batch"] = SOC.batch_json(bt) if bt else None
+    if tab == "jadwal" and can_see(user, "serahterima"):                # Handover is shown below the ITOC group: the last 14 days and everything still open
+        since = cfg.now().date() - timedelta(days=13)
+        V["handover"] = [ho_json(h) for h in db.scalars(select(M.Handover).where(M.Handover.is_open.is_(True) | (M.Handover.shift_date >= since)).order_by(M.Handover.created_at.desc()))]
+        V["open_tickets"] = _open_tickets(db, cfg, "", limit=40)
     if tab == "jadwal":
         qs = select(M.Ticket.site, func.count()).where(M.Ticket.resolved_at.is_(None), M.Ticket.status.not_in(cfg.p("sd.closed_statuses")))
         if st:

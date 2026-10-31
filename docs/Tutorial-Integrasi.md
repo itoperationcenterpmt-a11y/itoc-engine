@@ -122,5 +122,5 @@ Uptime Kuma dibaca lewat halaman Prometheus-nya (`/metrics`), hanya baca.
 2. Di TERA: **Admin > Data Sources > Integrations > Uptime Kuma**. Isi **Base URL** (alamat Kuma saja, contoh `http://10.1.1.5:3001`, tanpa `/metrics`).
 3. Kredensial: kalau memakai API key, kosongkan Username dan isi API key di kolom Password. Kalau memakai akun, isi keduanya. Nilainya disimpan terenkripsi.
 4. Klik **Test**, lalu nyalakan sumbernya. Sinkron berjalan tiap 5 menit; setiap sinkron menambah satu sampel per monitor, dan ketersediaan dihitung dari sampel itu (1 − sampel down ÷ semua sampel). Monitor yang sedang maintenance tidak dihitung.
-5. Menu **Network > Uptime Kuma** muncul untuk role yang punya akses PRTG (role lain diatur di **Admin > Access > Roles**). Report tersedia sebagai jenis **Uptime Kuma** dan ikut jenis **Network**.
+5. Menu **Network > Link / Web Availability** muncul untuk role yang punya akses PRTG (role lain diatur di **Admin > Access > Roles**). Report tersedia sebagai jenis **Link / Web Availability** dan ikut jenis **Network**.
 6. Lokasi monitor diambil dari nama atau host monitor yang cocok dengan nama atau alias lokasi (Admin > Data Sources > Mapping, kolom Aliases). Monitor yang tidak cocok tampil di bagian "Unmapped"; beri nama monitor awalan kode lokasi (contoh `BDJ - Website`) atau tambahkan alias lokasinya.

@@ -188,4 +188,4 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     src.cursor = cur
     if notes and not n_days and not n_top and not n_part and not n_fw:
         raise RuntimeError("; ".join(notes))
-    return n_rows, f"{n_days} hari ringkasan baru, {n_top} laporan Top diperbarui" + (", today's data updated" if n_part else "") + (f", {n_fw} firewall days" if n_fw else "") + ("; " + "; ".join(notes) if notes else "")
+    return n_rows, f"{n_days} new daily summaries, {n_top} Top reports updated" + (", today's data updated" if n_part else "") + (f", {n_fw} firewall days" if n_fw else "") + ("; " + "; ".join(notes) if notes else "")
