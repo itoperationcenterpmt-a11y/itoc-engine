@@ -30,7 +30,7 @@ def _top(rows, key, n=12, val=lambda r: 1):
     return [{"k": k, "n": v} for k, v in sorted(c.items(), key=lambda x: -x[1])[:n]]
 
 
-def history(db, cfg: Config, a: date, b: date, zone: str = "", ssid: str = "", site: str = "") -> dict:
+def history(db, cfg: Config, a: date, b: date, zone: str = "", ssid: str = "", site: str = "", every: bool = False) -> dict:
     """Riwayat sesi WiFi pada rentang tanggal a..b (menurut waktu sesi mulai): usage per hari, zone, SSID, lokasi, AP, tipe perangkat, client teratas, dan jam tersibuk."""
     S = WifiSession
     t0, t1 = datetime.combine(a, dtime.min), datetime.combine(b + timedelta(days=1), dtime.min)
@@ -48,19 +48,19 @@ def history(db, cfg: Config, a: date, b: date, zone: str = "", ssid: str = "", s
         x += timedelta(days=1)
 
     def grp(col, n=10):
-        q = db.query(col, func.count(), func.count(func.distinct(S.mac)), by).filter(*cond).group_by(col).order_by(by.desc()).limit(n)
+        q = db.query(col, func.count(), func.count(func.distinct(S.mac)), by).filter(*cond).group_by(col).order_by(by.desc()).limit(None if every else n)
         return [{"k": r[0] or "-", "sessions": r[1], "clients": r[2], "bytes": int(r[3])} for r in q]
     hr = func.extract("hour", S.started_at)
     hours = [0] * 24
     for h, n in db.query(hr, func.count()).filter(*cond).group_by(hr):
         hours[int(h)] = n
     top = [{"mac": r[0], "user": r[1], "host": r[2], "ssid": r[3], "sessions": r[4], "bytes": int(r[5])}
-           for r in db.query(S.mac, func.max(S.username), func.max(S.hostname), func.max(S.ssid), func.count(), by).filter(*cond).group_by(S.mac).order_by(by.desc()).limit(15)]
+           for r in db.query(S.mac, func.max(S.username), func.max(S.hostname), func.max(S.ssid), func.count(), by).filter(*cond).group_by(S.mac).order_by(by.desc()).limit(500 if every else 15)]
     return {"from": a.isoformat(), "to": b.isoformat(), "sessions": tot[0], "clients": tot[1], "rx": int(tot[2]), "tx": int(tot[3]), "since": first.isoformat() if first else None,
             "daily": daily, "byZone": grp(S.zone), "bySsid": grp(S.ssid), "byLoc": grp(S.loc), "byAp": grp(S.ap_name), "byDevice": grp(S.device, 8), "top": top, "hours": hours}
 
 
-def build(db, cfg: Config, user=None, zone: str = "", ssid: str = "", band: str = "", site: str = "", a: date | None = None, b: date | None = None) -> dict:
+def build(db, cfg: Config, user=None, zone: str = "", ssid: str = "", band: str = "", site: str = "", a: date | None = None, b: date | None = None, unlimited: bool = False) -> dict:
     every_row = db.query(WifiClient).order_by(WifiClient.username, WifiClient.mac).all()
     to_site = site_resolver(db)
     ap_loc = lambda name, zone: to_site((name or "").split("-")[0], zone) or zone or "-"            # kode di awal nama AP (mis. SRG-RUANG IT), lalu zone -> lokasi master (nama atau alias)
@@ -104,7 +104,7 @@ def build(db, cfg: Config, user=None, zone: str = "", ssid: str = "", band: str 
     hist = history(db, cfg, a, b, zone, ssid, site) if a and b else None
     return {"byLocAp": by_loc_ap, "hist": hist, "portal": portal, "portalLogin": sum(1 for x in portal if x["status"] == "login"), "byLoc": _top(rows, loc, 10), "total": len(rows), "users": len({r.username for r in rows if r.username}), "named": sum(1 for r in rows if r.username), "weak": sum(1 for r in rows if r.rssi is not None and r.rssi < weak), "weakAt": weak,
             "rx": sum(r.rx_bytes or 0 for r in rows), "tx": sum(r.tx_bytes or 0 for r in rows),
-            "apTotal": len(aps), "apOnline": sum(1 for a in aps if isup(a)), "apDown": down[:50],
+            "apTotal": len(aps), "apOnline": sum(1 for a in aps if isup(a)), "apDown": down if unlimited else down[:50],
             "bySsid": _top(rows, lambda r: r.ssid), "bySsidBytes": _top(rows, lambda r: r.ssid, 10, tot), "byAp": sorted(by_ap.values(), key=lambda x: -x["n"])[:10],
             "byZone": _top(rows, lambda r: r.zone, 10), "byType": _top(rows, lambda r: (r.raw or {}).get("deviceType") or "-", 8), "byBand": _top(rows, _band, 4),
             "top": [{"user": r.username, "host": r.hostname, "mac": r.mac, "ssid": r.ssid, "ap": r.ap_name, "bytes": tot(r), "rx": r.rx_bytes, "tx": r.tx_bytes}

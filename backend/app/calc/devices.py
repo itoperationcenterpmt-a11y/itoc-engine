@@ -27,7 +27,7 @@ def _agg(items):
     return {"total": len(items), "up": up, "down": down, "deg": c["degraded"], "maint": c["maintenance"], "off": c["disabled"], "avail": up / (up + down) if up + down else None}
 
 
-def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str = "", full: bool = False, grp: str = "", dtype: str = "") -> dict:
+def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str = "", full: bool = False, grp: str = "", dtype: str = "", down_all: bool = False) -> dict:
     labels = cfg.p("dev.kind_labels", {}) or {}
     chronic_h = 24 * int(cfg.p("dev.chronic_days", 30) or 30)
     amap = _alias_map(db)
@@ -122,12 +122,12 @@ def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str 
     every = (src.interval_min if src else 5) or 5
     stale = bool(last) and (datetime.utcnow() - last).total_seconds() > every * 60 * 3
     return {"all": _agg(rows), "chronic": sum(1 for d in down if d["ageH"] is not None and d["ageH"] > chronic_h), "chronicDays": cdays,
-            "byKind": by_kind, "byLoc": by_loc, "down": down[:200], "downN": len(down), "ageDist": age_dist, "map": mp, "noCoord": sorted(nocoord),
+            "byKind": by_kind, "byLoc": by_loc, "down": down if down_all else down[:200], "downN": len(down), "ageDist": age_dist, "map": mp, "noCoord": sorted(nocoord),
             "byType": by_type, "groups": groups, "groupMaps": group_maps, "unmapped": [{"code": c, "n": n} for c, n in sorted(unmapped.items(), key=lambda x: -x[1])], "kindLoc": kind_loc, "kindDown": kind_down,
             "list": lst, "listN": list_n, "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": stale,
             "configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled), "error": src.last_error if src else None}
 
-def history(db: Session, cfg: Config, a, b, site: str = "", kind: str = "", dtype: str = "") -> dict:
+def history(db: Session, cfg: Config, a, b, site: str = "", kind: str = "", dtype: str = "", every: bool = False) -> dict:
     """Riwayat down dari tabel zbx_event pada rentang tanggal a..b: kejadian, downtime (jam), perangkat terdampak, MTTR, per hari, lokasi, tipe, perangkat, dan masalah dominan."""
     from datetime import time as _t, timedelta
     labels = cfg.p("dev.kind_labels", {}) or {}
@@ -176,7 +176,7 @@ def history(db: Session, cfg: Config, a, b, site: str = "", kind: str = "", dtyp
             p[2].add(e.hostid)
     period_h = max((t1 - t0).total_seconds() / 3600, 1)
     n_dev = len(base)
-    rank = lambda key, n=10, name=lambda k: k: [{"k": name(k), "key": k, "events": v[0], "hours": round(v[1], 1), "hosts": len(v[2])} for k, v in sorted(per[key].items(), key=lambda x: -x[1][1])[:n]]
+    rank = lambda key, n=10, name=lambda k: k: [{"k": name(k), "key": k, "events": v[0], "hours": round(v[1], 1), "hosts": len(v[2])} for k, v in sorted(per[key].items(), key=lambda x: -x[1][1])[:None if every else n]]
     cnt_by = lambda f: {}
     out = {"from": a.isoformat(), "to": b.isoformat(), "events": n_ev, "hours": round(tot_h, 1), "hosts": len({h for v in per["host"].values() for h in v[2]}), "devices": n_dev,
            "mttr": round(sum(dur_closed) / len(dur_closed), 1) if dur_closed else None, "avail": max(0.0, 1 - tot_h / (n_dev * period_h)) if n_dev else None,

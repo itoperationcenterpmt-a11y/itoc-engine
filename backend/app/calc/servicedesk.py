@@ -61,9 +61,16 @@ def group(D, key, n_total):
     return sorted(out, key=lambda x: (-x["n"], x["k"]))
 
 
+ALL_ITOC, ALL_EOS = "All Team ITOC", "All EOS"
+
+
 def group_names(cfg: Config) -> list[str]:
-    """Groups that tickets are ranked under: Team ITOC 1-4 and Head Office."""
-    return ["Team " + t["code"] for t in cfg.clock.teams] + ["Head Office"]
+    """Choices for a report scope: every ITOC team together, every EOS engineer together, then Team ITOC 1-4 and Head Office one by one."""
+    return [ALL_ITOC, ALL_EOS] + ["Team " + t["code"] for t in cfg.clock.teams] + ["Head Office"]
+
+
+def is_eos(p: dict) -> bool:
+    return (p["unit"] or "").strip().upper().startswith("EOS")
 
 
 def group_of(cfg: Config, ppl: list[dict]):
@@ -90,7 +97,12 @@ def calc(rows: list[list], cfg: Config, d_from: date, d_to: date, shift: int = 0
     clk = cfg.clock
     D = [derive(t, cfg) for t in rows if t[12] is not None and a <= t[12] < b and (not shift or clk.shift_of(t[12].hour) == shift)]
     grp_of = group_of(cfg, people if people is not None else cfg.people)
-    if only_group:                                              # report per group: only that group's tickets
+    if only_group == ALL_EOS:                                   # every EOS engineer, branch and Head Office alike
+        eos = {p["sys"] for p in (people if people is not None else cfg.people) if is_eos(p) and not p["is_shared"]}
+        D = [d for d in D if d["t"][7] in eos]
+    elif only_group == ALL_ITOC:                                # every ITOC team together (Team 1-4, shared duty accounts count to the team on duty)
+        D = [d for d in D if (grp_of(d) or "").startswith("Team ")]
+    elif only_group:                                            # report per group: only that group's tickets
         D = [d for d in D if grp_of(d) == only_group]
     if only_tech:                                               # report per technician: only tickets assigned to that person (roster key, see report.build)
         D = [d for d in D if d["t"][7] == only_tech]
@@ -194,6 +206,18 @@ def calc(rows: list[list], cfg: Config, d_from: date, d_to: date, shift: int = 0
         x["rank"] = 1 + sum(1 for y in gk if y["n"] > x["n"])
         x["share"] = x["n"] / gt if gt else 0
     R["groupRanking"] = sorted(gk, key=lambda x: (-x["n"], order.index(x["name"])))
+    br = {}                                                     # EOS engineers grouped by branch
+    for p in roster:
+        if is_eos(p):
+            br.setdefault((p["branch"] or "").strip() or "-", []).append(p["sys"])
+    bk = []
+    for name, syss in br.items():
+        L = [d for s_ in syss for d in by_tech.get(s_, [])]
+        g = (group(L, lambda d: "x", n) or [empty])[0]
+        bk.append({"name": name, "members": len(syss), **{c: g[c] for c in empty}, "high": sum(1 for d in L if d["t"][10] == high)})
+    for x in bk:
+        x["rank"] = 1 + sum(1 for y in bk if y["n"] > x["n"])
+    R["branchRanking"] = sorted(bk, key=lambda x: (-x["n"], x["name"]))
     tot = sum(x["n"] for x in rk)
     for x in rk:
         x["rank"] = 1 + sum(1 for y in rk if y["n"] > x["n"])

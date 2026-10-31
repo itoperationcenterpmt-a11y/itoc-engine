@@ -173,7 +173,7 @@ def _servicedesk(db, cfg, f, preset="standar"):
     heads = ["", "Tickets", "% of total", "Done", "Open", "Within SLA"]
     kinds = ["t", "n", "p1", "n", "n", "p1"]
     for key, label in (("kategori", "Category"), ("lokasi", "Location / Group")):
-        rows = (T["dims"].get(key) or [])[:10]
+        rows = _cap(T["dims"].get(key) or [], preset, 10)
         if rows and not (key == "lokasi" and f.site):
             s["tables"].append(_table("Tickets per " + label.lower(), [label] + heads[1:], kinds, [[r["k"], r["n"], r["pct"], r["done"], r["open"], r["inPct"]] for r in rows]))
     scoped = bool(f.site or getattr(f, "rgrp", "") or getattr(f, "rtech", ""))
@@ -188,7 +188,7 @@ def _servicedesk(db, cfg, f, preset="standar"):
     s["extra"] = _ticket_list(T)
     if T["openList"]:
         s["tables"].append(_table("Open tickets (latest)", ["ID", "Subject", "Location", "Technician", "Priority", "Status", "Age (days)"], ["t", "t", "t", "t", "t", "t", "f1"],
-                                  [[r["id"], r["subj"], r["loc"], r["tech"], r["prio"], r["status"], r["age"]] for r in T["openList"][:10]]))
+                                  [[r["id"], r["subj"], r["loc"], r["tech"], r["prio"], r["status"], r["age"]] for r in _cap(T["openList"], preset, 10)]))
     if T["incomplete"]:
         s["attention"].append(f"{fmt_n(T['incomplete'])} tickets ({fmt_p(T['incomplete'] / n, 0)}) have incomplete required fields")
     if T["noSla"]:
@@ -228,10 +228,16 @@ def _performance(db, cfg, f, preset="standar"):
         _chart("Within SLA per team (%)", [r["name"] for r in gr], [{"name": "Within SLA", "values": [round((r["inPct"] or 0) * 100, 1) for r in gr]}]) if gr else None,
         _chart("Tickets received per shift", [names.get(no, str(no)) for no in sorted(hrs)], [{"name": "Tickets", "values": [hrs[no] for no in sorted(hrs)]}]) if len(hrs) > 1 else None) if c]
     dt = lambda r, pv: [r["n"] - pv["n"] if pv else None, diff(r["inPct"], pv["inPct"] if pv else None, 100)]
-    if gr:
+    if gr and g != SD.ALL_EOS:
         s["tables"].append(_table("Team performance", ["#", "Team", "Members", "Tickets", "Done", "Open", "Completion", "Average (h)", "Within SLA", "Tickets vs prev.", "SLA vs prev. (pp)"],
                                   ["n", "t", "n", "n", "n", "n", "p1", "f1", "p1", "n", "f1"],
                                   [[r["rank"], r["name"], r["members"], r["n"], r["done"], r["open"], r["done"] / r["n"], r["avg"], r["inPct"], *dt(r, prev_g.get(r["name"]))] for r in gr]))
+    if g == SD.ALL_EOS:
+        bk = [r for r in T["branchRanking"] if r["n"]]
+        prev_b = {r["name"]: r for r in P["branchRanking"]}
+        s["tables"].append(_table("Branch performance (EOS)", ["#", "Branch", "Engineers", "Tickets", "Done", "Open", "Completion", "Average (h)", "Within SLA", "Tickets vs prev.", "SLA vs prev. (pp)"],
+                                  ["n", "t", "n", "n", "n", "n", "p1", "f1", "p1", "n", "f1"],
+                                  [[r["rank"], r["name"], r["members"], r["n"], r["done"], r["open"], r["done"] / r["n"], r["avg"], r["inPct"], *dt(r, prev_b.get(r["name"]))] for r in bk]))
     s["tables"].append(_table("Technician performance", ["#", "Technician", "Unit", "Tickets", "Done", "Open", "Completion", "Average (h)", "Within SLA", "High priority", "Incomplete input", "Zero-minute", "Tickets vs prev.", "SLA vs prev. (pp)"],
                               ["n", "t", "t", "n", "n", "n", "p1", "f1", "p1", "n", "p1", "n", "n", "f1"],
                               [[r["rank"], r["name"], r["unit"], r["n"], r["done"], r["open"], r["done"] / r["n"], r["avg"], r["inPct"], r["high"], 1 - r["okPct"] if r["okPct"] is not None else None, r["zero"], *dt(r, prev_t.get(r["name"]))] for r in rk]))
@@ -348,10 +354,10 @@ def _noc(db, cfg, f, preset="standar"):
         s["tables"].append(_table("Summary per ISP", ["ISP", "Links", "Availability", "Downtime (h)", "Met", "Not met", "Insufficient data"], ["t", "n", "p2", "f1", "n", "n", "n"],
                                   [[r["k"], r["n"], r["av"], r["downH"], r["ok"], r["bad"], r["nodata"]] for r in isp]))
     s["tables"].append(_table("Links with the most downtime", ["Link", "Availability", "Downtime (min)", "Status", "Average (Mbit/s)"], ["t", "p2", "f1", "t", "f1"],
-                              [[r["link"], r["av"], r["downMin"], r["status"], r["avg"]] for r in N["rank"][:15]]))
+                              [[r["link"], r["av"], r["downMin"], r["status"], r["avg"]] for r in _cap(N["rank"], preset, 15)]))
     if N["util"]:
         s["tables"].append(_table("Highest utilization", ["Link", "Average (Mbit/s)", "Peak (Mbit/s)", "Capacity (Mbit/s)", "Peak utilization", "Status"], ["t", "f1", "f1", "f0", "p1", "t"],
-                                  [[r["link"], r["avg"], r["max"], r["cap"], r["uP"], r["ust"]] for r in N["util"][:10]]))
+                                  [[r["link"], r["avg"], r["max"], r["cap"], r["uP"], r["ust"]] for r in _cap(N["util"], preset, 10)]))
     if N["bad"]:
         s["attention"].append(f"{N['bad']} link{'s' if N['bad'] != 1 else ''} below the availability target")
     if N["nodata"]:
@@ -439,7 +445,7 @@ def _soc(db, cfg, f, preset="standar"):
             s["tables"].append(_table(title, [first_col] + heads[1:], kinds, [[r["k"], r["n"], r["pct"], r["blk"], r["alert"], r["blkPct"]] for r in rows]))
     if R["urlCat"]:
         s["tables"].append(_table("URLs by category", ["Category", "Access", "% of total", "Blocked", "Alert only"], ["t", "n", "p1", "n", "n"],
-                                  [[r["k"], r["n"], r["pct"], r["blk"], r["alert"]] for r in R["urlCat"][:10]]))
+                                  [[r["k"], r["n"], r["pct"], r["blk"], r["alert"]] for r in _cap(R["urlCat"], preset, 10)]))
     if R["chAlert"]:
         s["attention"].append(f"{fmt_n(R['chAlert'])} critical/high events alert only, not blocked")
     for kind, rows in (R.get("unknown") or {}).items():
@@ -452,11 +458,17 @@ WIFI_IDS = ["wifi_ssid", "wifi_ssid_gb", "wifi_ap", "wifi_zone", "wifi_band", "w
 _GB = 1073741824
 
 
+def _cap(rows, preset, n):
+    """Compact and Standard keep the first n rows of a table; Full lists every row."""
+    return rows if preset == "lengkap" else rows[:n]
+
+
 def _devices(db, cfg, f, preset="standar"):
     """Status perangkat adalah kondisi terkini dari Zabbix saat laporan dibuat; periode tidak berlaku."""
     from .calc import devices as DEV
-    D = DEV.build(db, cfg, f.site, "", "", full=False)
-    H = DEV.history(db, cfg, f.d_from, f.d_to, f.site)
+    every = preset == "lengkap"
+    D = DEV.build(db, cfg, f.site, "", "", full=False, down_all=every)
+    H = DEV.history(db, cfg, f.d_from, f.d_to, f.site, every=every)
     s = {"key": "devices", "title": "Devices", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     A = D["all"]
     if not D["configured"] or not A["total"]:
@@ -485,9 +497,9 @@ def _devices(db, cfg, f, preset="standar"):
     s["tables"].append(_table("Dominant problems (period)", ["Problem", "Incidents", "Downtime (h)"], ["t", "n", "f1"], [[r["k"], r["events"], r["hours"]] for r in H["byProb"]]))
     s["tables"].append(_table("Per category", ["Category", "Devices", "Online", "Down", "Interface", "Availability"], ["t", "n", "n", "n", "n", "p1"], [[r["k"], r["total"], r["up"], r["down"], r["deg"], r["avail"]] for r in bk]))
     s["tables"].append(_table("Per device type", ["Type", "Code", "Devices", "Down", "Availability"], ["t", "t", "n", "n", "p1"], [[r["k"], r["code"], r["total"], r["down"], r["avail"]] for r in bt]))
-    s["tables"].append(_table("Per location", ["Location", "Devices", "Down", "Interface", "Availability"], ["t", "n", "n", "n", "p1"], [[r["k"], r["total"], r["down"], r["deg"], r["avail"]] for r in bl[:40]]))
+    s["tables"].append(_table("Per location", ["Location", "Devices", "Down", "Interface", "Availability"], ["t", "n", "n", "n", "p1"], [[r["k"], r["total"], r["down"], r["deg"], r["avail"]] for r in _cap(bl, preset, 40)]))
     s["tables"].append(_table("Longest-down devices", ["Device", "Type", "Location", "Duration (h)", "Problem"], ["t", "t", "t", "f1", "t"],
-                              [[x["name"], x.get("typeLabel"), x["loc"], x["ageH"], x.get("problem")] for x in D["down"][:30]]))
+                              [[x["name"], x.get("typeLabel"), x["loc"], x["ageH"], x.get("problem")] for x in _cap(D["down"], preset, 30)]))
     if A["down"]:
         s["attention"].append(f"{A['down']} devices down, {D['chronic']} of them over {D['chronicDays']} days")
     if D["unmapped"]:
@@ -498,8 +510,8 @@ def _devices(db, cfg, f, preset="standar"):
 def _wifi(db, cfg, f, preset="standar"):
     """Client WiFi aktif dan Access Point dari Ruckus vSZ: kondisi terkini saat laporan dibuat; usage = trafik sesi yang sedang berjalan."""
     from .calc import wifi as WIFI
-    W = WIFI.build(db, cfg, site=f.site)
-    Hh = WIFI.history(db, cfg, f.d_from, f.d_to, site=f.site)
+    W = WIFI.build(db, cfg, site=f.site, unlimited=preset == "lengkap")
+    Hh = WIFI.history(db, cfg, f.d_from, f.d_to, site=f.site, every=preset == "lengkap")
     s = {"key": "wifi", "title": "WiFi (Ruckus)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not W["configured"] or not (W["total"] or W["apTotal"]):
         s["notes"].append("No WiFi data from Ruckus vSZ yet." + (" Last sync failed: " + W["error"] if W["error"] else ""))
@@ -507,7 +519,7 @@ def _wifi(db, cfg, f, preset="standar"):
     s["notes"].append("Status figures are a Ruckus vSZ snapshot at report time; usage, clients, and sessions follow the report period" + (" (recorded since " + Hh["since"][:10] + ")" if Hh.get("since") else "") + ".")
     s["kpis"] = [_kpi("Active clients", W["total"], "n", "connected now"), _kpi("Logged-in users", W["users"], "n", f"{fmt_n(W['named'])} clients with a username"),
                  _kpi("Access Points online", W["apOnline"], "n", f"of {fmt_n(W['apTotal'])} APs"), _kpi("Weak signal", W["weak"], "n", f"below {W['weakAt']} dBm"),
-                 _kpi("Download (GB)", W["tx"] / _GB, "f1", "sesi berjalan"), _kpi("Upload (GB)", W["rx"] / _GB, "f1", "sesi berjalan")]
+                 _kpi("Download (GB)", W["tx"] / _GB, "f1", "running sessions"), _kpi("Upload (GB)", W["rx"] / _GB, "f1", "running sessions")]
     tr = W["trend"]
     s["charts"] = _pick(cfg, "wifi", WIFI_IDS, preset, [
         _top("Clients per SSID", [(x["k"], x["n"]) for x in W["bySsid"]], "Client"),
@@ -517,25 +529,25 @@ def _wifi(db, cfg, f, preset="standar"):
         _chart("Clients per band", [x["k"] for x in W["byBand"]], [{"name": "Client", "values": [x["n"] for x in W["byBand"]]}], "donut"),
         _chart("Clients over the last 24 hours", [f"{(x['t'] // 3600000) % 24:02d}.{(x['t'] // 60000) % 60:02d}" for x in tr], [{"name": "Client", "values": [x["c"] for x in tr]}], "line") if len(tr) > 1 else None,
         _daily("WiFi usage (GB)", [x["date"] for x in Hh["daily"]], [{"name": "GB", "values": [round(x["bytes"] / _GB, 2) for x in Hh["daily"]]}]),
-        _daily("Unique clients and sessions", [x["date"] for x in Hh["daily"]], [{"name": "Client unik", "values": [x["clients"] for x in Hh["daily"]]}, {"name": "Sesi", "values": [x["sessions"] for x in Hh["daily"]]}]),
+        _daily("Unique clients and sessions", [x["date"] for x in Hh["daily"]], [{"name": "Unique clients", "values": [x["clients"] for x in Hh["daily"]]}, {"name": "Sessions", "values": [x["sessions"] for x in Hh["daily"]]}]),
         _top("Usage per zone in the period (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byZone"]], "GB"),
         _top("Usage per SSID in the period (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["bySsid"]], "GB"),
         _top("Usage per location in the period (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byLoc"]], "GB"),
-        _chart("Session start hour", [f"{h:02d}" for h in range(24)], [{"name": "Sesi", "values": Hh["hours"]}]),
+        _chart("Session start hour", [f"{h:02d}" for h in range(24)], [{"name": "Sessions", "values": Hh["hours"]}]),
         _top("Dominant devices in the period (GB)", [(x["k"], round(x["bytes"] / _GB, 2)) for x in Hh["byDevice"]], "GB")])
     s["kpis"] += [_kpi("Sessions (period)", Hh["sessions"], "n", ""), _kpi("Unique clients (period)", Hh["clients"], "n", "distinct MACs"), _kpi("Total usage (GB)", (Hh["rx"] + Hh["tx"]) / _GB, "f1", "report period"),
                   _kpi("Average usage per client (GB)", (Hh["rx"] + Hh["tx"]) / _GB / Hh["clients"] if Hh["clients"] else None, "f2", "")]
     for ttl, key, nm in (("Usage per zone (period)", "byZone", "Zone"), ("Usage per SSID (period)", "bySsid", "SSID"), ("Usage per location (period)", "byLoc", "Location"), ("Usage per AP (period)", "byAp", "AP")):
-        s["tables"].append(_table(ttl, [nm, "Client unik", "Sesi", "Penggunaan (GB)"], ["t", "n", "n", "f2"], [[x["k"], x["clients"], x["sessions"], x["bytes"] / _GB] for x in Hh[key]]))
+        s["tables"].append(_table(ttl, [nm, "Unique clients", "Sessions", "Usage (GB)"], ["t", "n", "n", "f2"], [[x["k"], x["clients"], x["sessions"], x["bytes"] / _GB] for x in Hh[key]]))
     s["tables"].append(_table("Clients with the most usage (period)", ["User / Host", "MAC", "SSID", "Sessions", "Usage (GB)"], ["t", "t", "t", "n", "f2"],
                               [[x["user"] or x["host"], x["mac"], x["ssid"], x["sessions"], x["bytes"] / _GB] for x in Hh["top"]]))
-    s["tables"].append(_table("Per SSID", ["SSID", "Client", "Penggunaan (GB)"], ["t", "n", "f2"], [[x["k"], x["n"], 0] for x in W["bySsid"]]))
+    s["tables"].append(_table("Per SSID", ["SSID", "Clients", "Usage (GB)"], ["t", "n", "f2"], [[x["k"], x["n"], 0] for x in W["bySsid"]]))
     gb = dict((x["k"], x["n"]) for x in W["bySsidBytes"])
     s["tables"][-1]["rows"] = [[x["k"], x["n"], gb.get(x["k"], 0) / _GB] for x in W["bySsid"]]
     s["tables"].append(_table("Clients with the most usage", ["User / Host", "MAC", "SSID", "AP", "Download (GB)", "Upload (GB)"], ["t", "t", "t", "t", "f2", "f2"],
                               [[x["user"] or x["host"], x["mac"], x["ssid"], x["ap"], (x["tx"] or 0) / _GB, (x["rx"] or 0) / _GB] for x in W["top"]]))
     if W["apDown"]:
-        s["tables"].append(_table("Access Points not online", ["AP", "Zone", "Status", "Model"], ["t", "t", "t", "t"], [[x["name"], x["zone"], x["status"], x["model"]] for x in W["apDown"][:30]]))
+        s["tables"].append(_table("Access Points not online", ["AP", "Zone", "Status", "Model"], ["t", "t", "t", "t"], [[x["name"], x["zone"], x["status"], x["model"]] for x in _cap(W["apDown"], preset, 30)]))
         s["attention"].append(f"{len(W['apDown'])} Access Points not online of {W['apTotal']}")
     if W["weak"]:
         s["attention"].append(f"{W['weak']} clients with weak signal (below {W['weakAt']} dBm)")
@@ -564,8 +576,8 @@ def _xdr(db, cfg, f, preset="standar"):
         _top("Top 10 detection models", [(x["k"], x["n"]) for x in X["byModel"]], "Alert"),
         _chart("Investigation status", [x["k"] for x in X["byStatus"]], [{"name": "Alert", "values": [x["n"] for x in X["byStatus"]]}])])
     s["tables"].append(_table("Top detection models", ["Model", "Alert"], ["t", "n"], [[x["k"], x["n"]] for x in X["byModel"]]))
-    s["tables"].append(_table("Latest critical and high alerts", ["Time", "Severity", "Model", "Skor", "Status"], ["t", "t", "t", "n", "t"],
-                              [[datetime.utcfromtimestamp(x["created"] / 1000).strftime("%d/%m %H.%M"), x["severity"], x["model"], x["score"], x["status"]] for x in X["list"] if x["severity"] in ("critical", "high")][:25]))
+    s["tables"].append(_table("Latest critical and high alerts", ["Time", "Severity", "Model", "Score", "Status"], ["t", "t", "t", "n", "t"],
+                              _cap([[datetime.utcfromtimestamp(x["created"] / 1000).strftime("%d/%m %H.%M"), x["severity"], x["model"], x["score"], x["status"]] for x in X["list"] if x["severity"] in ("critical", "high")], preset, 25)))
     i = X["impact"]
     if X["backlogCH"]:
         s["attention"].append(f"{X['backlogCH']} critical/high alerts still open")

@@ -13,6 +13,18 @@ MIME = {"xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.she
 
 
 # ---------------------------------------------------------------- Excel
+XL_SPLIT = 200          # a table longer than this goes on a sheet of its own so the section sheet stays readable
+
+
+def _sheet_name(wb, section, title):
+    base = "".join(ch for ch in f"{section} - {title}" if ch not in '[]:*?/\\')[:31]
+    name, i = base, 2
+    while name in wb.sheetnames:
+        name = base[:28] + f" {i}"
+        i += 1
+    return name
+
+
 def to_xlsx(m: dict) -> bytes:
     from openpyxl import Workbook
     from openpyxl.chart import AreaChart, BarChart, DoughnutChart, LineChart, Reference
@@ -21,11 +33,7 @@ def to_xlsx(m: dict) -> bytes:
     head_fill, thin = PatternFill("solid", fgColor=NAVY), Side(style="thin", color=LINE)
     wb = Workbook()
     wb.remove(wb.active)
-    for s in m["sections"]:
-        ws = wb.create_sheet(s["title"][:31])
-        ws.sheet_view.showGridLines = False
-        width = {}
-
+    def mk_put(ws, width):
         def put(r, c, v, kind="t", bold=False, color=None, fill=None, wrap=False):
             cell = ws.cell(row=r, column=c, value=None if v is None else v)
             if kind in XL_FMT and isinstance(v, (int, float)):
@@ -37,6 +45,14 @@ def to_xlsx(m: dict) -> bytes:
             cell.border = Border(bottom=thin)
             width[c] = min(60, max(width.get(c, 8), len(fmt(v, kind)) + 2))
             return cell
+        return put
+
+    for s in m["sections"]:
+        ws = wb.create_sheet(s["title"][:31])
+        ws.sheet_view.showGridLines = False
+        width = {}
+
+        put = mk_put(ws, width)
 
         ws["A1"] = m["title"]
         ws["A1"].font = Font(bold=True, size=16, color=NAVY)
@@ -51,7 +67,7 @@ def to_xlsx(m: dict) -> bytes:
             ws.cell(row=r, column=1, value=n).font = Font(italic=True, color=MUTED)
             r += 1
         if s["kpis"]:
-            for c, h in enumerate(["Metrik", "Nilai", "Keterangan"], 1):
+            for c, h in enumerate(["Metric", "Value", "Note"], 1):
                 put(r, c, h, bold=True, color="FFFFFF", fill=head_fill)
             r += 1
             for k in s["kpis"]:
@@ -102,6 +118,27 @@ def to_xlsx(m: dict) -> bytes:
         if s["charts"]:
             r = cr + ((len(s["charts"]) + 1) // 2) * 16 + 1
         for t in s["tables"]:
+            if len(t["rows"]) > XL_SPLIT:
+                name = _sheet_name(wb, s["title"], t["title"])
+                w2, wd = wb.create_sheet(name), {}
+                w2.sheet_view.showGridLines = False
+                p2 = mk_put(w2, wd)
+                w2["A1"] = t["title"]
+                w2["A1"].font = Font(bold=True, size=14, color=NAVY)
+                w2["A2"] = f"{m['subtitle']} · {s['title']} · {m['period']} · {len(t['rows'])} rows"
+                w2["A2"].font = Font(size=9, color=MUTED)
+                for c, h in enumerate(t["heads"], 1):
+                    p2(4, c, h, bold=True, color="FFFFFF", fill=head_fill, wrap=True)
+                for i, row in enumerate(t["rows"], 5):
+                    for c, v in enumerate(row, 1):
+                        p2(i, c, v, t["kinds"][c - 1])
+                w2.freeze_panes = "A5"
+                w2.auto_filter.ref = f"A4:{get_column_letter(len(t['heads']))}{4 + len(t['rows'])}"
+                for c, w in wd.items():
+                    w2.column_dimensions[get_column_letter(c)].width = max(w, 10)
+                ws.cell(row=r, column=1, value=f"{t['title']}: {len(t['rows'])} rows, see the sheet \"{name}\"").font = Font(bold=True, size=11, color=BLUE)
+                r += 2
+                continue
             ws.cell(row=r, column=1, value=t["title"]).font = Font(bold=True, size=12, color=BLUE)
             r += 1
             for c, h in enumerate(t["heads"], 1):
