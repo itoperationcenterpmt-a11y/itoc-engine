@@ -569,13 +569,17 @@ footer{margin-top:28px;color:var(--muted);font-size:calc(12px*var(--fs));display
 @keyframes dutysheen{0%,60%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
 @keyframes dutyblink{0%,49%{opacity:1}50%,100%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){.dutychip::after,.dutychip i,.dutychip .clk b{animation:none}}
-.stiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
 .stile{display:flex;flex-direction:column;gap:3px;text-align:left;background:var(--sunken);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--ink);cursor:pointer;font:inherit;transition:transform .15s,border-color .15s}
 .stile:hover{transform:translateY(-1px)}
 .stile .k{font-size:calc(11px*var(--fs));letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .stile b{font-size:calc(16px*var(--fs));font-weight:700}
 .stile.good{border-left-color:var(--good)}.stile.warn{border-left-color:var(--warn)}.stile.crit{border-left-color:var(--crit)}
 .stile.crit b{color:var(--crit)}.stile.warn b{color:var(--warn)}
+.stile .spark{display:block;width:100%;height:22px;margin-top:4px}
+.att li.dq{border-left-color:var(--line);color:var(--ink2)}
+.dhead{margin:14px 0 2px;font-size:calc(11px*var(--fs));letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.fold{border-bottom:1px solid var(--line)}.fold:last-child{border-bottom:0}.fold summary{cursor:pointer;padding:9px 0;font-weight:600;font-size:calc(13px*var(--fs))}.fold[open] summary{padding-bottom:4px}
 .admnav{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}.admnav .subtabs{margin:0}.admgrp button{font-weight:600}
 .admhead{margin:4px 0 14px}.admhead h3{font:700 18px var(--f-display);margin:0 0 3px}.admsub{font:700 15px var(--f-display);margin:22px 0 8px}
 .rolecards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin:12px 0}.rcard{background:var(--sunken);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}

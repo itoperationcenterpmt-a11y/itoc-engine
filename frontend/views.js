@@ -140,58 +140,70 @@ function renderDuty() {
 }
 
 /* ---------- Ringkasan ---------- */
+const spark = (v, c) => {
+  if (!v || v.length < 2 || !v.some(x => x > 0)) return "";
+  const mx = Math.max(...v), pts = v.map((x, i) => (100 * i / (v.length - 1)).toFixed(1) + "," + (20 - x / mx * 18).toFixed(1)).join(" ");
+  return `<svg class="spark" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="var(${c})" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`;
+};
+const stile = (tab, name, tone, head, sub, o = {}) => `<button type="button" class="stile ${tone}" data-go="${tab}"${o.tip ? ` title="${esc(o.tip)}"` : ""}><span class="k">${esc(name)}</span><b>${head}</b><span class="sub">${sub}</span>${o.dl ? `<span class="sub">${o.dl}</span>` : ""}${o.spark || ""}</button>`;
+const fold = (title, body) => `<details class="fold"><summary>${title}</summary>${body}</details>`;
+const attRow = a => `<li class="${a[0]}"><span>${a[1]}</span>${go(a[2], "View")}</li>`;
+
 function vRingkasan() {
   const hasT = "tk" in V, hasN = "net" in V, hasS = "soc" in V, hasH = "ho_open" in V, D = V.dev, hasD = !!(D && D.all && D.all.total), Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)), Xd = V.xdr, hasX = !!(Xd && Xd.configured && (Xd.total || Xd.backlogCH)), Cc = V.cctv, hasC = !!(Cc && Cc.configured && Cc.total), In = V.insight, hasI = !!(In && In.open.length), Iu = V.inet, hasU = !!(Iu && Iu.nFw && Iu.total.bytes);
   const T = hasT ? tkR() : null, N = hasN ? netR() : null, R = hasS ? socR() : null, chk = hasS ? socCheck() : [], okDays = chk.filter(x => x.s === "ok" || x.s === "dup").length, now = nowShift();
   const P = S.cmp ? prevRange() : null, Tp = P && tkR(P), Np = P && netR(P), Rp = P && socR(P);
   const openOld = V.open_old || [], oldD = CFG.params["sd.open_alert_days"], badLinks = N ? N.rank.filter(s => s.status === NST.bad) : [], hoOpen = V.ho_open || [], hiCrit = hoOpen.filter(h => prTone(h.prio) === "crit").length;
-  const att = [];
+  const wg = k => { const w = widgetFind(k); return w && widgetOk(w) ? w.html() : ""; };
+  const xCrit = hasX ? (Xd.bySev.find(x => x.k === "critical") || {n: 0}).n : 0, apOff = hasW ? Wf.apTotal - Wf.apOnline : 0;
+
+  /* Needs Attention: things to act on, critical first. Data problems are listed apart so they do not bury real incidents. */
+  const att = [], dq = [];
   if (openOld.length) att.push(["crit", `<b>${pl(openOld.length, "ticket")} open for more than ${oldD} days</b>, oldest: ${esc(openOld[0].subject)} (#${esc(openOld[0].id)}, ${fx(openOld[0].age, 0)} days).`, "servicedesk"]);
   if (badLinks.length) att.push(["crit", `<b>${badLinks.length} links below the ${pc(PAR.target, 1)} target</b>: ${badLinks.slice(0, 3).map(s => esc(s.link) + " (" + pc(s.av, 2) + ")").join(", ")}${badLinks.length > 3 ? ", …" : ""}.`, "noc"]);
   if (hiCrit) att.push(["crit", `<b>${hiCrit} high-priority handovers</b> are still open.`, "serahterima"]);
-  if (N && N.nodata) att.push(["warn", `<b>${pl(N.nodata, "link")} with insufficient data</b> (monitoring coverage below ${pc(PAR.minCov, 0)}), not assessed against SLA.`, "noc"]);
   if (R && R.chAlert) att.push(["warn", `<b>${fmt(R.chAlert)} critical/high events were alert-only</b>, not blocked by the firewall.`, "soc"]);
-  if (R && R.unknown && Object.keys(R.unknown).length) att.push(["warn", `<b>Cyber Security: new values outside the parameter list</b> (${Object.entries(R.unknown).map(([k, r]) => ({type: "type", action: "action", severity: "severity"}[k]) + ": " + r.map(x => esc(x[0])).join(", ")).join("; ")})`, "soc"]);
-  if (N && (N.unmappedIsp || []).length) att.push(["warn", `<b>${N.unmappedIsp.length} links do not match any ISP</b>: ${N.unmappedIsp.slice(0, 3).map(esc).join(", ")}`, "noc"]);
   if (hasD && D.all.down) att.push(["warn", `<b>${fmt(D.all.down)} devices down</b> (CCTV and Gate System), ${fmt(D.chronic)} of them for more than 30 days.`, "devices"]);
   if (hasX && Xd.backlogCH) att.push(["warn", `<b>${Xd.backlogCH} critical/high XDR alerts</b> are still open.`, "xdr"]);
-  if (hasW && Wf.apTotal - Wf.apOnline > 0) att.push(["warn", `<b>${Wf.apTotal - Wf.apOnline} of ${Wf.apTotal} WiFi Access Points</b> are offline.`, "wifi"]);
-  if (hasD && (D.error || D.stale)) att.push(["warn", `<b>Zabbix data ${D.error ? "failed to sync" : "is not up to date"}</b>. Check the connector in Admin.`, "devices"]);
-  const bad = chk.filter(x => x.s === "bad" || x.s === "miss"); if (bad.length) att.push(["warn", `<b>SOC data is incomplete</b>: ${bad.length} of ${chk.length} days unreadable or not uploaded.`, "kelengkapan"]);
-  const s1 = hasT ? [{name: "Tickets In", c: "--s1", v: T.daily.map(x => x.in)}, {name: "Tickets Closed", c: "--s2", v: T.daily.map(x => x.done)}] : [];
-  const cg = GROUPS.find(g => g.kind === "office"), care = cg ? CFG.people.filter(p => p.unit === cg.unit) : [], ct = CFG.params["report.contact"] || {};
-  const careP = cg ? panel("c3", esc(cg.label), esc(cg.start + "–" + cg.end), `<div class="carenum">${ct.phone ? `<span class="lbl">${esc(cg.label)} hotline</span><b class="num">${esc(ct.phone)}</b>` : ""}${ct.email ? `<span class="sub">${esc(ct.email)}</span>` : ""}</div>${care.length ? `<ul class="plist">${care.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc(p.job || "")}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`).join("")}</ul>` : ""}`) : "";
-  const lead = CFG.people.filter(p => p.unit === "ITOC" && !p.team_code), leadP = lead.length ? panel("c3", "Escalation", "Supervisor & Lead", `<ul class="plist">${lead.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc((p.job || "").replace(/^ITOC /, ""))}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`).join("")}</ul>`) : "";
-  const dom = (title, tab, body) => `<section class="panel c3 dom"><header><h2>${title}</h2></header><div class="mini">${body}</div>${go(tab)}</section>`;
-  const wg = k => { const w = widgetFind(k); return w && widgetOk(w) ? w.html() : ""; };
-  const xCrit = hasX ? (Xd.bySev.find(x => x.k === "critical") || {n: 0}).n : 0, apOff = hasW ? Wf.apTotal - Wf.apOnline : 0;
-  const tile = (tab, name, tone, head, sub) => `<button type="button" class="stile ${tone}" data-go="${tab}"><span class="k">${esc(name)}</span><b>${head}</b><span class="sub">${sub}</span></button>`;
-  const tiles = [
-    hasT ? tile("servicedesk", "Ticketing", openOld.length ? "crit" : "good", openOld.length ? pl(openOld.length, "old open ticket") : "Under control", fmt(T.n) + " tickets · " + fmt(T.open) + " open · SLA " + pc(T.slaPct)) : "",
-    hasN || hasW ? tile("network", "Network", badLinks.length ? "crit" : (N && N.nodata) || apOff ? "warn" : "good", badLinks.length ? pl(badLinks.length, "link") + " below target" : apOff ? apOff + " APs offline" : "Stable", (N ? "Availability " + pc(N.avail, 2) : "") + (N && hasW ? " · " : "") + (hasW ? fmt(Wf.total) + " WiFi clients" : "")) : "",
-    hasU ? tile("internet", "Internet Usage", "good", fwB(Iu.total.bytes) + " in the period", (Iu.dayN ? fx(Iu.total.bytes * 8 / (Iu.dayN * 86400) / 1e6, 0) + " Mb/s average" : "") + (Iu.app[0] ? " · top: " + Iu.app[0].k : "")) : "",
-    hasS || hasX ? tile("cyber", "Cyber Security", xCrit ? "crit" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "warn" : "good", xCrit ? xCrit + " critical XDR alerts" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "Needs follow-up" : "No issues", (R ? fmt(R.total) + " NDR events" : "") + (R && hasX ? " · " : "") + (hasX ? fmt(Xd.total) + " XDR alerts" : "")) : "",
-    hasD ? tile("devices", "Devices", D.all.down ? "warn" : "good", D.all.down ? fmt(D.all.down) + " devices down" : "All online", "Availability " + (D.all.avail != null ? pc(D.all.avail, 1) : "-") + " · " + fmt(D.all.total) + " devices") : "",
-    hasC ? tile("cctv", "Milestone", Cc.srv.failed.length ? "warn" : "good", Cc.srv.ok + " of " + Cc.srv.total + " servers syncing", fmt(Cc.zbx.up + Cc.zbx.other) + " cameras online" + (Cc.zbx.down ? " · " + fmt(Cc.zbx.down) + " offline" : "") + " · " + fmt(Cc.total) + " cameras") : "",
-    hasH ? tile("serahterima", "Handover", hiCrit ? "crit" : hoOpen.length ? "warn" : "good", hoOpen.length ? hoOpen.length + " open handovers" : "None open", hiCrit ? hiCrit + " high priority" : "all under control") : "",
-    hasI ? tile("insight", "Insights", In.counts.crit ? "crit" : In.counts.warn ? "warn" : "good", In.open.length + " active findings", In.counts.crit + " critical · " + In.counts.warn + " warning") : ""
+  if (apOff > 0) att.push(["warn", `<b>${apOff} of ${Wf.apTotal} WiFi Access Points</b> are offline.`, "wifi"]);
+  if (N && N.nodata) dq.push(["dq", `<b>${pl(N.nodata, "link")} with insufficient data</b> (monitoring coverage below ${pc(PAR.minCov, 0)}), not assessed against SLA.`, "noc"]);
+  if (R && R.unknown && Object.keys(R.unknown).length) dq.push(["dq", `<b>Cyber Security: new values outside the parameter list</b> (${Object.entries(R.unknown).map(([k, r]) => ({type: "type", action: "action", severity: "severity"}[k]) + ": " + r.map(x => esc(x[0])).join(", ")).join("; ")})`, "soc"]);
+  if (N && (N.unmappedIsp || []).length) dq.push(["dq", `<b>${N.unmappedIsp.length} links do not match any ISP</b>: ${N.unmappedIsp.slice(0, 3).map(esc).join(", ")}`, "noc"]);
+  if (hasD && (D.error || D.stale)) dq.push(["dq", `<b>Zabbix data ${D.error ? "failed to sync" : "is not up to date"}</b>. Check the connector in Admin.`, "devices"]);
+  const bad = chk.filter(x => x.s === "bad" || x.s === "miss"); if (bad.length) dq.push(["dq", `<b>SOC data is incomplete</b>: ${bad.length} of ${chk.length} days unreadable or not uploaded.`, "kelengkapan"]);
+  const attBody = (att.length ? `<ul class="att">${att.map(attRow).join("")}</ul>` : `<div class="empty sm">Nothing needs follow-up.</div>`) + (dq.length ? `<div class="dhead">Data health</div><ul class="att dq">${dq.map(attRow).join("")}</ul>` : "");
+  const attP = panel(hasI ? "c6" : "c8", "Needs Attention", ctxTxt(), attBody);
+
+  /* Right now (live state) and This period (follows the date filter) */
+  const nowTiles = [
+    hasD ? stile("devices", "Devices", D.all.down ? "warn" : "good", D.all.down ? fmt(D.all.down) + " devices down" : "All online", "Availability " + (D.all.avail != null ? pc(D.all.avail, 1) : "-") + " · " + fmt(D.all.total) + " devices", {tip: D.chronic ? fmt(D.chronic) + " down for more than 30 days" : ""}) : "",
+    hasW ? stile("wifi", "WiFi", apOff ? "warn" : "good", Wf.apTotal ? (apOff ? apOff + " APs offline" : "All APs online") : "No AP data", fmt(Wf.total) + " clients connected" + (Wf.weak ? " · " + fmt(Wf.weak) + " weak signal" : ""), {tip: Wf.apTotal ? fmt(Wf.apOnline) + " of " + fmt(Wf.apTotal) + " access points online" : ""}) : "",
+    hasC ? stile("cctv", "Milestone", Cc.srv.failed.length ? "warn" : "good", Cc.srv.ok + " of " + Cc.srv.total + " servers syncing", fmt(Cc.zbx.up + Cc.zbx.other) + " cameras online" + (Cc.zbx.down ? " · " + fmt(Cc.zbx.down) + " offline" : "") + " · " + fmt(Cc.total) + " cameras") : "",
+    hasH ? stile("serahterima", "Handover", hiCrit ? "crit" : hoOpen.length ? "warn" : "good", hoOpen.length ? hoOpen.length + " open handovers" : "None open", hiCrit ? hiCrit + " high priority" : "all under control") : ""
   ].filter(Boolean);
-  const tilesP = tiles.length ? panel("c12", "Today's Status", ctxTxt(), `<div class="stiles">${tiles.join("")}</div>`) : "";
+  const periodTiles = [
+    hasT ? stile("servicedesk", "Ticketing", openOld.length ? "crit" : "good", openOld.length ? pl(openOld.length, "old open ticket") : "Under control", fmt(T.n) + " tickets · " + fmt(T.open) + " open · SLA " + pc(T.slaPct), {dl: Tp ? delta(T.slaPct, Tp.slaPct, {up: true, pct: 1}) : "", spark: spark(T.daily.map(x => x.in), "--s1"), tip: "Closed " + pc(T.doneRate) + " · median " + fx(T.medMin, 0) + " min · P90 " + fx(T.p90, 1) + " h"}) : "",
+    hasN ? stile("network", "Network", badLinks.length ? "crit" : N && N.nodata ? "warn" : "good", badLinks.length ? pl(badLinks.length, "link") + " below target" : "Stable", N ? "Availability " + pc(N.avail, 2) + " · " + fx(N.downH, 1) + " h downtime" : "", {dl: N && Np ? delta(N.avail, Np.avail, {up: true, pct: 1}) : "", spark: N ? spark(N.daily.map(x => x.down), "--crit") : "", tip: N ? N.ok + " of " + (N.ok + N.bad) + " links meet SLA · " + N.events + " incidents · " + fmt(N.utilHigh) + " links with high utilization" : ""}) : "",
+    hasU ? stile("internet", "Internet Usage", "good", fwB(Iu.total.bytes) + " in the period", (Iu.dayN ? fx(Iu.total.bytes * 8 / (Iu.dayN * 86400) / 1e6, 0) + " Mb/s average" : "") + (Iu.app[0] ? " · top: " + Iu.app[0].k : "")) : "",
+    hasS || hasX ? stile("cyber", "Cyber Security", xCrit ? "crit" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "warn" : "good", xCrit ? xCrit + " critical XDR alerts" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "Needs follow-up" : "No issues", (R ? fmt(R.total) + " NDR events" : "") + (R && hasX ? " · " : "") + (hasX ? fmt(Xd.total) + " XDR alerts" : ""), {dl: R && R.ch && Rp && Rp.ch ? "Blocked " + pc(R.chBlkPct) + " " + delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : "", spark: R ? spark(R.daily.map(x => x.critical + x.high), "--serious") : "", tip: R ? "Critical/high blocked " + (R.ch ? pc(R.chBlkPct) : "–") + " · " + fmt(R.chAlert) + " alert-only · " + okDays + "/" + chk.length + " days validated" : ""}) : ""
+  ].filter(Boolean);
+  const nowP = nowTiles.length ? panel(hasI ? "c8" : "c12", "Right Now", "Live status", `<div class="stiles">${nowTiles.join("")}</div>`) : "";
+  const perP = periodTiles.length ? panel("c12", "This Period", ctxTxt(), `<div class="stiles">${periodTiles.join("")}</div>`) : "";
+  const dutyP = panel("c4", "On Duty", dlong(now.date) + " · " + shiftHours(now.shift), onDuty(now));
+
+  /* Contacts change rarely, so they sit folded at the bottom */
+  const cg = GROUPS.find(g => g.kind === "office"), care = cg ? CFG.people.filter(p => p.unit === cg.unit) : [], ct = CFG.params["report.contact"] || {};
+  const careB = cg ? `<div class="carenum">${ct.phone ? `<span class="lbl">${esc(cg.label)} hotline</span><b class="num">${esc(ct.phone)}</b>` : ""}${ct.email ? `<span class="sub">${esc(ct.email)}</span>` : ""}</div>${care.length ? `<ul class="plist">${care.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc(p.job || "")}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`).join("")}</ul>` : ""}` : "";
+  const lead = CFG.people.filter(p => p.unit === "ITOC" && !p.team_code), leadB = lead.length ? `<ul class="plist">${lead.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc((p.job || "").replace(/^ITOC /, ""))}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`).join("")}</ul>` : "";
+  const contactP = leadB || careB ? panel("c6", "Contacts", "Escalation and hotline", (leadB ? fold("Escalation · Supervisor &amp; Lead", leadB) : "") + (careB ? fold(esc(cg.label) + " · " + esc(cg.start + "–" + cg.end), careB) : "")) : "";
+
+  const s1 = hasT ? [{name: "Tickets In", c: "--s1", v: T.daily.map(x => x.in)}, {name: "Tickets Closed", c: "--s2", v: T.daily.map(x => x.done)}] : [];
   return `<div class="grid">
-  ${tilesP}
-  ${panel("c8", "Needs Attention", ctxTxt(), att.length ? `<ul class="att">${att.map(a => `<li class="${a[0]}"><span>${a[1]}</span>${go(a[2], "View")}</li>`).join("")}</ul>` : `<div class="empty sm">Nothing needs follow-up.</div>`)}
-  ${panel("c4", "On Duty", dlong(now.date) + " · " + shiftHours(now.shift), onDuty(now))}
-  ${hasI ? insightPanel(In, 4, "c6") : ""}
-  ${leadP}
-  ${careP}
-  ${!hasT ? "" : dom("Ticketing", "servicedesk", kpi("Tickets In", fmt(T.n), fx(T.perDay, 1) + "/day", {tip: RUMUS.tkIn, dl: Tp ? delta(T.n, Tp.n) : ""}) + kpi("Closed", pc(T.doneRate), fmt(T.open) + " open", {tip: RUMUS.tkDone, dl: Tp ? delta(T.doneRate, Tp.doneRate, {up: true, pct: 1}) : ""}) + kpi("Within SLA Target", pc(T.slaPct), fmt(T.slaOut) + " over", {tip: RUMUS.tkSla, dl: Tp ? delta(T.slaPct, Tp.slaPct, {up: true, pct: 1}) : "", cls: T.slaPct != null && T.slaPct < CFG.params["sd.sla_warn"] ? "warnv" : ""}) + kpi("Median Duration", fx(T.medMin, 0) + " min", "P90 " + fx(T.p90, 1) + " h", {tip: RUMUS.tkMed, dl: Tp ? delta(T.medMin, Tp.medMin, {up: false}) : ""}))}
-  ${!hasN ? "" : dom("Networking", "noc", N ? kpi("Availability", pc(N.avail, 2), "target " + pc(PAR.target, 1), {tip: RUMUS.av, dl: Np ? delta(N.avail, Np.avail, {up: true, pct: 1}) : "", cls: N.avail < PAR.target ? "warnv" : ""}) + kpi("Links Meeting SLA", N.ok + "/" + (N.ok + N.bad), N.bad + " not met, " + N.nodata + " no data", {tip: RUMUS.link}) + kpi("Total Downtime", fx(N.downH, 1) + " h", N.events + " incidents", {tip: RUMUS.down, dl: Np ? delta(N.downH, Np.downH, {up: false}) : ""}) + kpi("High Utilization", fmt(N.utilHigh), "links peaking ≥ " + pc(PAR.utilPeak, 0), {tip: RUMUS.util}) : empty())}
-  ${!hasS ? "" : dom("Cyber Security", "soc", kpi("Critical + High Blocked", R.ch ? pc(R.chBlkPct) : "–", fmt(R.chAlert) + " alert-only", {tip: RUMUS.socCH, dl: Rp && Rp.ch ? delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : ""}) + kpi("Total Events", R.total ? fmt(R.total) : "–", fmt(R.ch) + " critical/high", {tip: RUMUS.socTot}) + kpi("Validated Days", okDays + "/" + chk.length, okDays < chk.length ? "the rest are not counted" : "complete", {cls: okDays < chk.length ? "warnv" : ""}) + kpi("Internal Source", pc(R.internalPct), "of all events", {tip: RUMUS.socInt}))}
-  ${!hasX ? "" : dom("XDR", "xdr", kpi("Alerts", fmt(Xd.total), "in period") + kpi("Still Open", fmt(Xd.open), "not closed", {cls: Xd.open ? "warnv" : ""}) + kpi("Critical", fmt(xCrit), "in period") + kpi("Critical/High Backlog", fmt(Xd.backlogCH), "", {cls: Xd.backlogCH ? "warnv" : ""}))}
-  ${!hasD ? "" : dom("Devices", "devices", kpi("Devices", fmt(D.all.total), "") + kpi("Availability Now", D.all.avail != null ? pc(D.all.avail, 1) : "-", "", {cls: D.all.avail != null && D.all.avail < 0.95 ? "warnv" : ""}) + kpi("Down", fmt(D.all.down), fmt(D.chronic) + " for over 30 days", {cls: D.all.down ? "warnv" : ""}) + kpi("Interface Issues", fmt(D.all.deg || 0), ""))}
-  ${!hasW ? "" : dom("WiFi", "wifi", kpi("Active Clients", fmt(Wf.total), "connected now") + kpi("Access Points", Wf.apTotal ? fmt(Wf.apOnline) + " / " + fmt(Wf.apTotal) : "-", "online", {cls: Wf.apTotal && Wf.apOnline < Wf.apTotal ? "warnv" : ""}) + kpi("Weak Signal", fmt(Wf.weak), "below " + Wf.weakAt + " dBm", {cls: Wf.weak ? "warnv" : ""}) + kpi("Usage", wBytes(Wf.tx + Wf.rx), ""))}
-  ${!hasC ? "" : dom("Milestone", "cctv", kpi("Servers", Cc.srv.ok + " / " + Cc.srv.total, Cc.srv.failed.length ? fmt(Cc.srv.failed.length) + " not syncing" : "all syncing", {cls: Cc.srv.failed.length ? "warnv" : ""}) + kpi("Cameras", fmt(Cc.total), fmt(Cc.nHw) + " hardware") + kpi("Online", fmt(Cc.zbx.up + Cc.zbx.other), "") + kpi("Offline", fmt(Cc.zbx.down), "", {cls: Cc.zbx.down ? "warnv" : ""}))}
-  ${!hasH ? "" : panel("c3", "Open Handovers", hoOpen.length + " items", hoList(hoOpen.slice(0, 3), true) + go("serahterima", "All handovers"))}
+  ${attP}
+  ${hasI ? insightPanel(In, 4, "c6") : dutyP}
+  ${nowP}
+  ${hasI ? dutyP : ""}
+  ${perP}
   ${!hasT ? "" : panel("c8", "Tickets In and Closed per Day", ctxTxt(), legend(s1) + bars(dayB(T.daily), s1, {label: "Tickets per day"}))}
   ${N ? panel("c4", "Top 5 Links by Downtime", "", tbl(["Link", "Availability", "Hours"], N.rank.slice(0, 5).map(s => [s.link, pc(s.av, 2), fx(s.down / 3600, 1)]), {r: [1, 2], empty: "No data yet."})) : ""}
   ${N ? panel("c8", "Link Downtime per Day", "", bars(dayB(N.daily), [{name: "Downtime (min)", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " min", label: "Daily downtime"})) : ""}
@@ -199,9 +211,12 @@ function vRingkasan() {
   ${R && R.hasData ? panel("c8", "NDR · Critical and High per Day", "Palo Alto events", legend([{name: "Critical", c: "--crit"}, {name: "High", c: "--serious"}]) + bars(dayB(R.daily), [{name: "Critical", c: "--crit", v: R.daily.map(x => x.critical)}, {name: "High", c: "--serious", v: R.daily.map(x => x.high)}], {stack: true, label: "Critical and high"})) : ""}
   ${R && R.hasData ? panel("c4", "NDR · Severity", "", tbl(["Severity", "Events", "Blocked"], R.sev.map(x => [x.k, x.n, pc(x.blkPct, 0)]), {r: [1, 2]})) : ""}
   ${hasX ? xdrPanels(Xd).daily() + xdrPanels(Xd).sev() : ""}
+  ${!hasH ? "" : panel("c6", "Open Handovers", hoOpen.length + " items", hoList(hoOpen.slice(0, 3), true) + go("serahterima", "All handovers"))}
+  ${contactP}
   ${wg("dev-map:NETWORK-SDWAN")}
 </div>`;
 }
+
 function onDuty(n) {
   const g = teamOn(n.date, n.shift), c = crew(g);
   return `<div class="duty-card"><div class="big"><span class="code ${SC[n.shift]}">${SC[n.shift]}</span><div><b>Shift ${SN[n.shift]} · Team ${g}</b><span class="sub">Next: ${SN[n.shift % NS + 1]} · Team ${teamOn(n.shift === NS ? addDays(n.date, 1) : n.date, n.shift % NS + 1)}</span></div></div>
