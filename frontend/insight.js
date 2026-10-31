@@ -2,6 +2,9 @@
 "use strict";
 const INS_SEV = {crit: ["crit", "Critical"], warn: ["warn", "Warning"], info: ["idle", "Info"]};
 const INS_KIND = {tickets: "Tickets", links: "Links", capacity: "Capacity", security: "Security", devices: "Devices", wifi: "WiFi", cctv: "Milestone", correlation: "Cross-source", data: "Data quality"};
+const INS_GROUP = {tickets: "Service Desk", links: "NOC", capacity: "NOC", devices: "NOC", wifi: "NOC", cctv: "NOC", correlation: "NOC", security: "SOC", data: "Data quality"};
+const INS_SRC = {soc: "NDR (Palo Alto)", xdr: "XDR (Trend Micro)"};
+const insKindLabel = r => r.kind === "security" && INS_SRC[r.tab] ? "Security · " + INS_SRC[r.tab] : INS_KIND[r.kind] || r.kind;
 const INS_M = {value: "Value", normal: "Normal", z: "z-score", count: "Count", links: "Links", longest_downtime_min: "Longest downtime (min)", window_days: "Window (days)", days_to_target: "Days to target", days_to_90pct: "Days to 90%",
   oldest_days: "Oldest (days)", open_alerts: "Open alerts", without_ticket: "Without ticket", with_ticket: "With ticket", alerts: "Alerts", hosts: "Hosts", tickets: "Tickets", events: "Events", new_categories: "New categories", servers: "Servers", alerts_7_days: "Alerts (7 days)", events_7_days: "Events (7 days)", offline: "Offline", total: "Total", now: "Now", slope_per_day: "Slope per day", target: "Target", devices: "Devices", signals: "Signals",
   peak_pct: "Peak (%)", gb: "Traffic (GB)", normal_gb: "Normal (GB)", capacity_mbps: "Capacity (Mbps)", already_past_sla: "Already past SLA", last_7_days: "Last 7 days", previous_7_days: "Previous 7 days", missing_days: "Missing days", readings: "Readings", expected: "Expected",
@@ -15,7 +18,7 @@ function insCard(r, o = {}) {
     `${insTab(r.tab)}${r.status === "new" ? `<button type="button" class="btn ghost sm" data-ins-ack="${r.id}">Mark read</button>` : ""}${CFG.me.can_write && !r.handover ? `<button type="button" class="btn ghost sm" data-ins-ho="${r.id}">Add to Handover</button>` : ""}<button type="button" class="btn ghost sm" data-ins-dis="${r.id}">Dismiss</button>`;
   return `<article class="icard ins ${tone}"><header>${pill(tone, label)}<b>${esc(r.title)}</b>${r.status === "new" ? `<span class="tag warn">New</span>` : r.status === "dismissed" ? `<span class="tag">Dismissed</span>` : ""}${r.handover ? `<span class="tag">In Handover</span>` : ""}</header>
     <p>${esc(r.detail)}</p>${o.compact ? "" : `<div class="mchips">${insMetric(r.metric)}</div>`}
-    <span class="sub">${r.site ? esc(r.site) + " · " : ""}${esc(INS_KIND[r.kind] || r.kind)} · first seen ${esc(dtime(r.first))} · last ${esc(dtime(r.last))}${r.ackBy ? " · by " + esc(r.ackBy) : ""}${r.reason ? " · reason: " + esc(r.reason) : ""}${r.until && r.status === "dismissed" ? " · hidden until " + esc(dtime(r.until)) : ""}</span>
+    <span class="sub">${r.site ? esc(r.site) + " · " : ""}${esc(insKindLabel(r))} · first seen ${esc(dtime(r.first))} · last ${esc(dtime(r.last))}${r.ackBy ? " · by " + esc(r.ackBy) : ""}${r.reason ? " · reason: " + esc(r.reason) : ""}${r.until && r.status === "dismissed" ? " · hidden until " + esc(dtime(r.until)) : ""}</span>
     ${dis ? `<div class="insdis"><select id="insDays" aria-label="Hide for"><option value="7">Hide for 7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="90">90 days</option></select><input id="insWhy" type="text" placeholder="Reason (optional)" maxlength="200"><button type="button" class="btn sm" data-ins-dis-ok="${r.id}">Confirm</button><button type="button" class="btn ghost sm" data-ins-dis-x>Cancel</button></div>` : `<div class="acts">${acts}</div>`}</article>`;
 }
 function insightPanel(I, n = 5, size = "c12", kinds = null, only = "") {
@@ -34,7 +37,7 @@ function insArea(tab = S.tab) {
   return `${head}<div class="grid">${insightPanel(I, 4, "c12", kinds, INS_ONLY[tab])}</div>`;
 }
 async function insSum() {
-  const sc = S.sumScope || "24h", q = "scope=" + sc + (S.sumDay && sc !== "24h" ? "&day=" + S.sumDay : "");
+  const sc = S.sumScope || "24h", q = "scope=" + sc + (S.sumDay && !["24h", "7d", "30d"].includes(sc) ? "&day=" + S.sumDay : "") + "&kind=" + (S.sumKind || "full") + "&lang=" + (S.sumLang || "id");
   try { const x = await api("/api/insights/summary?" + q); set({sumText: x.text}); } catch (er) { alert(er.message); }
 }
 const insBar = v => `<span class="hbar"><i style="width:${Math.max(2, v)}%;background:var(${v >= 80 ? "--good" : v >= 60 ? "--warn" : "--crit"})"></i></span>`;
@@ -46,9 +49,10 @@ function vInsight() {
   const nav = `<div class="seg insnav">${tabs.map(([k, l]) => `<button type="button" data-ins-tab="${k}" aria-pressed="${k === tab}">${esc(l)}</button>`).join("")}</div>`;
   let body = "";
   if (tab === "findings") {
-    const sev = S.insSev || "", kind = S.insKind || "", rows = I.open.filter(r => (!sev || r.sev === sev) && (!kind || r.kind === kind)), kinds = [...new Set(I.open.map(r => r.kind))];
+    const sev = S.insSev || "", area = S.insKind || "", src = area === "SOC" ? S.insSrc || "" : "", rows = I.open.filter(r => (!sev || r.sev === sev) && (!area || INS_GROUP[r.kind] === area) && (!src || r.tab === src)), areas = [...new Set(I.open.map(r => INS_GROUP[r.kind] || "Other"))];
     const chips = `<div class="chips sm">${[["", "All"], ["crit", "Critical"], ["warn", "Warning"], ["info", "Info"]].map(([k, l]) => `<button type="button" class="chip" data-ins-sev="${k}" aria-pressed="${k === sev}">${l}</button>`).join("")}</div>` +
-      (kinds.length > 1 ? `<div class="chips sm"><button type="button" class="chip" data-ins-kind="" aria-pressed="${!kind}">All types</button>${kinds.map(k => `<button type="button" class="chip" data-ins-kind="${esc(k)}" aria-pressed="${k === kind}">${esc(INS_KIND[k] || k)}</button>`).join("")}</div>` : "");
+      (areas.length > 1 ? `<div class="chips sm"><button type="button" class="chip" data-ins-kind="" aria-pressed="${!area}">All areas</button>${areas.map(k => `<button type="button" class="chip" data-ins-kind="${esc(k)}" aria-pressed="${k === area}">${esc(k)}</button>`).join("")}</div>` : "") +
+      (area === "SOC" ? `<div class="chips sm"><button type="button" class="chip" data-ins-src="" aria-pressed="${!src}">NDR and XDR</button>${Object.entries(INS_SRC).map(([k, l]) => `<button type="button" class="chip" data-ins-src="${k}" aria-pressed="${k === src}">${esc(l)}</button>`).join("")}</div>` : "");
     body = `<div class="insbar">${chips}</div>` + (rows.length ? `<div class="icards">${rows.map(r => insCard(r)).join("")}</div>` : `<div class="empty"><b>No findings</b><span>${I.open.length ? "Nothing matches this filter." : "Every indicator is within its normal range."}</span></div>`);
   } else if (tab === "rankings") {
     const R = I.rank;
@@ -61,8 +65,10 @@ function vInsight() {
   } else if (tab === "summary") {
     const sc = S.sumScope || "24h", wins = I.windows || [];
     body = `
-      <div class="insbar"><label class="sub">Period <select id="sumScope" aria-label="Summary period">${wins.map(w => `<option value="${esc(w.key)}" ${w.key === sc ? "selected" : ""}>${esc(w.label)}</option>`).join("")}</select></label>
-      ${sc === "24h" ? "" : `<label class="sub">Date <input type="date" id="sumDay" value="${esc(S.sumDay || nowShift().today)}" max="${esc(nowShift().today)}" min="${esc(CFG.params.data_start)}"></label>`}</div>
+      <div class="insbar"><label class="sub">Type <select id="sumKind" aria-label="Summary type">${[["full", "Full"], ["noc", "NOC"], ["soc", "SOC (NDR and XDR)"]].map(([k, l]) => `<option value="${k}" ${k === (S.sumKind || "full") ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="sub">Language <select id="sumLang" aria-label="Summary language">${[["id", "Bahasa Indonesia"], ["en", "English"]].map(([k, l]) => `<option value="${k}" ${k === (S.sumLang || "id") ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="sub">Period <select id="sumScope" aria-label="Summary period">${wins.map(w => `<option value="${esc(w.key)}" ${w.key === sc ? "selected" : ""}>${esc(w.label)}</option>`).join("")}</select></label>
+      ${["24h", "7d", "30d"].includes(sc) ? "" : `<label class="sub">Date <input type="date" id="sumDay" value="${esc(S.sumDay || nowShift().today)}" max="${esc(nowShift().today)}" min="${esc(CFG.params.data_start)}"></label>`}</div>
       <pre class="sumtxt" id="sumTxt">${esc(S.sumText || I.summary)}</pre><div class="acts"><button type="button" class="btn" data-ins-copy>Copy text</button><button type="button" class="btn ghost" data-ins-refresh>Regenerate</button></div>`;
   } else {
     const st = Object.entries(I.stats || {}).sort((a, b) => b[1].total - a[1].total);
@@ -74,11 +80,12 @@ function vInsight() {
   return subnav("report") + (S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : "") + kp + grid(`<section class="panel c12"><div class="insbar">${nav}</div>${body}</section>` + how);
 }
 document.addEventListener("click", async e => {
-  const q = a => e.target.closest(a), $a = q("[data-ins-ack]"), $d = q("[data-ins-dis]"), $ok = q("[data-ins-dis-ok]"), $x = q("[data-ins-dis-x]"), $h = q("[data-ins-ho]"), $re = q("[data-ins-reopen]"), $run = q("[data-ins-run]"), $t = q("[data-ins-tab]"), $s = q("[data-ins-sev]"), $k = q("[data-ins-kind]"), $c = q("[data-ins-copy]"), $rf = q("[data-ins-refresh]");
+  const q = a => e.target.closest(a), $a = q("[data-ins-ack]"), $d = q("[data-ins-dis]"), $ok = q("[data-ins-dis-ok]"), $x = q("[data-ins-dis-x]"), $h = q("[data-ins-ho]"), $re = q("[data-ins-reopen]"), $run = q("[data-ins-run]"), $t = q("[data-ins-tab]"), $s = q("[data-ins-sev]"), $k = q("[data-ins-kind]"), $sr = q("[data-ins-src]"), $c = q("[data-ins-copy]"), $rf = q("[data-ins-refresh]");
   try {
     if ($t) set({insTab: $t.dataset.insTab, insDis: null});
     else if ($s) set({insSev: $s.dataset.insSev});
-    else if ($k) set({insKind: $k.dataset.insKind});
+    else if ($k) set({insKind: $k.dataset.insKind, insSrc: ""});
+    else if ($sr) set({insSrc: $sr.dataset.insSrc});
     else if ($d) set({insDis: +$d.dataset.insDis});
     else if ($x) set({insDis: null});
     else if ($a) { $a.disabled = true; await send("/api/insights/" + $a.dataset.insAck + "/ack", {}); refresh(); }
@@ -91,5 +98,5 @@ document.addEventListener("click", async e => {
   } catch (er) { if (er) alert(er.message); }
 });
 document.addEventListener("change", e => {
-  if (e.target.id === "sumScope" || e.target.id === "sumDay") { S.sumScope = $("sumScope").value; S.sumDay = $("sumDay") ? $("sumDay").value : ""; insSum(); }
+  if (["sumScope", "sumDay", "sumKind", "sumLang"].includes(e.target.id)) { S.sumScope = $("sumScope").value; S.sumDay = $("sumDay") ? $("sumDay").value : ""; S.sumKind = $("sumKind").value; S.sumLang = $("sumLang").value; insSum(); }
 });

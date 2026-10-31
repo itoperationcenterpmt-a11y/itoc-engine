@@ -279,7 +279,7 @@ def d_ndr(db: Session, cfg: Config) -> list[dict]:
     last = max(ch)
     r = robust([v for d, v in ch.items() if d < last], ch[last])
     if r and r[2] >= ZCUT and ch[last] >= 1.5 * r[0] and ch[last] - r[0] >= 20:
-        return [_ins(f"ndr_spike:{last}", "security", "warn", f"NDR critical and high events spiked on {last:%d/%m}", f"{fmt(ch[last])} critical + high events, normally about {fmt(r[0])} per day (last 30 days). Review the sources and firewall actions.",
+        return [_ins(f"ndr_spike:{last}", "security", "warn", f"NDR (Palo Alto): critical and high events spiked on {last:%d/%m}", f"{fmt(ch[last])} critical + high events, normally about {fmt(r[0])} per day (last 30 days). Open NDR and check the top sources, and whether the firewall blocked them: alert-only events are not blocked.",
                      "soc", {"value": ch[last], "normal": round(r[0], 1), "z": round(r[2], 1)})]
     return []
 
@@ -307,11 +307,11 @@ def d_ndr_traffic(db: Session, cfg: Config) -> list[dict]:
         name, med = smap.get(fw) or fw, r[0]
         if r[2] >= ZCUT and cur >= 2 * med and cur - med >= 50e9:
             top = sorted((days[day][1] or {}).items(), key=lambda kv: -kv[1])[:3]
-            out.append(_ins(f"ndr_traffic:{fw}:{day:%Y%m%d}", "security", "warn", f"Traffic through {short(name)} firewall was {fmt(cur / med, 1)}x higher than usual on {day:%d/%m}",
-                            f"{fmt(cur / 1e9)} GB, normally about {fmt(med / 1e9)} GB per day." + (" Top sources: " + ", ".join(f"{ip} ({fmt(b / 1e9)} GB)" for ip, b in top) + "." if top else ""), "soc",
+            out.append(_ins(f"ndr_traffic:{fw}:{day:%Y%m%d}", "security", "warn", f"NDR (Palo Alto): traffic through {short(name)} firewall was {fmt(cur / med, 1)}x higher than usual on {day:%d/%m}",
+                            f"{fmt(cur / 1e9)} GB, normally about {fmt(med / 1e9)} GB per day. A large transfer can be a backup or an update, or data leaving the network." + (" Top sources: " + ", ".join(f"{ip} ({fmt(b / 1e9)} GB)" for ip, b in top) + "." if top else ""), "soc",
                             {"gb": round(cur / 1e9, 1), "normal_gb": round(med / 1e9, 1), "z": round(r[2], 1)}, name))
         elif r[2] <= -ZCUT and med >= 20e9 and cur <= 0.3 * med:
-            out.append(_ins(f"ndr_traffic_low:{fw}:{day:%Y%m%d}", "security", "info", f"Traffic through {short(name)} firewall dropped sharply on {day:%d/%m}",
+            out.append(_ins(f"ndr_traffic_low:{fw}:{day:%Y%m%d}", "security", "info", f"NDR (Palo Alto): traffic through {short(name)} firewall dropped sharply on {day:%d/%m}",
                             f"{fmt(cur / 1e9)} GB, normally about {fmt(med / 1e9)} GB per day. Check the link, or whether the firewall stopped sending logs to Panorama.", "soc",
                             {"gb": round(cur / 1e9, 1), "normal_gb": round(med / 1e9, 1), "z": round(r[2], 1)}, name))
     return sorted(out, key=lambda i: -i["metric"]["gb"])[:5]
@@ -323,14 +323,14 @@ def d_xdr(db: Session, cfg: Config) -> list[dict]:
                                                                                  func.lower(func.coalesce(M.XdrAlert.investigation_status, "")) != "closed", M.XdrAlert.created_at < now - timedelta(hours=72))).one()
     if old[0]:
         age = (now - old[1]).days
-        out.append(_ins("xdr_backlog", "security", "crit" if old[0] >= 5 else "warn", f"{old[0]} critical or high XDR alerts have been open for more than 72 hours", f"The oldest is {age} days old. Close or follow up in Trend Micro Vision One.", "xdr", {"count": old[0], "oldest_days": age}))
+        out.append(_ins("xdr_backlog", "security", "crit" if old[0] >= 5 else "warn", f"XDR (Trend Micro): {old[0]} critical or high alerts open for more than 72 hours", f"The oldest is {age} days old. An open alert means a possible threat is still unhandled: review each one in Vision One, then close it or escalate.", "xdr", {"count": old[0], "oldest_days": age}))
     cnt: dict = {}
     for ents in db.scalars(select(M.XdrAlert.entities).where(M.XdrAlert.created_at >= now - timedelta(days=7))):
         for n in {e.get("name") for e in (ents or []) if e.get("type") == "host" and e.get("name")}:
             cnt[n] = cnt.get(n, 0) + 1
     for h, n in sorted(cnt.items(), key=lambda x: -x[1])[:3]:
         if n >= 3:
-            out.append(_ins(f"xdr_repeat:{h}", "security", "warn", f"Host {h} keeps appearing in XDR alerts", f"{n} alerts in the last 7 days. Check whether the host needs to be isolated or cleaned.", "xdr", {"alerts_7_days": n}))
+            out.append(_ins(f"xdr_repeat:{h}", "security", "warn", f"XDR (Trend Micro): host {h} keeps appearing in alerts", f"{n} alerts in the last 7 days. Check in Vision One whether the host needs to be isolated or cleaned.", "xdr", {"alerts_7_days": n}))
     return out
 
 
@@ -346,7 +346,7 @@ def d_xdr_tickets(db: Session, cfg: Config) -> list[dict]:
     out, bare = [], [r for r in rows if not ref.get(r.id)]
     if len(bare) >= 3:
         hosts = sorted({e.get("name") for r in bare for e in (r.entities or []) if e.get("type") == "host" and e.get("name")})[:5]
-        out.append(_ins("xdr_noticket", "security", "crit" if len(bare) >= 10 else "warn", f"{len(bare)} of {len(rows)} open critical or high XDR alerts have no ticket",
+        out.append(_ins("xdr_noticket", "security", "crit" if len(bare) >= 10 else "warn", f"XDR (Trend Micro): {len(bare)} of {len(rows)} open critical or high alerts have no ticket",
                         "No ManageEngine ticket mentions the affected host in the 30 days after the alert. Open a ticket so the response is tracked." + (f" Hosts: {', '.join(hosts)}." if hosts else ""), "xdr",
                         {"open_alerts": len(rows), "without_ticket": len(bare), "with_ticket": len(rows) - len(bare)}))
     by: dict = {}
@@ -355,7 +355,7 @@ def d_xdr_tickets(db: Session, cfg: Config) -> list[dict]:
     model, grp = max(by.items(), key=lambda x: len(x[1]))
     if len(grp) >= 5:
         tk = sorted({t["id"] for r in grp for t in ref.get(r.id, [])})[:6]
-        out.append(_ins(f"xdr_model:{model}", "security", "warn", f"Detection model \"{model}\" triggered {len(grp)} open alerts",
+        out.append(_ins(f"xdr_model:{model}", "security", "warn", f"XDR (Trend Micro): detection model \"{model}\" triggered {len(grp)} open alerts",
                         "The same model keeps firing across hosts. Check whether it is one campaign or a rule that needs tuning." + (f" Related tickets: {', '.join(tk)}." if tk else " No related ticket found."), "xdr",
                         {"alerts": len(grp), "hosts": len({e.get("name") for r in grp for e in (r.entities or []) if e.get("type") == "host"}), "tickets": tk or "none"}))
     return out
@@ -380,7 +380,7 @@ def d_ndr_mix(db: Session, cfg: Config) -> list[dict]:
     fresh = sorted(((c, v) for c, v in new.items() if c not in old and c != "-" and v >= 10), key=lambda x: -x[1])[:3]
     if not fresh:
         return []
-    return [_ins("ndr_newcat:" + fresh[0][0], "security", "info", f"New NDR threat category: {fresh[0][0]}", f"{fmt(fresh[0][1])} events this week from a category not seen in the previous weeks." + (f" Also new: {', '.join(c for c, _ in fresh[1:])}." if len(fresh) > 1 else ""), "soc",
+    return [_ins("ndr_newcat:" + fresh[0][0], "security", "info", f"NDR (Palo Alto): new threat category {fresh[0][0]}", f"{fmt(fresh[0][1])} events this week from a category not seen in the previous weeks. Check whether it is a real new threat or only a signature update." + (f" Also new: {', '.join(c for c, _ in fresh[1:])}." if len(fresh) > 1 else ""), "soc",
                  {"events": fresh[0][1], "new_categories": len(fresh)})]
 
 
@@ -609,33 +609,59 @@ def site_health(db: Session, cfg: Config) -> list[dict]:
     return sorted(out, key=lambda r: r["score"])
 
 
-MONTHS_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+MONTHS = {"en": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], "id": ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]}
+KINDS_NOC = {"links", "capacity", "devices", "wifi", "cctv", "correlation"}
+KINDS_SOC = {"security"}
+# Text of the shift summary in both languages (it is pasted into WhatsApp, where the team writes Indonesian).
+TXT = {
+    "en": {"title": "*ITOC Shift Summary*", "noc": "NOC", "soc": "SOC", "not_started": "This period has not started yet, no data.", "data": "Data {a} – {b} · created {n}", "live": " (period still running)",
+           "tickets": "*Tickets*: {i} received, {d} resolved", "open": ", {o} still open", "old": " ({n} over {days} days)", "net": "*Network*: link availability {x}%.", "net_none": "*Network*: no hourly PRTG data for this period.",
+           "down": "- {name}: down {m} min", "wifi": "*WiFi*: {o} of {t} Access Points offline now.", "dev": "*Devices*: {n} new down events", "dev_now": ", {d} devices down now", "ho": "*Handover*: {n} created in this period", "ho_open": ", {o} still open",
+           "ndr": "*NDR (Palo Alto)*: {t} events, {c} critical/high ({a} alert-only, not blocked).", "ndr_cat": "- top critical/high categories: {x}", "ndr_days": " Daily data {f}–{t}.", "ndr_none": "*NDR (Palo Alto)*: no daily data for this period (NDR data is per day).",
+           "xdr": "*XDR (Trend Micro)*: {n} new alerts", "xdr_open": ", {o} critical/high still open", "xdr_model": "- top detection models: {x}", "find": "*Automatic findings*", "crit": "CRITICAL", "warn": "WARNING",
+           "d_full": "Full day {d}", "d_h1": "First half, {d} (00:00–12:00)", "d_h2": "Second half, {d} (12:00–24:00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "Last 24 hours", "d_7": "Last 7 days", "d_30": "Last 30 days", "d_month": "Month {m} {y}"},
+    "id": {"title": "*Ringkasan Shift ITOC*", "noc": "NOC", "soc": "SOC", "not_started": "Periode ini belum dimulai, belum ada data.", "data": "Data {a} – {b} · dibuat {n}", "live": " (periode masih berjalan)",
+           "tickets": "*Tiket*: {i} masuk, {d} selesai", "open": ", {o} masih open", "old": " ({n} lebih dari {days} hari)", "net": "*Jaringan*: availability link {x}%.", "net_none": "*Jaringan*: belum ada data PRTG per jam untuk periode ini.",
+           "down": "- {name}: down {m} menit", "wifi": "*WiFi*: {o} dari {t} Access Point offline saat ini.", "dev": "*Perangkat*: {n} kejadian down baru", "dev_now": ", {d} perangkat down saat ini", "ho": "*Handover*: {n} dibuat pada periode ini", "ho_open": ", {o} masih open",
+           "ndr": "*NDR (Palo Alto)*: {t} event, {c} critical/high ({a} hanya alert, tidak diblokir).", "ndr_cat": "- kategori critical/high teratas: {x}", "ndr_days": " Data harian {f}–{t}.", "ndr_none": "*NDR (Palo Alto)*: belum ada data harian untuk periode ini (data NDR per hari).",
+           "xdr": "*XDR (Trend Micro)*: {n} alert baru", "xdr_open": ", {o} critical/high masih open", "xdr_model": "- model deteksi teratas: {x}", "find": "*Temuan otomatis*", "crit": "KRITIS", "warn": "PERINGATAN",
+           "d_full": "Hari penuh {d}", "d_h1": "Setengah hari pertama, {d} (00.00–12.00)", "d_h2": "Setengah hari kedua, {d} (12.00–24.00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "24 jam terakhir", "d_7": "7 hari terakhir", "d_30": "30 hari terakhir", "d_month": "Bulan {m} {y}"},
+}
+SUMMARY_KINDS = ("full", "noc", "soc")
 
 
-def _dt(d: datetime) -> str:
-    return f"{d.day} {MONTHS_ID[d.month - 1]} {d:%H:%M}"
+def _dt(d: datetime, lang: str = "id") -> str:
+    return f"{d.day} {MONTHS[lang][d.month - 1]} {d:%H:%M}"
 
 
 def summary_windows(cfg: Config) -> list[dict]:
-    """Choices for the shift summary: last 24 hours, full day, two half days, and one entry per shift."""
+    """Choices for the shift summary: last 24 hours, full day, two half days, one entry per shift, and longer periods."""
     out = [{"key": "24h", "label": "Last 24 hours"}, {"key": "day", "label": "Full day (00:00–24:00)"}, {"key": "half1", "label": "First half (00:00–12:00)"}, {"key": "half2", "label": "Second half (12:00–24:00)"}]
     sh = sorted(cfg.shifts, key=lambda s: s["start"])
     for i, s in enumerate(sh):
         end = sh[(i + 1) % len(sh)]["start"]
         out.append({"key": f"s{s['no']}", "label": f"Shift {s['name']} ({s['start']:02d}:00–{end:02d}:00)"})
-    return out
+    return out + [{"key": "7d", "label": "Last 7 days"}, {"key": "30d", "label": "Last 30 days"}, {"key": "month", "label": "Whole month of the chosen date"}]
 
 
-def _window(cfg: Config, scope: str, day: date | None) -> tuple[datetime, datetime, str]:
-    now = cfg.now()
+def _window(cfg: Config, scope: str, day: date | None, lang: str = "id") -> tuple[datetime, datetime, str]:
+    now, t = cfg.now(), TXT[lang]
     d = day or now.date()
     mid = datetime(d.year, d.month, d.day)
+    dm = f"{d.day} {MONTHS[lang][d.month - 1]}"
     if scope == "day":
-        return mid, mid + timedelta(days=1), f"Hari penuh {d.day} {MONTHS_ID[d.month - 1]} {d.year}"
+        return mid, mid + timedelta(days=1), t["d_full"].format(d=f"{dm} {d.year}")
     if scope == "half1":
-        return mid, mid + timedelta(hours=12), f"Setengah hari pertama, {d.day} {MONTHS_ID[d.month - 1]} (00.00–12.00)"
+        return mid, mid + timedelta(hours=12), t["d_h1"].format(d=dm)
     if scope == "half2":
-        return mid + timedelta(hours=12), mid + timedelta(days=1), f"Setengah hari kedua, {d.day} {MONTHS_ID[d.month - 1]} (12.00–24.00)"
+        return mid + timedelta(hours=12), mid + timedelta(days=1), t["d_h2"].format(d=dm)
+    if scope == "month":
+        first = datetime(d.year, d.month, 1)
+        nxt = datetime(d.year + (d.month == 12), d.month % 12 + 1, 1)
+        return first, nxt, t["d_month"].format(m=MONTHS[lang][d.month - 1], y=d.year)
+    if scope in ("7d", "30d"):
+        days = 7 if scope == "7d" else 30
+        return now - timedelta(days=days), now, t["d_" + scope[:-1]]
     if scope.startswith("s") and scope[1:].isdigit():
         sh = sorted(cfg.shifts, key=lambda s: s["start"])
         for i, s in enumerate(sh):
@@ -643,54 +669,100 @@ def _window(cfg: Config, scope: str, day: date | None) -> tuple[datetime, dateti
                 end = sh[(i + 1) % len(sh)]["start"]
                 a = mid + timedelta(hours=s["start"])
                 b = mid + timedelta(hours=end) if end > s["start"] else mid + timedelta(days=1, hours=end)
-                return a, b, f"Shift {s['name']}, {d.day} {MONTHS_ID[d.month - 1]} ({s['start']:02d}.00–{end:02d}.00)"
-    return now - timedelta(hours=24), now, "24 jam terakhir"
+                sep = ":" if lang == "en" else "."
+                return a, b, t["d_shift"].format(n=s["name"], d=dm, s=f"{s['start']:02d}{sep}00", e=f"{end:02d}{sep}00")
+    return now - timedelta(hours=24), now, t["d_24"]
 
 
-def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope: str = "24h", day: date | None = None) -> str:
-    """Plain-text summary for the shift handover (WhatsApp friendly, Indonesian with English technical terms). Every number comes from stored data."""
+def _ndr_part(db: Session, a: datetime, end: datetime) -> dict | None:
+    """NDR figures from the daily Palo Alto batches that fall inside the window (the source has no finer resolution)."""
+    rows = db.execute(text("SELECT DISTINCT ON (day) day, threats FROM soc_day WHERE day >= :a AND day <= :b ORDER BY day, batch_id DESC"), {"a": a.date(), "b": end.date()}).all()
+    if not rows:
+        return None
+    total = ch = alert = 0
+    cats: dict = {}
+    for _, th in rows:
+        for k, v in (th or {}).items():
+            p = k.split("|")
+            total += v
+            if p[0] in ("critical", "high"):
+                ch += v
+                if len(p) > 3 and p[3] in ("alert", "allow"):
+                    alert += v
+                cats[p[2] if len(p) > 2 else "-"] = cats.get(p[2] if len(p) > 2 else "-", 0) + v
+    return {"from": rows[0][0], "to": rows[-1][0], "total": int(total), "ch": int(ch), "alert": int(alert), "cats": sorted(((c, int(v)) for c, v in cats.items() if c not in ("-", "N/A")), key=lambda x: -x[1])[:3]}
+
+
+def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope: str = "24h", day: date | None = None, kind: str = "full", lang: str = "id") -> str:
+    """Plain-text summary for the shift handover (WhatsApp friendly), in Indonesian or English, for everything, only the NOC side, or only the SOC side. Every number comes from stored data."""
+    lang = lang if lang in TXT else "id"
+    kind = kind if kind in SUMMARY_KINDS else "full"
+    t = TXT[lang]
     now = cfg.now()
-    a, b, label = _window(cfg, scope, day)
+    a, b, label = _window(cfg, scope, day, lang)
     end = min(b, now)
+    head = t["title"] + ("" if kind == "full" else " · " + t[kind])
     if a >= now:
-        return f"*Ringkasan Shift ITOC* ({label})\n\nPeriode ini belum dimulai, belum ada data."
+        return f"{head} ({label})\n\n{t['not_started']}"
     live = b > now                                              # window still running: "open now" is meaningful
-    tk = lambda col: db.scalar(select(func.count()).select_from(M.Ticket).where(col >= a, col < end)) or 0
-    n_in, n_done = tk(M.Ticket.created_at), tk(M.Ticket.resolved_at)
-    n_open = db.scalar(select(func.count()).select_from(M.Ticket).where(M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED))) or 0
-    old_days = cfg.p("sd.open_alert_days", 3)
-    n_old = db.scalar(select(func.count()).select_from(M.Ticket).where(M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED), M.Ticket.created_at < now - timedelta(days=old_days))) or 0
-    link_rows = db.execute(select(M.PrtgHourly.sensor_id, func.sum(M.PrtgHourly.down_s)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end).group_by(M.PrtgHourly.sensor_id).having(func.sum(M.PrtgHourly.down_s) >= 1800).order_by(func.sum(M.PrtgHourly.down_s).desc()).limit(5)).all()
-    name = _sensor_names(db)
-    tot_n, down_s = db.execute(select(func.count(), func.coalesce(func.sum(M.PrtgHourly.down_s), 0)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end, M.PrtgHourly.seen.is_(True))).one()
-    avail = 1 - down_s / (tot_n * 3600) if tot_n else None
-    xdr_new = db.scalar(select(func.count()).select_from(M.XdrAlert).where(M.XdrAlert.created_at >= a, M.XdrAlert.created_at < end)) or 0
-    xdr_open = db.scalar(select(func.count()).select_from(M.XdrAlert).where(M.XdrAlert.severity.in_(["critical", "high"]), func.lower(func.coalesce(M.XdrAlert.status, "")) != "closed", func.lower(func.coalesce(M.XdrAlert.investigation_status, "")) != "closed")) or 0
-    dev_down = db.scalar(select(func.count()).select_from(M.ZbxHost).where(M.ZbxHost.status == "down")) or 0
-    dev_new = db.scalar(select(func.count()).select_from(M.ZbxEvent).where(M.ZbxEvent.start_at >= a, M.ZbxEvent.start_at < end)) or 0
-    ho_new = db.scalar(select(func.count()).select_from(M.Handover).where(M.Handover.created_at >= a, M.Handover.created_at < end)) or 0
-    ho_open = db.scalars(select(M.Handover).where(M.Handover.is_open.is_(True)).order_by(M.Handover.created_at.desc()).limit(3)).all()
-    ho_open_n = db.scalar(select(func.count()).select_from(M.Handover).where(M.Handover.is_open.is_(True))) or 0
-
-    L = [f"*Ringkasan Shift ITOC*", f"{label}", f"Data {_dt(a)} – {_dt(end)} · dibuat {_dt(now)}" + (" (periode masih berjalan)" if live else ""), ""]
-    L.append(f"*Tiket*: {n_in} masuk, {n_done} selesai" + (f", {n_open} masih open" + (f" ({n_old} lebih dari {old_days} hari)" if n_old else "") if live else "") + ".")
-    L.append(f"*Jaringan*: availability link {fmt(avail * 100, 2).replace('.', ',')}%." if avail is not None else "*Jaringan*: belum ada data PRTG per jam untuk periode ini.")
-    for sid, secs in link_rows:
-        L.append(f"- {name.get(sid, sid)}: down {fmt(secs / 60)} menit")
-    L.append(f"*Keamanan*: {xdr_new} alert XDR baru" + (f", {xdr_open} critical/high masih open" if live else "") + ".")
-    L.append(f"*Perangkat*: {dev_new} kejadian down baru" + (f", {dev_down} perangkat down saat ini" if live else "") + ".")
-    L.append(f"*Handover*: {ho_new} dibuat pada periode ini" + (f", {ho_open_n} masih open" if live else "") + ".")
-    for h in ho_open if live else []:
-        L.append(f"- [{h.priority}] {h.title[:90]}")
+    noc, soc = kind in ("full", "noc"), kind in ("full", "soc")
+    L = [head, label, t["data"].format(a=_dt(a, lang), b=_dt(end, lang), n=_dt(now, lang)) + (t["live"] if live else ""), ""]
+    if kind == "full":
+        tk = lambda col: db.scalar(select(func.count()).select_from(M.Ticket).where(col >= a, col < end)) or 0
+        n_in, n_done = tk(M.Ticket.created_at), tk(M.Ticket.resolved_at)
+        open_q = (M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED))
+        n_open = db.scalar(select(func.count()).select_from(M.Ticket).where(*open_q)) or 0
+        old_days = cfg.p("sd.open_alert_days", 3)
+        n_old = db.scalar(select(func.count()).select_from(M.Ticket).where(*open_q, M.Ticket.created_at < now - timedelta(days=old_days))) or 0
+        L.append(t["tickets"].format(i=n_in, d=n_done) + (t["open"].format(o=n_open) + (t["old"].format(n=n_old, days=old_days) if n_old else "") if live else "") + ".")
+    if noc:
+        link_rows = db.execute(select(M.PrtgHourly.sensor_id, func.sum(M.PrtgHourly.down_s)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end).group_by(M.PrtgHourly.sensor_id).having(func.sum(M.PrtgHourly.down_s) >= 1800).order_by(func.sum(M.PrtgHourly.down_s).desc()).limit(5)).all()
+        name = _sensor_names(db)
+        tot_n, down_s = db.execute(select(func.count(), func.coalesce(func.sum(M.PrtgHourly.down_s), 0)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end, M.PrtgHourly.seen.is_(True))).one()
+        avail = 1 - down_s / (tot_n * 3600) if tot_n else None
+        dec = "," if lang == "id" else "."
+        L.append(t["net"].format(x=fmt(avail * 100, 2).replace(".", dec) if lang == "id" else fmt(avail * 100, 2)) if avail is not None else t["net_none"])
+        for sid, secs in link_rows:
+            L.append(t["down"].format(name=name.get(sid, sid), m=fmt(secs / 60)))
+        if live:
+            ap_t = db.scalar(select(func.count()).select_from(M.WifiAp)) or 0
+            ap_o = db.scalar(select(func.count()).select_from(M.WifiAp).where(~func.lower(func.coalesce(M.WifiAp.status, "")).startswith("online"))) or 0
+            if ap_t:
+                L.append(t["wifi"].format(o=ap_o, t=ap_t))
+        dev_down = db.scalar(select(func.count()).select_from(M.ZbxHost).where(M.ZbxHost.status == "down")) or 0
+        dev_new = db.scalar(select(func.count()).select_from(M.ZbxEvent).where(M.ZbxEvent.start_at >= a, M.ZbxEvent.start_at < end)) or 0
+        L.append(t["dev"].format(n=dev_new) + (t["dev_now"].format(d=dev_down) if live else "") + ".")
+    if soc:
+        nd = _ndr_part(db, a, end)
+        if nd:
+            L.append(t["ndr"].format(t=fmt(nd["total"]), c=fmt(nd["ch"]), a=fmt(nd["alert"])) + t["ndr_days"].format(f=f"{nd['from']:%d/%m}", t=f"{nd['to']:%d/%m}"))
+            if nd["cats"]:
+                L.append(t["ndr_cat"].format(x=", ".join(f"{c} ({fmt(v)})" for c, v in nd["cats"])))
+        else:
+            L.append(t["ndr_none"])
+        xdr_new = db.scalar(select(func.count()).select_from(M.XdrAlert).where(M.XdrAlert.created_at >= a, M.XdrAlert.created_at < end)) or 0
+        xdr_open = db.scalar(select(func.count()).select_from(M.XdrAlert).where(M.XdrAlert.severity.in_(["critical", "high"]), func.lower(func.coalesce(M.XdrAlert.status, "")) != "closed", func.lower(func.coalesce(M.XdrAlert.investigation_status, "")) != "closed")) or 0
+        L.append(t["xdr"].format(n=xdr_new) + (t["xdr_open"].format(o=xdr_open) if live else "") + ".")
+        models = db.execute(select(M.XdrAlert.model, func.count()).where(M.XdrAlert.created_at >= a, M.XdrAlert.created_at < end).group_by(M.XdrAlert.model).order_by(func.count().desc()).limit(3)).all()
+        if models:
+            L.append(t["xdr_model"].format(x=", ".join(f"{m or '-'} ({n})" for m, n in models)))
+    if kind == "full":
+        ho_new = db.scalar(select(func.count()).select_from(M.Handover).where(M.Handover.created_at >= a, M.Handover.created_at < end)) or 0
+        ho_open = db.scalars(select(M.Handover).where(M.Handover.is_open.is_(True)).order_by(M.Handover.created_at.desc()).limit(3)).all()
+        ho_open_n = db.scalar(select(func.count()).select_from(M.Handover).where(M.Handover.is_open.is_(True))) or 0
+        L.append(t["ho"].format(n=ho_new) + (t["ho_open"].format(o=ho_open_n) if live else "") + ".")
+        for h in ho_open if live else []:
+            L.append(f"- [{h.priority}] {h.title[:90]}")
     rows = db.scalars(select(M.Insight).where(M.Insight.severity.in_(["crit", "warn"]), M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
-                      .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(20)).all()
+                      .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(40)).all()
+    want = None if kind == "full" else (KINDS_NOC if kind == "noc" else KINDS_SOC)
     seen, pick = set(), []
     for r in rows:                                              # the same title can appear for more than one key
-        if r.title not in seen:
+        if (want is None or r.kind in want) and r.title not in seen:
             seen.add(r.title)
             pick.append(r)
     if pick:
-        L += ["", "*Temuan otomatis*"] + [f"- [{'KRITIS' if r.severity == 'crit' else 'PERINGATAN'}] {r.title}" for r in pick[:8]]
+        L += ["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in pick[:8]]
     return "\n".join(L)
 
 
