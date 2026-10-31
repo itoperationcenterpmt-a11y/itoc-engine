@@ -82,7 +82,17 @@ def main(argv):
         print("Perintah ini hanya untuk uji/demo dan diblokir saat ITOC_ENV=production."); return
     if cmd == "migrate":
         from alembic.config import main as alembic
-        alembic(argv=["-c", str(Path(__file__).resolve().parent.parent / "alembic.ini"), "upgrade", "head"])
+        ini = str(Path(__file__).resolve().parent.parent / "alembic.ini")
+        from sqlalchemy import inspect
+        from .db import Base, engine
+        have = set(inspect(engine).get_table_names())
+        if "alembic_version" not in have and "app_parameter" not in have:      # an empty database: the migrations are a history of changes to an existing schema, so build the current one and mark it up to date
+            from . import models  # noqa: F401
+            Base.metadata.create_all(engine)
+            alembic(argv=["-c", ini, "stamp", "head"])
+            print("New database: the current schema was created and marked as up to date.")
+        else:
+            alembic(argv=["-c", ini, "upgrade", "head"])
     elif cmd == "seed-config":
         only = next((a.split("=", 1)[1].split(",") for a in args if a.startswith("--only=")), None)
         seed_config("--overwrite" in args, only)
