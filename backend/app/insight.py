@@ -628,11 +628,18 @@ KINDS_NOC = {"links", "capacity", "devices", "wifi", "cctv", "correlation"}
 KINDS_SOC = {"security"}
 # Text of the shift summary: Indonesian, because it is pasted into WhatsApp where the team writes Indonesian.
 TXT = {
-    "id": {"title": "*Ringkasan Shift ITOC*", "noc": "NOC", "soc": "SOC", "not_started": "Periode ini belum dimulai, belum ada data.", "data": "Data {a} – {b} · dibuat {n}", "live": " (periode masih berjalan)",
-           "tickets": "*Tiket*: {i} masuk, {d} selesai", "open": ", {o} masih open", "old": " ({n} lebih dari {days} hari)", "net": "*Jaringan*: availability link {x}%.", "net_none": "*Jaringan*: belum ada data PRTG per jam untuk periode ini.",
-           "down": "- {name}: down {m} menit", "wifi": "*WiFi*: {o} dari {t} Access Point offline saat ini.", "dev": "*Perangkat*: {n} kejadian down baru", "dev_now": ", {d} perangkat down saat ini", "ho": "*Handover*: {n} dibuat pada periode ini", "ho_open": ", {o} masih open",
-           "ndr": "*NDR (Palo Alto)*: {t} event, {c} critical/high ({a} hanya alert, tidak diblokir).", "ndr_cat": "- kategori critical/high teratas: {x}", "ndr_days": " Data harian {f}–{t}.", "ndr_none": "*NDR (Palo Alto)*: belum ada data harian untuk periode ini (data NDR per hari).",
-           "xdr": "*XDR (Trend Micro)*: {n} alert baru", "xdr_open": ", {o} critical/high masih open", "xdr_model": "- model deteksi teratas: {x}", "find": "*Temuan otomatis*", "crit": "KRITIS", "warn": "PERINGATAN",
+    "id": {"title": "📢 *LAPORAN SHIFT ITOC*", "noc": "NOC", "soc": "SOC", "not_started": "Periode ini belum dimulai, belum ada data.", "data": "Data {a} – {b} · dibuat {n}", "live": " (periode masih berjalan)",
+           "shift": "Shift: {x}", "team": "Team: {x}", "date": "Tanggal: {x}", "period": "Periode: {x}",
+           "s_status": "📊 *STATUS SISTEM*", "st_ok": "{k} : NORMAL", "st_warn": "{k} : PERHATIAN ({n} temuan kritis)",
+           "tk_total": "Total Tiket : {n} (On Hold : {h} | Closed : {c} | Open : {o} | In progress : {p})", "tk_done": "Tiket selesai pada periode ini : {n}",
+           "s_tk": "🎫 *TIKET*", "tk_line": "#{id} {subject}\nStatus : {status} | Teknisi : {tech}", "tk_more": "… dan {n} tiket lain (lihat di TERA)", "tk_none": "Tidak ada tiket baru pada periode ini.",
+           "s_pend": "⚠️ *PENDING CASE (Handover)*", "ho_line": "- [{prio}] {title} ({site}){tk}", "ho_body": "  {x}", "ho_next": "  Tindak lanjut: {x}", "ho_none": "Tidak ada.",
+           "s_mon": "📈 *RINGKASAN MONITORING*", "net": "Jaringan: availability link {x}%.", "net_none": "Jaringan: belum ada data PRTG per jam untuk periode ini.", "down": "- {name}: down {m} menit",
+           "wifi": "WiFi: {o} dari {t} Access Point offline saat ini.", "dev": "Perangkat: {n} kejadian down baru", "dev_now": ", {d} perangkat down saat ini",
+           "ndr": "NDR (Palo Alto): {t} event, {c} critical/high ({a} hanya alert, tidak diblokir).", "ndr_days": " Data harian {f}–{t}.", "ndr_cat": "- kategori critical/high teratas: {x}", "ndr_none": "NDR (Palo Alto): belum ada data harian untuk periode ini (data NDR per hari).",
+           "xdr": "XDR (Trend Micro): {n} alert baru", "xdr_open": ", {o} critical/high masih open", "xdr_model": "- model deteksi teratas: {x}",
+           "al_noc": "Alert NOC : Kritis({c}) Peringatan({w}) Info({i})", "al_ndr": "Alert SOC (NDR) : C({c}) H({h}) M({m}) L({l}) N({n})", "al_xdr": "Alert SOC (XDR) : C({c}) H({h}) M({m}) L({l})",
+           "find": "🔎 *TEMUAN OTOMATIS*", "crit": "KRITIS", "warn": "PERINGATAN", "link": "Link Pendukung : {u}",
            "d_full": "Hari penuh {d}", "d_h1": "Setengah hari pertama, {d} (00.00–12.00)", "d_h2": "Setengah hari kedua, {d} (12.00–24.00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "24 jam terakhir", "d_7": "7 hari terakhir", "d_30": "30 hari terakhir", "d_month": "Bulan {m} {y}"},
 }
 SUMMARY_KINDS = ("full", "noc", "soc")
@@ -688,20 +695,44 @@ def _ndr_part(db: Session, a: datetime, end: datetime) -> dict | None:
         return None
     total = ch = alert = 0
     cats: dict = {}
+    sev: dict = {}
     for _, th in rows:
         for k, v in (th or {}).items():
             p = k.split("|")
             total += v
+            sev[p[0]] = sev.get(p[0], 0) + int(v)
             if p[0] in ("critical", "high"):
                 ch += v
                 if len(p) > 3 and p[3] in ("alert", "allow"):
                     alert += v
                 cats[p[2] if len(p) > 2 else "-"] = cats.get(p[2] if len(p) > 2 else "-", 0) + v
-    return {"from": rows[0][0], "to": rows[-1][0], "total": int(total), "ch": int(ch), "alert": int(alert), "cats": sorted(((c, int(v)) for c, v in cats.items() if c not in ("-", "N/A")), key=lambda x: -x[1])[:3]}
+    return {"from": rows[0][0], "to": rows[-1][0], "sev": sev, "total": int(total), "ch": int(ch), "alert": int(alert), "cats": sorted(((c, int(v)) for c, v in cats.items() if c not in ("-", "N/A")), key=lambda x: -x[1])[:3]}
+
+
+def _tstate(status: str, closed: set, hold: set) -> str:
+    s = (status or "").strip().lower()
+    return "Closed" if s in closed else "On Hold" if s in hold else "In progress" if "progress" in s else "Open"
+
+
+def _shifts_in(cfg: Config, a: datetime, end: datetime) -> list[tuple[str, str | None]]:
+    """(shift name, team code) for the shifts that start inside the window (a full day gives Pagi, Sore, and Malam of that date); when none starts inside, the shifts that overlap it."""
+    sh = sorted(cfg.shifts, key=lambda s: s["start"])
+    out, over, d = [], [], a.date() - timedelta(days=1)
+    while d <= end.date():
+        for i, s in enumerate(sh):
+            nxt = sh[(i + 1) % len(sh)]["start"]
+            base = datetime(d.year, d.month, d.day)
+            st, en = base + timedelta(hours=s["start"]), base + (timedelta(hours=nxt) if nxt > s["start"] else timedelta(days=1, hours=nxt))
+            if st < end and en > a:
+                tm = cfg.clock.team_on(d, s["no"])
+                (out if a <= st else over).append((s["name"], tm["code"] if tm else None))
+        d += timedelta(days=1)
+    return out or over
 
 
 def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope: str = "24h", day: date | None = None, kind: str = "full") -> str:
-    """Plain-text summary for the shift handover (WhatsApp friendly, Indonesian), for everything, only the NOC side, or only the SOC side. Every number comes from stored data."""
+    """Plain-text summary for the shift handover (WhatsApp friendly, Indonesian), for everything, only the NOC side, or only the SOC side. Every number comes from stored data.
+    Layout: header (shift, team, date), system status, tickets, pending cases from Handover, monitoring summary, automatic findings, and a link back to TERA."""
     kind = kind if kind in SUMMARY_KINDS else "full"
     t = TXT["id"]
     now = cfg.now()
@@ -709,18 +740,62 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
     end = min(b, now)
     head = t["title"] + ("" if kind == "full" else " · " + t[kind])
     if a >= now:
-        return f"{head} ({label})\n\n{t['not_started']}"
+        return f"{head}\n{label}\n\n{t['not_started']}"
     live = b > now                                              # window still running: "open now" is meaningful
     noc, soc = kind in ("full", "noc"), kind in ("full", "soc")
-    L = [head, label, t["data"].format(a=_dt(a), b=_dt(end), n=_dt(now)) + (t["live"] if live else ""), ""]
+    L = [head]
+    if b - a <= timedelta(days=2):
+        sh = _shifts_in(cfg, a, end)
+        order = {s["name"]: s["no"] for s in cfg.shifts}
+        L.append(t["shift"].format(x=", ".join(sorted({n for n, _ in sh}, key=lambda n: order.get(n, 99))) or "-"))
+        L.append(t["team"].format(x=", ".join(sorted({c for _, c in sh if c})) or "-"))
+        last = (end - timedelta(seconds=1)).date()
+        L.append(t["date"].format(x=f"{a:%d/%m/%Y}" if a.date() == last else f"{a:%d/%m} – {last:%d/%m/%Y}"))
+    else:
+        L.append(t["period"].format(x=label))
+    L += [t["data"].format(a=_dt(a), b=_dt(end), n=_dt(now)) + (t["live"] if live else ""), ""]
+
+    rows = db.scalars(select(M.Insight).where(M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
+                      .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(120)).all()
+    seen, pick = set(), []
+    for r in rows:                                              # the same title can appear for more than one key
+        if r.title not in seen:
+            seen.add(r.title)
+            pick.append(r)
+    sev = lambda grp, s: sum(1 for r in pick if r.kind in grp and r.severity == s)
+    L.append(t["s_status"])
+    for key, grp, on in (("noc", KINDS_NOC, noc), ("soc", KINDS_SOC, soc)):
+        if on:
+            n = sev(grp, "crit")
+            L.append(t["st_warn"].format(k=t[key], n=n) if n else t["st_ok"].format(k=t[key]))
+    tks = []
     if kind == "full":
-        tk = lambda col: db.scalar(select(func.count()).select_from(M.Ticket).where(col >= a, col < end)) or 0
-        n_in, n_done = tk(M.Ticket.created_at), tk(M.Ticket.resolved_at)
-        open_q = (M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED))
-        n_open = db.scalar(select(func.count()).select_from(M.Ticket).where(*open_q)) or 0
-        old_days = cfg.p("sd.open_alert_days", 3)
-        n_old = db.scalar(select(func.count()).select_from(M.Ticket).where(*open_q, M.Ticket.created_at < now - timedelta(days=old_days))) or 0
-        L.append(t["tickets"].format(i=n_in, d=n_done) + (t["open"].format(o=n_open) + (t["old"].format(n=n_old, days=old_days) if n_old else "") if live else "") + ".")
+        tks = db.execute(select(M.Ticket.id, M.Ticket.subject, M.Ticket.status, M.Ticket.technician).where(M.Ticket.created_at >= a, M.Ticket.created_at < end).order_by(M.Ticket.created_at)).all()
+        closed = {x.lower() for x in (cfg.p("sd.closed_statuses") or [])}
+        hold = {x.lower() for x in (cfg.p("sd.onhold_statuses", ["Onhold", "On Hold"]) or [])}
+        c = {"On Hold": 0, "Closed": 0, "Open": 0, "In progress": 0}
+        for _, _, st, _ in tks:
+            c[_tstate(st, closed, hold)] += 1
+        L.append(t["tk_total"].format(n=len(tks), h=c["On Hold"], c=c["Closed"], o=c["Open"], p=c["In progress"]))
+        L.append(t["tk_done"].format(n=db.scalar(select(func.count()).select_from(M.Ticket).where(M.Ticket.resolved_at >= a, M.Ticket.resolved_at < end)) or 0))
+        L += ["", t["s_tk"]]
+        for tid, subj, st, tech in tks[:15]:
+            L.append(t["tk_line"].format(id=tid, subject=(subj or "-")[:110], status=st or "-", tech=tech or "-"))
+        if not tks:
+            L.append(t["tk_none"])
+        elif len(tks) > 15:
+            L.append(t["tk_more"].format(n=len(tks) - 15))
+        pend = db.scalars(select(M.Handover).where(M.Handover.is_open.is_(True)).order_by(M.Handover.created_at.desc()).limit(5)).all()
+        L += ["", t["s_pend"]]
+        for h in pend:
+            L.append(t["ho_line"].format(prio=h.priority, title=h.title[:90], site=h.site, tk=f" #{h.ticket_id}" if h.ticket_id else ""))
+            if h.body:
+                L.append(t["ho_body"].format(x=" ".join(h.body.split())[:180]))
+            if h.next_action:
+                L.append(t["ho_next"].format(x=" ".join(h.next_action.split())[:140]))
+        if not pend:
+            L.append(t["ho_none"])
+    L += ["", t["s_mon"]]
     if noc:
         link_rows = db.execute(select(M.PrtgHourly.sensor_id, func.sum(M.PrtgHourly.down_s)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end).group_by(M.PrtgHourly.sensor_id).having(func.sum(M.PrtgHourly.down_s) >= 1800).order_by(func.sum(M.PrtgHourly.down_s).desc()).limit(5)).all()
         name = _sensor_names(db)
@@ -737,6 +812,7 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
         dev_down = db.scalar(select(func.count()).select_from(M.ZbxHost).where(M.ZbxHost.status == "down")) or 0
         dev_new = db.scalar(select(func.count()).select_from(M.ZbxEvent).where(M.ZbxEvent.start_at >= a, M.ZbxEvent.start_at < end)) or 0
         L.append(t["dev"].format(n=dev_new) + (t["dev_now"].format(d=dev_down) if live else "") + ".")
+        L.append(t["al_noc"].format(c=sev(KINDS_NOC, "crit"), w=sev(KINDS_NOC, "warn"), i=sev(KINDS_NOC, "info")))
     if soc:
         nd = _ndr_part(db, a, end)
         if nd:
@@ -745,29 +821,25 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
                 L.append(t["ndr_cat"].format(x=", ".join(f"{c} ({fmt(v)})" for c, v in nd["cats"])))
         else:
             L.append(t["ndr_none"])
-        xdr_new = db.scalar(select(func.count()).select_from(M.XdrAlert).where(M.XdrAlert.created_at >= a, M.XdrAlert.created_at < end)) or 0
+        xs: dict = {}
+        for sv, n in db.execute(select(M.XdrAlert.severity, func.count()).where(M.XdrAlert.created_at >= a, M.XdrAlert.created_at < end).group_by(M.XdrAlert.severity)).all():
+            xs[(sv or "").lower()] = xs.get((sv or "").lower(), 0) + n
         xdr_open = db.scalar(select(func.count()).select_from(M.XdrAlert).where(M.XdrAlert.severity.in_(["critical", "high"]), func.lower(func.coalesce(M.XdrAlert.status, "")) != "closed", func.lower(func.coalesce(M.XdrAlert.investigation_status, "")) != "closed")) or 0
-        L.append(t["xdr"].format(n=xdr_new) + (t["xdr_open"].format(o=xdr_open) if live else "") + ".")
+        L.append(t["xdr"].format(n=sum(xs.values())) + (t["xdr_open"].format(o=xdr_open) if live else "") + ".")
         models = db.execute(select(M.XdrAlert.model, func.count()).where(M.XdrAlert.created_at >= a, M.XdrAlert.created_at < end).group_by(M.XdrAlert.model).order_by(func.count().desc()).limit(3)).all()
         if models:
             L.append(t["xdr_model"].format(x=", ".join(f"{m or '-'} ({n})" for m, n in models)))
-    if kind == "full":
-        ho_new = db.scalar(select(func.count()).select_from(M.Handover).where(M.Handover.created_at >= a, M.Handover.created_at < end)) or 0
-        ho_open = db.scalars(select(M.Handover).where(M.Handover.is_open.is_(True)).order_by(M.Handover.created_at.desc()).limit(3)).all()
-        ho_open_n = db.scalar(select(func.count()).select_from(M.Handover).where(M.Handover.is_open.is_(True))) or 0
-        L.append(t["ho"].format(n=ho_new) + (t["ho_open"].format(o=ho_open_n) if live else "") + ".")
-        for h in ho_open if live else []:
-            L.append(f"- [{h.priority}] {h.title[:90]}")
-    rows = db.scalars(select(M.Insight).where(M.Insight.severity.in_(["crit", "warn"]), M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
-                      .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(40)).all()
+        ns = (nd or {}).get("sev", {})
+        L.append(t["al_ndr"].format(c=fmt(ns.get("critical", 0)), h=fmt(ns.get("high", 0)), m=fmt(ns.get("medium", 0)), l=fmt(ns.get("low", 0)), n=fmt(ns.get("informational", 0))))
+        L.append(t["al_xdr"].format(c=xs.get("critical", 0), h=xs.get("high", 0), m=xs.get("medium", 0), l=xs.get("low", 0)))
     want = None if kind == "full" else (KINDS_NOC if kind == "noc" else KINDS_SOC)
-    seen, pick = set(), []
-    for r in rows:                                              # the same title can appear for more than one key
-        if (want is None or r.kind in want) and r.title not in seen:
-            seen.add(r.title)
-            pick.append(r)
-    if pick:
-        L += ["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in pick[:8]]
+    shown = [r for r in pick if r.severity in ("crit", "warn") and (want is None or r.kind in want)]
+    if shown:
+        L += ["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in shown[:8]]
+    base = (cfg.p("ui.public_url", "") or "").strip().rstrip("/")
+    if base:
+        d = day or now.date()
+        L += ["", t["link"].format(u=f"{base}/#insight?ins=summary&scope={scope}&kind={kind}" + (f"&day={d.isoformat()}" if scope not in ("24h", "7d", "30d") else ""))]
     return "\n".join(L)
 
 

@@ -78,10 +78,12 @@ function readHash() {
   const p = new URLSearchParams(q || ""); setPreset(p.get("p") || CFG.params["ui.default_preset"]);
   if (p.get("dari") && p.get("sampai") && !p.get("p")) { S.preset = ""; S.from = p.get("dari"); S.to = p.get("sampai"); }
   S.sf = +p.get("shift") || 0; S.site = CFG.me.site || p.get("lokasi") || ""; S.cmp = p.get("banding") === "1";
+  if (S.tab === "insight" && p.get("ins") === "summary") { S.insTab = "summary"; S.sumScope = p.get("scope") || "24h"; S.sumDay = p.get("day") || ""; S.sumKind = p.get("kind") || "full"; S.sumText = ""; S.sumPending = true; }       // link shared from the shift summary
 }
 function writeHash() {
   const p = new URLSearchParams(); if (S.preset) p.set("p", S.preset); else { p.set("dari", S.from); p.set("sampai", S.to); }
   if (S.sf) p.set("shift", S.sf); if (S.site) p.set("lokasi", S.site); if (S.cmp) p.set("banding", "1");
+  if (S.tab === "insight" && S.insTab === "summary") { p.set("ins", "summary"); p.set("scope", S.sumScope || "24h"); p.set("kind", S.sumKind || "full"); if (S.sumDay && !["24h", "7d", "30d"].includes(S.sumScope || "24h")) p.set("day", S.sumDay); }
   history.replaceState(null, "", "#" + S.tab + "?" + p.toString());
 }
 const nDays = () => Math.round((dayMs(S.to) - dayMs(S.from)) / 864e5) + 1;

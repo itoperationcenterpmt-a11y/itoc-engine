@@ -36,6 +36,7 @@ function insArea(tab = S.tab) {
   const h = I.siteHealth, head = I.site ? `<div class="kpis k6">${kpi("Location", esc(I.site), "")}${kpi("Health score", h ? fmt(h.score) : "–", "")}${kpi("Link availability", h && h.link != null ? pc(h.link, 2) : "–", "")}${kpi("Devices down", h && h.devTotal ? fmt(h.devDown) + " / " + fmt(h.devTotal) : "–", "")}${kpi("Tickets past SLA", fmt(h ? h.overdue : 0), "", {cls: h && h.overdue ? "warnv" : ""})}</div>` : "";
   return `${head}<div class="grid">${insightPanel(I, 4, "c12", kinds, INS_ONLY[tab])}</div>`;
 }
+const sumFull = t => t + ((S.sumNote || "").trim() ? "\n\n📢 *CATATAN/INSTRUKSI*\n" + S.sumNote.trim() : "");
 async function insSum() {
   const sc = S.sumScope || "24h", q = "scope=" + sc + (S.sumDay && !["24h", "7d", "30d"].includes(sc) ? "&day=" + S.sumDay : "") + "&kind=" + (S.sumKind || "full");
   try { const x = await api("/api/insights/summary?" + q); set({sumText: x.text}); } catch (er) { alert(er.message); }
@@ -44,6 +45,7 @@ const insBar = v => `<span class="hbar"><i style="width:${Math.max(2, v)}%;backg
 function vInsight() {
   const I = V.insight, grid = h => `<div class="grid">${h}</div>`;
   if (!I) return subnav("report") + grid(`<section class="panel c12">${empty()}</section>`);
+  if (S.sumPending && (S.insTab || "") === "summary") { S.sumPending = false; setTimeout(insSum, 0); }
   const c = I.counts, tab = S.insTab || "findings", tabs = [["findings", "Findings (" + I.open.length + ")"], ["rankings", "Rankings"], ["health", "Location Health"], ["summary", "Shift Summary"], ["history", "History"]];
   const kp = `<div class="kpis k6">${kpi("Critical", fmt(c.crit), "", {cls: c.crit ? "warnv" : ""})}${kpi("Warning", fmt(c.warn), "", {cls: c.warn ? "warnv" : ""})}${kpi("Info", fmt(c.info), "")}${kpi("New", fmt(I.new), "")}${kpi("Dismissed", fmt((I.dismissed || []).length), "")}${kpi("Last analysis", I.updated ? hm(I.updated) : "-", (I.updated ? dtime(I.updated).replace(/, \d\d:\d\d$/, "") + " · " : "") + "runs every 30 min")}</div>`;
   const nav = `<div class="seg insnav">${tabs.map(([k, l]) => `<button type="button" data-ins-tab="${k}" aria-pressed="${k === tab}">${esc(l)}</button>`).join("")}</div>`;
@@ -68,7 +70,8 @@ function vInsight() {
       <div class="insbar"><label class="sub">Type <select id="sumKind" aria-label="Summary type">${[["full", "Full"], ["noc", "NOC"], ["soc", "SOC (NDR and XDR)"]].map(([k, l]) => `<option value="${k}" ${k === (S.sumKind || "full") ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label class="sub">Period <select id="sumScope" aria-label="Summary period">${wins.map(w => `<option value="${esc(w.key)}" ${w.key === sc ? "selected" : ""}>${esc(w.label)}</option>`).join("")}</select></label>
       ${["24h", "7d", "30d"].includes(sc) ? "" : `<label class="sub">Date <input type="date" id="sumDay" value="${esc(S.sumDay || nowShift().today)}" max="${esc(nowShift().today)}" min="${esc(CFG.params.data_start)}"></label>`}</div>
-      <pre class="sumtxt" id="sumTxt">${esc(S.sumText || I.summary)}</pre><div class="acts"><button type="button" class="btn" data-ins-copy>Copy text</button><button type="button" class="btn ghost" data-ins-refresh>Regenerate</button></div>`;
+      <div class="fld wide"><label for="sumNote">Notes / instructions <span class="sub">added at the end of the text, not saved</span></label><textarea id="sumNote" rows="2" placeholder="For example: please follow up with the EOS of each branch">${esc(S.sumNote || "")}</textarea></div>
+      <pre class="sumtxt" id="sumTxt">${esc(sumFull(S.sumText || I.summary))}</pre><div class="acts"><button type="button" class="btn" data-ins-copy>Copy text</button><button type="button" class="btn ghost" data-ins-refresh>Regenerate</button></div>`;
   } else {
     const st = Object.entries(I.stats || {}).sort((a, b) => b[1].total - a[1].total);
     body = `<div class="grid" style="padding:0">${panel("c12", "Resolved in the last 14 days", "", I.done.length ? tbl(["Resolved", "Finding", "Detail"], I.done.map(r => [dtime(r.resolved), r.title, r.detail]), {tall: true}) : `<div class="empty sm">Nothing resolved yet.</div>`)}
@@ -96,6 +99,7 @@ document.addEventListener("click", async e => {
     else if ($c) { const t = $("sumTxt").textContent; try { await navigator.clipboard.writeText(t); $c.textContent = "Copied"; } catch (er) { const r = document.createRange(); r.selectNode($("sumTxt")); getSelection().removeAllRanges(); getSelection().addRange(r); $c.textContent = "Selected, press Ctrl+C"; } }
   } catch (er) { if (er) alert(er.message); }
 });
+document.addEventListener("input", e => { if (e.target.id === "sumNote") { S.sumNote = e.target.value; const pre = $("sumTxt"); if (pre) pre.textContent = sumFull(S.sumText || V.insight.summary); } });
 document.addEventListener("change", e => {
   if (["sumScope", "sumDay", "sumKind"].includes(e.target.id)) { S.sumScope = $("sumScope").value; S.sumDay = $("sumDay") ? $("sumDay").value : ""; S.sumKind = $("sumKind").value; insSum(); }
 });
