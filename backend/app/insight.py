@@ -748,10 +748,12 @@ def _head_lines(cfg: Config, t: dict, head: str, a: datetime, b: datetime, end: 
     if b - a <= timedelta(days=2):
         sh = _shifts_in(cfg, a, end)
         order = {s["name"]: s["no"] for s in cfg.shifts}
-        L.append(t["shift"].format(x=", ".join(sorted({n for n, _ in sh}, key=lambda n: order.get(n, 99))) or "-"))
-        L.append(t["team"].format(x=", ".join(sorted({c for _, c in sh if c})) or "-"))
+        sh = sorted(sh, key=lambda x: order.get(x[0], 99))          # Pagi, Sore, Malam: the teams are listed in the same order as the shifts
+        teams = list(dict.fromkeys(c for _, c in sh if c))
+        L.append(t["shift"].format(x=", ".join(dict.fromkeys(n for n, _ in sh)) or "-"))
+        L.append(t["team"].format(x=", ".join(teams) or "-"))
         last = (end - timedelta(seconds=1)).date()
-        L.append(t["date"].format(x=f"{a:%d/%m/%Y}" if scope == "duty" or a.date() == last else f"{a:%d/%m} – {last:%d/%m/%Y}"))       # a duty day starts at the first shift and ends the next morning: it is reported under its start date
+        L.append(t["date"].format(x=f"{a:%d/%m/%Y}" if scope == "duty" or (scope[1:].isdigit() and scope[:1] == "s") or a.date() == last else f"{a:%d/%m} – {last:%d/%m/%Y}"))       # a duty day starts at the first shift and ends the next morning: it is reported under its start date
     else:
         L.append(t["period"].format(x=label))
     return L + [t["data"].format(a=_dt(a), b=_dt(end), n=_dt(now)) + (t["live"] if live else ""), ""]
