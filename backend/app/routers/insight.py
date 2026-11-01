@@ -1,6 +1,6 @@
 """Insights: acknowledge, dismiss with a reason, reopen, add to handover, and run the analysis now."""
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Response, APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from ..db import get_db
@@ -97,7 +97,7 @@ def run_now(db: Session = Depends(get_db), user: User = Depends(require_admin)):
 
 
 @router.get("/summary", dependencies=[Depends(rate_limit("inssum", 60, 60))])
-def summary(scope: str = "duty", day: date | None = None, kind: str = "full", site: str = "", db: Session = Depends(get_db), user: User = Depends(current_user)):
+def summary(scope: str = "duty", day: date | None = None, kind: str = "full", site: str = "", format: str = "json", db: Session = Depends(get_db), user: User = Depends(current_user)):
     """Shift summary text for a chosen window (last 24 hours, full day, half day, or one shift)."""
     if not can_see(user, "insight"):
         raise HTTPException(403, "This account has no access to Insights")
@@ -109,4 +109,7 @@ def summary(scope: str = "duty", day: date | None = None, kind: str = "full", si
     site = effective_site(user, db) or site
     if site and site not in cfg.sites:
         raise HTTPException(422, "Unknown branch")
-    return {"text": shift_summary(db, cfg, None, scope, day, kind, site if kind == "eos" else "")}
+    text = shift_summary(db, cfg, None, scope, day, kind, site if kind == "eos" else "")
+    if format == "text":                                        # for senders that put the whole response in a message (a WhatsApp scheduler)
+        return Response(content=text, media_type="text/plain; charset=utf-8")
+    return {"text": text}
