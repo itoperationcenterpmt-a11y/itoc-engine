@@ -759,7 +759,7 @@ def _head_lines(cfg: Config, t: dict, head: str, a: datetime, b: datetime, end: 
     return L + [t["data"].format(a=_dt(a), b=_dt(end), n=_dt(now)) + (t["live"] if live else ""), ""]
 
 
-def _ticket_lines(db: Session, cfg: Config, t: dict, a: datetime, end: datetime, site: str = "") -> tuple[list[str], dict]:
+def _ticket_lines(db: Session, cfg: Config, t: dict, a: datetime, end: datetime, site: str = "", tk_max: int = 15) -> tuple[list[str], dict]:
     """Ticket counts by state (tickets created in the window) and the ticket list, for the whole company or one branch."""
     from . import views as VW
     q = select(M.Ticket.id, M.Ticket.subject, M.Ticket.status, M.Ticket.technician).where(M.Ticket.created_at >= a, M.Ticket.created_at < end).order_by(M.Ticket.created_at)
@@ -773,12 +773,12 @@ def _ticket_lines(db: Session, cfg: Config, t: dict, a: datetime, end: datetime,
     for _, _, st, _ in tks:
         c[_tstate(st, closed, hold)] += 1
     L = [t["tk_total"].format(n=len(tks), h=c["On Hold"], c=c["Closed"], o=c["Open"], p=c["In progress"]), t["tk_done"].format(n=db.scalar(done) or 0), "", t["s_tk"]]
-    for tid, subj, st, tech in tks[:15]:
+    for tid, subj, st, tech in tks[:tk_max]:
         L.append(t["tk_line"].format(id=tid, subject=(subj or "-")[:110], status=st or "-", tech=tech or "-"))
     if not tks:
         L.append(t["tk_none"])
-    elif len(tks) > 15:
-        L.append(t["tk_more"].format(n=len(tks) - 15))
+    elif len(tks) > tk_max:
+        L.append(t["tk_more"].format(n=len(tks) - tk_max))
     return L, c
 
 
@@ -799,7 +799,7 @@ def _net_lines(db: Session, t: dict, a: datetime, end: datetime, site: str = "")
     return L, len(link_rows)
 
 
-def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: str) -> str:
+def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: str, tk_max: int = 15, f_max: int = 8) -> str:
     """Summary for the EOS teams: tickets, network, and device status, for all branches or one branch. No security part."""
     from .calc import devices as DEV
     t = TXT["id"]
@@ -819,17 +819,18 @@ def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: s
     L.append(t["s_status"])
     L.append(t["st_net"].format(s=t["warn_n"].format(n=n_down) if n_down else t["ok"]))
     L.append(t["st_dev"].format(s=t["dev_warn"].format(n=A["down"]) if A["down"] else t["ok"]))
-    tk, _ = _ticket_lines(db, cfg, t, a, end, site)
+    tk, _ = _ticket_lines(db, cfg, t, a, end, site, tk_max)
     L += tk + ["", t["s_net"]] + net + ["", t["s_dev"]]
     if not A["total"]:
         L.append(t["dev_none"])
     else:
         L.append(t["dev_tot"].format(t=_f(A["total"]), d=_f(A["down"]), a=_f((A["avail"] or 0) * 100, 1)))
         L.append(t["dev_ev"].format(f=f"{a:%d/%m}", t=f"{(end - timedelta(seconds=1)):%d/%m}", n=_f(H["events"]), h=_f(H["hours"], 1)))
-        for x in D["down"][:10]:
+        dev_max = min(10, max(3, tk_max))
+        for x in D["down"][:dev_max]:
             L.append(t["dev_line"].format(name=x["name"], loc=x["loc"], h=_f(x["ageH"] or 0, 1)))
-        if len(D["down"]) > 10:
-            L.append(t["tk_more"].format(n=len(D["down"]) - 10).replace("tiket", "perangkat"))
+        if len(D["down"]) > dev_max:
+            L.append(t["tk_more"].format(n=len(D["down"]) - dev_max).replace("tiket", "perangkat"))
     rows = db.scalars(select(M.Insight).where(M.Insight.severity.in_(["crit", "warn"]), M.Insight.kind.in_(["tickets", "links", "capacity", "devices"]), M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
                       .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(150)).all()
     seen, pick = set(), []
@@ -837,8 +838,8 @@ def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: s
         if r.title not in seen and (not site or r.site == site or site in r.title or site in (r.detail or "")):
             seen.add(r.title)
             pick.append(r)
-    if pick:
-        L += ["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in pick[:8]]
+    if pick and f_max:
+        L += ["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in pick[:f_max]]
     return "\n".join(L + _link_lines(cfg, t, scope, day, "eos", site, now))
 
 
@@ -851,12 +852,24 @@ def _link_lines(cfg: Config, t: dict, scope: str, day: date | None, kind: str, s
     return ["", t["link"].format(u=url)]
 
 
-def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope: str = "duty", day: date | None = None, kind: str = "full", site: str = "") -> str:
+LEVELS = [(15, 8), (10, 6), (6, 4), (3, 3), (0, 2), (0, 0)]       # (tickets listed, findings listed): what is dropped first when a message has to fit a limit
+
+
+def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope: str = "duty", day: date | None = None, kind: str = "full", site: str = "", max_chars: int = 0) -> str:
+    """The summary; with max_chars (a chat message limit) the ticket list and the findings are shortened step by step until it fits, never cut in the middle."""
+    for tk_max, f_max in LEVELS:
+        out = _summary(db, cfg, scope, day, kind, site, tk_max, f_max)
+        if not max_chars or len(out) <= max_chars:
+            return out
+    return out[: max_chars - 1] + "…"
+
+
+def _summary(db: Session, cfg: Config, scope: str, day: date | None, kind: str, site: str, tk_max: int, f_max: int) -> str:
     """Plain-text summary for the shift handover (WhatsApp friendly, Indonesian), for everything, only the NOC side, only the SOC side, or the EOS view (tickets, network, devices; one branch or all). Every number comes from stored data.
     Layout: header (shift, team, date), system status, tickets, pending cases from Handover, monitoring summary, automatic findings, and a link back to TERA."""
     kind = kind if kind in SUMMARY_KINDS else "full"
     if kind == "eos":
-        return _eos_summary(db, cfg, scope, day, site)
+        return _eos_summary(db, cfg, scope, day, site, tk_max, f_max)
     t = TXT["id"]
     now = cfg.now()
     a, b, label = _window(cfg, scope, day)
@@ -882,7 +895,7 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
             n = sev(grp, "crit")
             L.append(t["st_warn"].format(k=t[key], n=n) if n else t["st_ok"].format(k=t[key]))
     if kind == "full":
-        tk, _ = _ticket_lines(db, cfg, t, a, end)
+        tk, _ = _ticket_lines(db, cfg, t, a, end, "", tk_max)
         L += tk
         pend = db.scalars(select(M.Handover).where(M.Handover.is_open.is_(True)).order_by(M.Handover.created_at.desc()).limit(5)).all()
         L += ["", t["s_pend"]]
@@ -928,8 +941,8 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
         L.append(t["al_xdr"].format(c=xs.get("critical", 0), h=xs.get("high", 0), m=xs.get("medium", 0), l=xs.get("low", 0)))
     want = None if kind == "full" else (KINDS_NOC if kind == "noc" else KINDS_SOC)
     shown = [r for r in pick if r.severity in ("crit", "warn") and (want is None or r.kind in want)]
-    if shown:
-        L += ["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in shown[:8]]
+    if shown and f_max:
+        L += ["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in shown[:f_max]]
     return "\n".join(L + _link_lines(cfg, t, scope, day, kind, "", now))
 
 
