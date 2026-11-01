@@ -1,7 +1,7 @@
 /* TERA Dashboard — Admin: Integrations, API Keys, Email (SMTP), Webhooks. Secrets are write-only and never shown again. */
 "use strict";
 const INT = {integrations: null, apikeys: null, smtp: null, webhooks: null, msg: null, newKey: null, hookEdit: null, keyForm: false, busy: {}};
-const intReset = () => { if (typeof AUD !== "undefined") AUD.loaded = false; INT.integrations = INT.apikeys = INT.smtp = INT.webhooks = INT.msg = INT.newKey = INT.hookEdit = INT.todo = INT.status = INT.roles = INT.roleEdit = null; INT.keyForm = false; };
+const intReset = () => { if (typeof AUD !== "undefined") AUD.loaded = false; INT.sharelinks = INT.integrations = INT.apikeys = INT.smtp = INT.webhooks = INT.msg = INT.newKey = INT.hookEdit = INT.todo = INT.status = INT.roles = INT.roleEdit = null; INT.keyForm = false; };
 const intDt = s => s ? new Date(s).toLocaleString("id-ID", {dateStyle: "medium", timeStyle: "short"}) : "–";
 const intMsg = () => INT.msg ? `<div class="msg ${INT.msg.ok ? "ok" : "err"}">${esc(INT.msg.t)}</div>` : "";
 async function intLoad(name, path) {
@@ -9,7 +9,12 @@ async function intLoad(name, path) {
   try { INT[name] = await api("/api/admin/" + path); } catch (e) { INT[name] = {rows: [], error: e.message}; }
   INT.busy[name] = false; render(false);
 }
-const intLoading = () => `<div class="empty sm">Memuat…</div>`;
+const intLoading = () => `<div class="empty sm">Loading…</div>`;
+function vShareLinks() {
+  if (!INT.sharelinks) { intLoad("sharelinks", "sharelinks"); return intLoading(); }
+  const rows = INT.sharelinks.rows.map(r => [intDt(r.created), r.by, String(r.kind).split(":")[0] + " · " + String(r.fmt).toUpperCase(), r.from + " – " + r.to + (r.site ? " · " + r.site : ""), intDt(r.expires), r.downloads, {h: pill(r.state === "active" ? "good" : "idle", r.state)}, {h: r.state === "active" ? `<button class="btn ghost sm" type="button" data-w data-int="sharerevoke" data-id="${r.id}">Revoke</button>` : ""}]);
+  return admTitle("Share Links", "Report links that work without signing in, for at most 3 days. A link builds the file when it is opened, with the rights of the account that created it. Create one on the Report page.") + intMsg() + tbl(["Created", "By", "Report", "Period", "Expires", "Opened", "State", ""], rows, {r: [5], empty: "No share links yet."});
+}
 const intOpt = (arr, cur) => arr.map(([v, l]) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(l)}</option>`).join("");
 const msRow = x => `<div class="msrow"><input data-ms="name" type="text" placeholder="Name, e.g. Belawan" value="${esc(x.name || "")}" aria-label="Server name"><input data-ms="url" type="text" placeholder="https://10.181.3.1" value="${esc(x.url || "")}" aria-label="Server address" autocomplete="off">
   <label class="chk"><input data-ms="on" type="checkbox" ${x.enabled !== false ? "checked" : ""}> Active</label>
@@ -124,6 +129,7 @@ document.addEventListener("click", async e => {
     else if (a === "keyform") { INT.keyForm = !INT.keyForm && !INT.keyEdit; INT.keyEdit = null; INT.newKey = null; render(false); }
     else if (a === "keyedit") { INT.keyEdit = +id; INT.keyForm = false; INT.newKey = null; INT.msg = null; render(false); }
     else if (a === "copykey") { try { await navigator.clipboard.writeText($("newKeyVal").textContent); b.textContent = "Copied"; } catch (er) { const r = document.createRange(); r.selectNode($("newKeyVal")); getSelection().removeAllRanges(); getSelection().addRange(r); } }
+    else if (a === "sharerevoke") { if (!confirm("Revoke this link? It stops working immediately.")) return; await send("/api/admin/sharelinks/" + id + "/revoke", {}); intDone("sharelinks", true, "Link revoked."); }
     else if (a === "revoke") { if (!confirm("Revoke this API key? Systems using it will be rejected.")) return; await api("/api/admin/apikeys/" + id, {method: "DELETE"}); intDone("apikeys", true, "API key revoked."); }
     else if (a === "hookform") { INT.hookEdit = id === "x" ? null : id === "new" ? {events: ["handover_high"], enabled: true} : Object.assign({}, INT.webhooks.rows.find(w => String(w.id) === id)); INT.msg = null; render(false); }
     else if (a === "hooktest") { b.disabled = true; b.textContent = "Sending…"; const r = await send("/api/admin/webhooks/" + id + "/test", {}).catch(er => ({ok: false, msg: er.message})); INT.webhooks = null; INT.msg = {ok: r.ok, t: r.msg || "Failed"}; render(false); }

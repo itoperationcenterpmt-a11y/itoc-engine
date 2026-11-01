@@ -5,6 +5,7 @@ trend slopes with a forecast against targets, repeat counts, SLA risk from ticke
 and a location health score. Every finding carries its numbers and comparison. Findings are stored in the insight table with a unique key; a finding that no
 longer appears is closed automatically. A dismissed finding stays hidden for the chosen number of days."""
 import statistics
+from urllib.parse import quote
 from datetime import date, datetime, timedelta
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
@@ -640,9 +641,12 @@ TXT = {
            "xdr": "XDR (Trend Micro): {n} alert baru", "xdr_open": ", {o} critical/high masih open", "xdr_model": "- model deteksi teratas: {x}",
            "al_noc": "Alert NOC : Kritis({c}) Peringatan({w}) Info({i})", "al_ndr": "Alert SOC (NDR) : C({c}) H({h}) M({m}) L({l}) N({n})", "al_xdr": "Alert SOC (XDR) : C({c}) H({h}) M({m}) L({l})",
            "find": "🔎 *TEMUAN OTOMATIS*", "crit": "KRITIS", "warn": "PERINGATAN", "link": "Link Pendukung : {u}",
+           "eos": "EOS", "branch": "Cabang: {x}", "all_branches": "Semua cabang", "st_net": "Status Jaringan : {s}", "st_dev": "Status Perangkat : {s}", "ok": "OK", "warn_n": "PERHATIAN ({n} link down)", "dev_warn": "PERHATIAN ({n} perangkat down)",
+           "s_net": "🌐 *JARINGAN*", "s_dev": "🖥️ *PERANGKAT*", "dev_none": "Belum ada data perangkat dari Zabbix.", "dev_tot": "Perangkat: {t} unit, {d} down saat ini (ketersediaan {a}%).", "dev_ev": "Kejadian down {f}–{t}: {n} kejadian, total {h} jam.", "dev_line": "- {name} ({loc}): down {h} jam",
+           "d_duty": "Hari tugas {d} ({h}.00–{h}.00 esok hari)",
            "d_full": "Hari penuh {d}", "d_h1": "Setengah hari pertama, {d} (00.00–12.00)", "d_h2": "Setengah hari kedua, {d} (12.00–24.00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "24 jam terakhir", "d_7": "7 hari terakhir", "d_30": "30 hari terakhir", "d_month": "Bulan {m} {y}"},
 }
-SUMMARY_KINDS = ("full", "noc", "soc")
+SUMMARY_KINDS = ("full", "noc", "soc", "eos")
 
 
 def _dt(d: datetime) -> str:
@@ -651,7 +655,8 @@ def _dt(d: datetime) -> str:
 
 def summary_windows(cfg: Config) -> list[dict]:
     """Choices for the shift summary: last 24 hours, full day, two half days, one entry per shift, and longer periods."""
-    out = [{"key": "24h", "label": "Last 24 hours"}, {"key": "day", "label": "Full day (00:00–24:00)"}, {"key": "half1", "label": "First half (00:00–12:00)"}, {"key": "half2", "label": "Second half (12:00–24:00)"}]
+    h0 = min(s["start"] for s in cfg.shifts)
+    out = [{"key": "duty", "label": f"Duty day ({h0:02d}:00 to {h0:02d}:00 the next day)"}, {"key": "24h", "label": "Last 24 hours"}, {"key": "day", "label": "Full day (00:00–24:00)"}, {"key": "half1", "label": "First half (00:00–12:00)"}, {"key": "half2", "label": "Second half (12:00–24:00)"}]
     sh = sorted(cfg.shifts, key=lambda s: s["start"])
     for i, s in enumerate(sh):
         end = sh[(i + 1) % len(sh)]["start"]
@@ -661,9 +666,12 @@ def summary_windows(cfg: Config) -> list[dict]:
 
 def _window(cfg: Config, scope: str, day: date | None) -> tuple[datetime, datetime, str]:
     now, t = cfg.now(), TXT["id"]
-    d = day or now.date()
+    d = day or cfg.clock.duty_date(now)                         # the duty date: a night shift after midnight still reports on the day it started
     mid = datetime(d.year, d.month, d.day)
     dm = f"{d.day} {MONTHS[d.month - 1]}"
+    if scope == "duty":                                         # one working day from the first shift to the first shift of the next day: Pagi, Sore, and Malam of the date
+        h0 = min(s["start"] for s in cfg.shifts)
+        return mid + timedelta(hours=h0), mid + timedelta(days=1, hours=h0), t["d_duty"].format(d=dm, h=f"{h0:02d}")
     if scope == "day":
         return mid, mid + timedelta(days=1), t["d_full"].format(d=f"{dm} {d.year}")
     if scope == "half1":
@@ -709,13 +717,18 @@ def _ndr_part(db: Session, a: datetime, end: datetime) -> dict | None:
     return {"from": rows[0][0], "to": rows[-1][0], "sev": sev, "total": int(total), "ch": int(ch), "alert": int(alert), "cats": sorted(((c, int(v)) for c, v in cats.items() if c not in ("-", "N/A")), key=lambda x: -x[1])[:3]}
 
 
+def _f(v, d: int = 0) -> str:
+    """Number in Indonesian style: 1.234,5."""
+    return f"{v:,.{d}f}".replace(",", "§").replace(".", ",").replace("§", ".")
+
+
 def _tstate(status: str, closed: set, hold: set) -> str:
     s = (status or "").strip().lower()
     return "Closed" if s in closed else "On Hold" if s in hold else "In progress" if "progress" in s else "Open"
 
 
 def _shifts_in(cfg: Config, a: datetime, end: datetime) -> list[tuple[str, str | None]]:
-    """(shift name, team code) for the shifts that start inside the window (a full day gives Pagi, Sore, and Malam of that date); when none starts inside, the shifts that overlap it."""
+    """(shift name, team code) for the shifts that start inside the window (a duty day gives Pagi, Sore, and Malam of that date); when none starts inside, the shifts that overlap it."""
     sh = sorted(cfg.shifts, key=lambda s: s["start"])
     out, over, d = [], [], a.date() - timedelta(days=1)
     while d <= end.date():
@@ -730,10 +743,118 @@ def _shifts_in(cfg: Config, a: datetime, end: datetime) -> list[tuple[str, str |
     return out or over
 
 
-def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope: str = "24h", day: date | None = None, kind: str = "full") -> str:
-    """Plain-text summary for the shift handover (WhatsApp friendly, Indonesian), for everything, only the NOC side, or only the SOC side. Every number comes from stored data.
+def _head_lines(cfg: Config, t: dict, head: str, a: datetime, b: datetime, end: datetime, now: datetime, label: str, live: bool, scope: str = "") -> list[str]:
+    L = [head]
+    if b - a <= timedelta(days=2):
+        sh = _shifts_in(cfg, a, end)
+        order = {s["name"]: s["no"] for s in cfg.shifts}
+        L.append(t["shift"].format(x=", ".join(sorted({n for n, _ in sh}, key=lambda n: order.get(n, 99))) or "-"))
+        L.append(t["team"].format(x=", ".join(sorted({c for _, c in sh if c})) or "-"))
+        last = (end - timedelta(seconds=1)).date()
+        L.append(t["date"].format(x=f"{a:%d/%m/%Y}" if scope == "duty" or a.date() == last else f"{a:%d/%m} – {last:%d/%m/%Y}"))       # a duty day starts at the first shift and ends the next morning: it is reported under its start date
+    else:
+        L.append(t["period"].format(x=label))
+    return L + [t["data"].format(a=_dt(a), b=_dt(end), n=_dt(now)) + (t["live"] if live else ""), ""]
+
+
+def _ticket_lines(db: Session, cfg: Config, t: dict, a: datetime, end: datetime, site: str = "") -> tuple[list[str], dict]:
+    """Ticket counts by state (tickets created in the window) and the ticket list, for the whole company or one branch."""
+    from . import views as VW
+    q = select(M.Ticket.id, M.Ticket.subject, M.Ticket.status, M.Ticket.technician).where(M.Ticket.created_at >= a, M.Ticket.created_at < end).order_by(M.Ticket.created_at)
+    done = select(func.count()).select_from(M.Ticket).where(M.Ticket.resolved_at >= a, M.Ticket.resolved_at < end)
+    if site:
+        q, done = q.where(VW._tsite(db, site)), done.where(VW._tsite(db, site))
+    tks = db.execute(q).all()
+    closed = {x.lower() for x in (cfg.p("sd.closed_statuses") or [])}
+    hold = {x.lower() for x in (cfg.p("sd.onhold_statuses", ["Onhold", "On Hold"]) or [])}
+    c = {"On Hold": 0, "Closed": 0, "Open": 0, "In progress": 0}
+    for _, _, st, _ in tks:
+        c[_tstate(st, closed, hold)] += 1
+    L = [t["tk_total"].format(n=len(tks), h=c["On Hold"], c=c["Closed"], o=c["Open"], p=c["In progress"]), t["tk_done"].format(n=db.scalar(done) or 0), "", t["s_tk"]]
+    for tid, subj, st, tech in tks[:15]:
+        L.append(t["tk_line"].format(id=tid, subject=(subj or "-")[:110], status=st or "-", tech=tech or "-"))
+    if not tks:
+        L.append(t["tk_none"])
+    elif len(tks) > 15:
+        L.append(t["tk_more"].format(n=len(tks) - 15))
+    return L, c
+
+
+def _net_lines(db: Session, t: dict, a: datetime, end: datetime, site: str = "") -> tuple[list[str], int]:
+    """PRTG availability and the links with the most downtime in the window, for all links or the links of one branch. Returns the lines and how many links were down for 30 minutes or more."""
+    from .calc import network as NET
+    sids = None
+    if site:
+        sids = [r for (r,) in db.execute(select(M.PrtgSensor.id).where(M.PrtgSensor.active.is_(True), NET.site_cond(db, site)))]
+    by = (M.PrtgHourly.sensor_id.in_(sids),) if sids is not None else ()
+    link_rows = db.execute(select(M.PrtgHourly.sensor_id, func.sum(M.PrtgHourly.down_s)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end, *by).group_by(M.PrtgHourly.sensor_id)
+                           .having(func.sum(M.PrtgHourly.down_s) >= 1800).order_by(func.sum(M.PrtgHourly.down_s).desc()).limit(8 if site else 5)).all()
+    name = _sensor_names(db)
+    tot_n, down_s = db.execute(select(func.count(), func.coalesce(func.sum(M.PrtgHourly.down_s), 0)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end, M.PrtgHourly.seen.is_(True), *by)).one()
+    avail = 1 - down_s / (tot_n * 3600) if tot_n else None
+    L = [t["net"].format(x=_f(avail * 100, 2)) if avail is not None else t["net_none"]]
+    L += [t["down"].format(name=name.get(sid, sid), m=_f(secs / 60)) for sid, secs in link_rows]
+    return L, len(link_rows)
+
+
+def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: str) -> str:
+    """Summary for the EOS teams: tickets, network, and device status, for all branches or one branch. No security part."""
+    from .calc import devices as DEV
+    t = TXT["id"]
+    now = cfg.now()
+    a, b, label = _window(cfg, scope, day)
+    end = min(b, now)
+    head = t["title"] + " · EOS"
+    if a >= now:
+        return f"{head}\n{label}\n\n{t['not_started']}"
+    live = b > now
+    L = _head_lines(cfg, t, head, a, b, end, now, label, live, scope)
+    L.insert(1, t["branch"].format(x=site or t["all_branches"]))
+    net, n_down = _net_lines(db, t, a, end, site)
+    D = DEV.build(db, cfg, site, "", "", down_all=True)
+    H = DEV.history(db, cfg, a.date(), (end - timedelta(seconds=1)).date(), site)
+    A = D["all"]
+    L.append(t["s_status"])
+    L.append(t["st_net"].format(s=t["warn_n"].format(n=n_down) if n_down else t["ok"]))
+    L.append(t["st_dev"].format(s=t["dev_warn"].format(n=A["down"]) if A["down"] else t["ok"]))
+    tk, _ = _ticket_lines(db, cfg, t, a, end, site)
+    L += tk + ["", t["s_net"]] + net + ["", t["s_dev"]]
+    if not A["total"]:
+        L.append(t["dev_none"])
+    else:
+        L.append(t["dev_tot"].format(t=_f(A["total"]), d=_f(A["down"]), a=_f((A["avail"] or 0) * 100, 1)))
+        L.append(t["dev_ev"].format(f=f"{a:%d/%m}", t=f"{(end - timedelta(seconds=1)):%d/%m}", n=_f(H["events"]), h=_f(H["hours"], 1)))
+        for x in D["down"][:10]:
+            L.append(t["dev_line"].format(name=x["name"], loc=x["loc"], h=_f(x["ageH"] or 0, 1)))
+        if len(D["down"]) > 10:
+            L.append(t["tk_more"].format(n=len(D["down"]) - 10).replace("tiket", "perangkat"))
+    rows = db.scalars(select(M.Insight).where(M.Insight.severity.in_(["crit", "warn"]), M.Insight.kind.in_(["tickets", "links", "capacity", "devices"]), M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
+                      .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(150)).all()
+    seen, pick = set(), []
+    for r in rows:
+        if r.title not in seen and (not site or r.site == site or site in r.title or site in (r.detail or "")):
+            seen.add(r.title)
+            pick.append(r)
+    if pick:
+        L += ["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in pick[:8]]
+    return "\n".join(L + _link_lines(cfg, t, scope, day, "eos", site, now))
+
+
+def _link_lines(cfg: Config, t: dict, scope: str, day: date | None, kind: str, site: str, now: datetime) -> list[str]:
+    base = (cfg.p("ui.public_url", "") or "").strip().rstrip("/")
+    if not base:
+        return []
+    d = day or cfg.clock.duty_date(now)
+    url = f"{base}/#insight?ins=summary&scope={scope}&kind={kind}" + (f"&day={d.isoformat()}" if scope not in ("24h", "7d", "30d") else "") + (f"&site={quote(site)}" if site else "")
+    return ["", t["link"].format(u=url)]
+
+
+def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope: str = "duty", day: date | None = None, kind: str = "full", site: str = "") -> str:
+    """Plain-text summary for the shift handover (WhatsApp friendly, Indonesian), for everything, only the NOC side, only the SOC side, or the EOS view (tickets, network, devices; one branch or all). Every number comes from stored data.
     Layout: header (shift, team, date), system status, tickets, pending cases from Handover, monitoring summary, automatic findings, and a link back to TERA."""
     kind = kind if kind in SUMMARY_KINDS else "full"
+    if kind == "eos":
+        return _eos_summary(db, cfg, scope, day, site)
     t = TXT["id"]
     now = cfg.now()
     a, b, label = _window(cfg, scope, day)
@@ -743,17 +864,7 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
         return f"{head}\n{label}\n\n{t['not_started']}"
     live = b > now                                              # window still running: "open now" is meaningful
     noc, soc = kind in ("full", "noc"), kind in ("full", "soc")
-    L = [head]
-    if b - a <= timedelta(days=2):
-        sh = _shifts_in(cfg, a, end)
-        order = {s["name"]: s["no"] for s in cfg.shifts}
-        L.append(t["shift"].format(x=", ".join(sorted({n for n, _ in sh}, key=lambda n: order.get(n, 99))) or "-"))
-        L.append(t["team"].format(x=", ".join(sorted({c for _, c in sh if c})) or "-"))
-        last = (end - timedelta(seconds=1)).date()
-        L.append(t["date"].format(x=f"{a:%d/%m/%Y}" if a.date() == last else f"{a:%d/%m} – {last:%d/%m/%Y}"))
-    else:
-        L.append(t["period"].format(x=label))
-    L += [t["data"].format(a=_dt(a), b=_dt(end), n=_dt(now)) + (t["live"] if live else ""), ""]
+    L = _head_lines(cfg, t, head, a, b, end, now, label, live, scope)
 
     rows = db.scalars(select(M.Insight).where(M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
                       .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(120)).all()
@@ -768,23 +879,9 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
         if on:
             n = sev(grp, "crit")
             L.append(t["st_warn"].format(k=t[key], n=n) if n else t["st_ok"].format(k=t[key]))
-    tks = []
     if kind == "full":
-        tks = db.execute(select(M.Ticket.id, M.Ticket.subject, M.Ticket.status, M.Ticket.technician).where(M.Ticket.created_at >= a, M.Ticket.created_at < end).order_by(M.Ticket.created_at)).all()
-        closed = {x.lower() for x in (cfg.p("sd.closed_statuses") or [])}
-        hold = {x.lower() for x in (cfg.p("sd.onhold_statuses", ["Onhold", "On Hold"]) or [])}
-        c = {"On Hold": 0, "Closed": 0, "Open": 0, "In progress": 0}
-        for _, _, st, _ in tks:
-            c[_tstate(st, closed, hold)] += 1
-        L.append(t["tk_total"].format(n=len(tks), h=c["On Hold"], c=c["Closed"], o=c["Open"], p=c["In progress"]))
-        L.append(t["tk_done"].format(n=db.scalar(select(func.count()).select_from(M.Ticket).where(M.Ticket.resolved_at >= a, M.Ticket.resolved_at < end)) or 0))
-        L += ["", t["s_tk"]]
-        for tid, subj, st, tech in tks[:15]:
-            L.append(t["tk_line"].format(id=tid, subject=(subj or "-")[:110], status=st or "-", tech=tech or "-"))
-        if not tks:
-            L.append(t["tk_none"])
-        elif len(tks) > 15:
-            L.append(t["tk_more"].format(n=len(tks) - 15))
+        tk, _ = _ticket_lines(db, cfg, t, a, end)
+        L += tk
         pend = db.scalars(select(M.Handover).where(M.Handover.is_open.is_(True)).order_by(M.Handover.created_at.desc()).limit(5)).all()
         L += ["", t["s_pend"]]
         for h in pend:
@@ -797,13 +894,8 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
             L.append(t["ho_none"])
     L += ["", t["s_mon"]]
     if noc:
-        link_rows = db.execute(select(M.PrtgHourly.sensor_id, func.sum(M.PrtgHourly.down_s)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end).group_by(M.PrtgHourly.sensor_id).having(func.sum(M.PrtgHourly.down_s) >= 1800).order_by(func.sum(M.PrtgHourly.down_s).desc()).limit(5)).all()
-        name = _sensor_names(db)
-        tot_n, down_s = db.execute(select(func.count(), func.coalesce(func.sum(M.PrtgHourly.down_s), 0)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end, M.PrtgHourly.seen.is_(True))).one()
-        avail = 1 - down_s / (tot_n * 3600) if tot_n else None
-        L.append(t["net"].format(x=fmt(avail * 100, 2).replace(".", ",")) if avail is not None else t["net_none"])
-        for sid, secs in link_rows:
-            L.append(t["down"].format(name=name.get(sid, sid), m=fmt(secs / 60)))
+        net, _ = _net_lines(db, t, a, end)
+        L += net
         if live:
             ap_t = db.scalar(select(func.count()).select_from(M.WifiAp)) or 0
             ap_o = db.scalar(select(func.count()).select_from(M.WifiAp).where(~func.lower(func.coalesce(M.WifiAp.status, "")).startswith("online"))) or 0
@@ -816,9 +908,9 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
     if soc:
         nd = _ndr_part(db, a, end)
         if nd:
-            L.append(t["ndr"].format(t=fmt(nd["total"]), c=fmt(nd["ch"]), a=fmt(nd["alert"])) + t["ndr_days"].format(f=f"{nd['from']:%d/%m}", t=f"{nd['to']:%d/%m}"))
+            L.append(t["ndr"].format(t=_f(nd["total"]), c=_f(nd["ch"]), a=_f(nd["alert"])) + t["ndr_days"].format(f=f"{nd['from']:%d/%m}", t=f"{nd['to']:%d/%m}"))
             if nd["cats"]:
-                L.append(t["ndr_cat"].format(x=", ".join(f"{c} ({fmt(v)})" for c, v in nd["cats"])))
+                L.append(t["ndr_cat"].format(x=", ".join(f"{c} ({_f(v)})" for c, v in nd["cats"])))
         else:
             L.append(t["ndr_none"])
         xs: dict = {}
@@ -830,17 +922,13 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
         if models:
             L.append(t["xdr_model"].format(x=", ".join(f"{m or '-'} ({n})" for m, n in models)))
         ns = (nd or {}).get("sev", {})
-        L.append(t["al_ndr"].format(c=fmt(ns.get("critical", 0)), h=fmt(ns.get("high", 0)), m=fmt(ns.get("medium", 0)), l=fmt(ns.get("low", 0)), n=fmt(ns.get("informational", 0))))
+        L.append(t["al_ndr"].format(c=_f(ns.get("critical", 0)), h=_f(ns.get("high", 0)), m=_f(ns.get("medium", 0)), l=_f(ns.get("low", 0)), n=_f(ns.get("informational", 0))))
         L.append(t["al_xdr"].format(c=xs.get("critical", 0), h=xs.get("high", 0), m=xs.get("medium", 0), l=xs.get("low", 0)))
     want = None if kind == "full" else (KINDS_NOC if kind == "noc" else KINDS_SOC)
     shown = [r for r in pick if r.severity in ("crit", "warn") and (want is None or r.kind in want)]
     if shown:
         L += ["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in shown[:8]]
-    base = (cfg.p("ui.public_url", "") or "").strip().rstrip("/")
-    if base:
-        d = day or now.date()
-        L += ["", t["link"].format(u=f"{base}/#insight?ins=summary&scope={scope}&kind={kind}" + (f"&day={d.isoformat()}" if scope not in ("24h", "7d", "30d") else ""))]
-    return "\n".join(L)
+    return "\n".join(L + _link_lines(cfg, t, scope, day, kind, "", now))
 
 
 # ---------------- storage ----------------

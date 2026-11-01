@@ -472,7 +472,9 @@ function vReport() {
   const tkSel = tkOn ? `<div class="rgroup inl"><span class="lbl">Group</span><select id="rgrp" aria-label="Group"><option value="">Any group</option>${(rp.groups || []).map(g => `<option value="${esc(g)}" ${S.rgrp === g ? "selected" : ""}>${esc(g)}</option>`).join("")}</select></div><div class="rgroup inl"><span class="lbl">Technician</span><select id="rtech" aria-label="Technician"><option value="">All technicians</option>${(rp.techs || []).map(t => `<option value="${esc(t.key)}" ${S.rtech === t.key ? "selected" : ""}>${esc(t.label)}</option>`).join("")}</select></div>` : "";
   const lkOn = ["full", "network", "noc"].includes(kind) || (kind === "custom" && picked.includes("noc"));
   const lkSel = lkOn ? `<div class="rgroup inl"><span class="lbl">ISP</span><select id="risp" aria-label="ISP"><option value="">All ISPs</option>${(rp.isps || []).map(n => `<option value="${esc(n)}" ${S.risp === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></div>` : "";
-  const dl = `<div class="rdl">${[["xlsx", "Excel"], ["pdf", "PDF"], ["pptx", "PowerPoint"]].map(([k, l]) => `<button type="button" class="btn" data-rep="${k}" ${kind === "custom" && !picked.length ? "disabled" : ""}>${l}</button>`).join("")}</div>`;
+  const dl = `<div class="rdl">${[["xlsx", "Excel"], ["pdf", "PDF"], ["pptx", "PowerPoint"]].map(([k, l]) => `<button type="button" class="btn" data-rep="${k}" ${kind === "custom" && !picked.length ? "disabled" : ""}>${l}</button>`).join("")}</div>
+    <div class="rshare"><span class="sub">Link without sign-in, valid for 3 days:</span>${[["pdf", "PDF"], ["xlsx", "Excel"], ["pptx", "PowerPoint"]].map(([k, l]) => `<button type="button" class="btn ghost sm" data-rshare="${k}" ${kind === "custom" && !picked.length ? "disabled" : ""}>${l} link</button>`).join("")}</div>
+    ${S.shareUrl ? `<div class="msg ok rlink"><input type="text" readonly id="shareUrl" value="${esc(S.shareUrl)}" aria-label="Report link"><button type="button" class="btn ghost sm" data-rcopy>Copy</button><span class="sub">expires ${esc(S.shareExp)}</span></div>` : ""}`;
   const kp = shown.flatMap(s => s.kpis).slice(0, 12), nc = shown.reduce((a, s) => a + s.charts.length, 0), nt = shown.reduce((a, s) => a + s.tables.length, 0);
   const list = (a, n) => a.length ? `<ul>${a.slice(0, n).map(x => `<li>${esc(x.title)}</li>`).join("")}${a.length > n ? `<li class="sub">and ${a.length - n} more</li>` : ""}</ul>` : `<span class="sub">none</span>`;
   const none = s => !s.kpis.length && !s.charts.length && !s.tables.length, why = shown.filter(none).flatMap(s => s.notes.slice(0, 1));
@@ -492,6 +494,7 @@ function vAdmin() {
     <div class="ucards">${V.users.map(u => `<article class="ucard ${u.active ? "" : "off"}"><span class="av">${esc((u.name || u.u).split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase())}</span><div class="ub"><b>${esc(u.name)}</b><span class="sub">@${esc(u.u)} · ${esc(ROLES[u.role] || u.role)}${u.site ? " · " + esc(u.site) : ""}</span><span class="sub" title="${esc(roleAccess(u.role))}">${u.active ? "Active" : "Inactive"} · last login ${esc(dtime(u.last))}</span></div><span class="acts"><button class="btn ghost" data-edit-user="${esc(u.u)}">Edit</button>${u.u === CFG.me.username ? "" : `<button class="btn ghost" data-toggle-user="${esc(u.u)}">${u.active ? "Disable" : "Enable"}</button><button class="btn ghost" data-reset-user="${esc(u.u)}">Reset</button>`}</span></article>`).join("")}</div>`;
   if (S.adm === "integrasi") body = vIntegrations();
   if (S.adm === "apikeys") body = vApiKeys();
+  if (S.adm === "sharelinks") body = vShareLinks();
   if (S.adm === "smtp") body = vSmtp();
   if (S.adm === "webhooks") body = vWebhooks();
   if (S.adm === "roles") body = vRoles();

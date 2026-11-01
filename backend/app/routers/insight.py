@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Handover, Insight, User
-from ..security import current_user, can_see, rate_limit, require_admin
+from ..security import current_user, can_see, rate_limit, require_admin, effective_site
 from ..insight import shift_summary, summary_windows as shift_summary_windows
 from ..store import audit, bump_data, load_config
 
@@ -97,13 +97,16 @@ def run_now(db: Session = Depends(get_db), user: User = Depends(require_admin)):
 
 
 @router.get("/summary", dependencies=[Depends(rate_limit("inssum", 60, 60))])
-def summary(scope: str = "24h", day: date | None = None, kind: str = "full", db: Session = Depends(get_db), user: User = Depends(current_user)):
+def summary(scope: str = "duty", day: date | None = None, kind: str = "full", site: str = "", db: Session = Depends(get_db), user: User = Depends(current_user)):
     """Shift summary text for a chosen window (last 24 hours, full day, half day, or one shift)."""
     if not can_see(user, "insight"):
         raise HTTPException(403, "This account has no access to Insights")
     cfg = load_config(db)
     if scope not in {w["key"] for w in shift_summary_windows(cfg)}:
         raise HTTPException(422, "Unknown summary period")
-    if kind not in ("full", "noc", "soc"):
+    if kind not in ("full", "noc", "soc", "eos"):
         raise HTTPException(422, "Unknown summary type")
-    return {"text": shift_summary(db, cfg, None, scope, day, kind)}
+    site = effective_site(user, db) or site
+    if site and site not in cfg.sites:
+        raise HTTPException(422, "Unknown branch")
+    return {"text": shift_summary(db, cfg, None, scope, day, kind, site if kind == "eos" else "")}

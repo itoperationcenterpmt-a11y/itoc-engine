@@ -27,13 +27,20 @@ function lockAdmin() {
 }
 async function downloadReport(kind, btn) {
   const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, kind: S.rkind === "custom" ? "custom:" + (S.rsecs || []).join(",") : S.rkind || "full", preset: S.rpreset, ...ticketQ()}), old = btn.innerHTML;
-  btn.disabled = true; btn.textContent = "Menyiapkan…";
+  btn.disabled = true; btn.textContent = "Preparing…";
   try {
     const r = await fetch(`/api/report/${kind}?${q}`, {credentials: "same-origin"});
     if (!r.ok) { let msg = r.statusText; try { const j = await r.json(); if (typeof j.detail === "string") msg = j.detail; } catch (_) {} throw new Error(msg); }
     const blob = await r.blob(), a = document.createElement("a"), cd = r.headers.get("content-disposition") || "", nm = (cd.match(/filename="([^"]+)"/) || [])[1];
     a.href = URL.createObjectURL(blob); a.download = nm || "laporan." + kind; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   } finally { btn.innerHTML = old; btn.disabled = false; }
+}
+async function shareReport(fmt, btn) {
+  const body = {fmt, from: S.from, to: S.to, shift: +S.sf || 0, site: S.site, kind: S.rkind === "custom" ? "custom:" + (S.rsecs || []).join(",") : S.rkind || "full", preset: S.rpreset, hours: 72, ...ticketQ()}, old = btn.innerHTML;
+  btn.disabled = true; btn.textContent = "Creating…";
+  try { const r = await send("/api/report-share", body); S.shareUrl = r.url; S.shareExp = new Date(r.expires_at).toLocaleString("en-GB", {dateStyle: "medium", timeStyle: "short"}); }
+  catch (e) { alert(e.message); S.shareUrl = ""; }
+  btn.innerHTML = old; btn.disabled = false; render(false);
 }
 /* Page layout (widgets): order, size, title, show/hide per role. Super Admin edits it with the Customize button; stored in the layout table. */
 const LAYOUT_PAGES = ["ringkasan", "servicedesk", "network", "noc", "kuma", "wifi", "cyber", "soc", "xdr", "devices", "devnet", "devcctv", "devops", "cctv", "internet"], SIZES = [["c3", "S"], ["c4", "M"], ["c6", "L"], ["c8", "XL"], ["c12", "Full"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
@@ -313,6 +320,8 @@ document.addEventListener("click", async e => {
     else if (d.rkind) set({rkind: d.rkind});
     else if (d.rpreset) set({rpreset: d.rpreset});
     else if (d.rep) await downloadReport(d.rep, b);
+    else if (d.rshare) await shareReport(d.rshare, b);
+    else if (b.hasAttribute("data-rcopy")) { const i = $("shareUrl"); i.select(); try { await navigator.clipboard.writeText(i.value); b.textContent = "Copied"; } catch (_) { b.textContent = "Press Ctrl+C"; } }
     else if (d.ho) set({hoSt: d.ho});
     else if (d.hoform) set({hoForm: d.hoform === "1"});
     else if (d.close) set({closing: +d.close});

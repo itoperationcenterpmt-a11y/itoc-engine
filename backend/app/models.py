@@ -367,6 +367,20 @@ class ApiKey(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class ShareLink(Base):
+    """A report link that works without signing in for at most 3 days: only the hash of the token is stored, plus what to build (spec) and whose rights apply (created_by)."""
+    __tablename__ = "share_link"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_by: Mapped[str] = mapped_column(String(60))
+    spec: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    downloads: Mapped[int] = mapped_column(Integer, default=0)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class Webhook(Base):
     """Tujuan notifikasi (Teams, Slack, Telegram, JSON umum). URL dienkripsi karena memuat token."""
     __tablename__ = "webhook"

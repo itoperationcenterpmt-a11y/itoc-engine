@@ -153,7 +153,7 @@ def require_module(module: str):
 
 # Halaman Admin yang bisa dikunci untuk Super Admin (parameter admin.locked_pages). Awalan path API -> kunci halaman.
 ADMIN_PAGE_PATHS = {"integrasi": ("/api/admin/integrations",), "apikeys": ("/api/admin/apikeys",), "smtp": ("/api/admin/smtp",), "webhooks": ("/api/admin/webhooks",), "audit": ("/api/admin/audit",),
-                    "pengguna": ("/api/admin/users",), "parameter": ("/api/admin/params",), "status": ("/api/admin/status",), "dilengkapi": ("/api/admin/todo",)}
+                    "pengguna": ("/api/admin/users",), "sharelinks": ("/api/admin/sharelinks",), "parameter": ("/api/admin/params",), "status": ("/api/admin/status",), "dilengkapi": ("/api/admin/todo",)}
 ADMIN_MASTER_PAGE = {"role": "roles", "module": "menu", "widget": "menu", "data_source": "integrasi", "site": "pemetaan", "zbx_loc": "pemetaan", "dev_code": "pemetaan", "prtg_sensor": "pemetaan", "isp": "pemetaan",
                      "person": "personel", "team": "tim", "shift": "tim", "sla_target": "parameter", "formula": "rumus"}
 DEFAULT_LOCKED = ["pengguna", "roles", "apikeys", "integrasi", "smtp", "webhooks", "menu", "audit", "akses"]
