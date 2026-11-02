@@ -1,4 +1,4 @@
-"""Chat commands for the shift summary (/fullday, /fullday-261101, /pagi, /noc, /eos-parepare, ...), so a WhatsApp or Telegram bridge only has to forward the text it received.
+"""Chat commands for the shift summary (/fullday, /fullday-20261101, /pagi, /noc, /eos-parepare, /thismonth, ...), so a WhatsApp or Telegram bridge only has to forward the text it received.
 The commands are the parameter chat.commands (Admin > Operations > Targets & Parameters > Reports); DEFAULT below is used when that parameter is missing or broken.
 A command always answers with a message: a wrong one answers with the list of commands, so the chat never stays silent."""
 import re
@@ -8,26 +8,32 @@ from .insight import shift_summary
 from .store import Config
 
 # One entry per command. name: what is typed after the slash. aliases: other names for it. kind: full | noc | soc | eos.
-# scope: duty (the duty day) | day (00:00-24:00) | half1 | half2 | s1, s2, s3 (a shift by number) | shift:Pagi (a shift by name) | 24h | 7d | 30d | month.
+# scope: duty (the duty day) | day (00:00-24:00) | half1 | half2 | s1, s2, s3 (a shift by number) | shift:Pagi (a shift by name) | 24h | 7d | 30d | thismonth | lastmonth | month (the month is typed: /month-202610).
 # site: a fixed branch for the command (for example "Branch Parepare"). branch_arg: the branch is typed after the command (eos only). hidden: leave it out of /help.
+# group: commands with the same group share one line of /help, written with the "line" of the first of them ("help" is the text of the slash menu in the chat app).
 DEFAULT = {
     "commands": [
         {"name": "fullday", "aliases": ["full", "harian"], "kind": "full", "scope": "duty", "help": "laporan hari tugas ini"},
-        {"name": "pagi", "kind": "full", "scope": "shift:Pagi", "help": "laporan shift Pagi"},
-        {"name": "sore", "kind": "full", "scope": "shift:Sore", "help": "laporan shift Sore"},
-        {"name": "malam", "kind": "full", "scope": "shift:Malam", "help": "laporan shift Malam"},
-        {"name": "noc", "kind": "noc", "scope": "duty", "help": "laporan NOC hari tugas ini"},
-        {"name": "soc", "kind": "soc", "scope": "duty", "help": "laporan SOC hari tugas ini"},
+        {"name": "pagi", "kind": "full", "scope": "shift:Pagi", "group": "shift", "line": "satu shift hari tugas ini", "help": "laporan shift Pagi"},
+        {"name": "sore", "kind": "full", "scope": "shift:Sore", "group": "shift", "help": "laporan shift Sore"},
+        {"name": "malam", "kind": "full", "scope": "shift:Malam", "group": "shift", "help": "laporan shift Malam"},
+        {"name": "noc", "kind": "noc", "scope": "duty", "group": "report", "line": "laporan NOC / SOC", "help": "laporan NOC hari tugas ini"},
+        {"name": "soc", "kind": "soc", "scope": "duty", "group": "report", "help": "laporan SOC hari tugas ini"},
         {"name": "eos", "kind": "eos", "scope": "duty", "branch_arg": True, "help": "laporan EOS semua cabang, atau satu cabang: /eos-parepare"},
         {"name": "7hari", "aliases": ["7d", "minggu"], "kind": "full", "scope": "7d", "help": "7 hari terakhir"},
+        {"name": "thismonth", "aliases": ["bulanini"], "kind": "full", "scope": "thismonth", "group": "month", "line": "bulan ini / bulan lalu", "help": "laporan bulan ini"},
+        {"name": "lastmonth", "aliases": ["bulanlalu"], "kind": "full", "scope": "lastmonth", "group": "month", "help": "laporan bulan lalu"},
+        {"name": "month", "aliases": ["bulan"], "kind": "full", "scope": "month", "hidden": True, "help": "laporan satu bulan: /month-202610"},
     ],
-    "footer": ["Tambahkan tanggal YYYYMMDD untuk hari lain, contoh /fullday-20261101 atau /eos-parepare-20261101.", "Hari tugas dimulai pukul 08.00 dan berakhir 08.00 keesokan harinya."],
+    "footer": ["Tanggal: tambah -20261101. Rentang: -20261101-20261107. Bulan lain: /month-202610", "Cabang: /eos-belawan. Daftar cabang: /cabang"],
 }
 DATE_RE = re.compile(r"^(\d{8}|\d{6})$")            # YYYYMMDD; the short yymmdd form still works
 NAME_RE = re.compile(r"^[a-z0-9]{1,20}$")
 KINDS = ("full", "noc", "soc", "eos")
-FIXED = ("duty", "day", "half1", "half2", "24h", "7d", "30d", "month")
-DATED = ("duty", "day", "half1", "half2", "month")                # scopes that follow a date
+FIXED = ("duty", "day", "half1", "half2", "24h", "7d", "30d", "thismonth", "lastmonth", "month")
+DATED = ("duty", "day", "half1", "half2")                         # scopes that follow a typed date (two dates on "duty" make a range)
+MAX_RANGE_DAYS = 62
+HINT = "Ketik / untuk daftar perintah."                      # a wrong command gets a short pointer, not the whole list
 MAX_CHARS = 3000                                                  # a chat message limit: the summary shortens its lists to stay within it
 
 
@@ -53,22 +59,29 @@ def catalog(cfg: Config) -> list[dict]:
 
 
 def help_text(cfg: Config) -> str:
+    """Short on purpose: one line per command or per group of commands, without aliases."""
     c = _config(cfg)
-    shown = [x for x in c["commands"] if not x.get("hidden")]
-    lines = ["*Perintah TERA*  (ketik / atau /help untuk daftar ini)"]
-    for x in shown:
-        alias = ", ".join("/" + str(a).strip().lstrip("/") for a in x.get("aliases", []) if str(a).strip())
-        lines.append(f"/{x['name']}" + (f" ({alias})" if alias else "") + f" : {x.get('help') or x['name']}")
-    lines.append("/help : daftar ini")
-    lines += [str(f) for f in c["footer"]]
-    if any(x["kind"] == "eos" and x.get("branch_arg") for x in shown):
-        lines.append("Cabang untuk perintah EOS: " + ", ".join(s.lower().replace("branch ", "") for s in cfg.sites if s.lower().startswith("branch ")) + ".")
-    return "\n".join(lines)
+    rows, by_group = [], {}
+    for x in (y for y in c["commands"] if not y.get("hidden")):
+        g = str(x.get("group") or "")
+        if g in by_group:
+            by_group[g][0].append("/" + x["name"])
+            continue
+        row = (["/" + x["name"]], str(x.get("line") or x.get("help") or x["name"]))
+        rows.append(row)
+        if g:
+            by_group[g] = row
+    return "\n".join(["*Perintah TERA*"] + [f"{' '.join(names)} : {line}" for names, line in rows] + ["/ atau /help : daftar ini"] + [str(f) for f in c["footer"]])
 
 
 def _date(tok: str) -> date:
     y = int(tok[:2]) + 2000 if len(tok) == 6 else int(tok[:4])
     return date(y, int(tok[-4:-2]), int(tok[-2:]))
+
+
+def _month(tok: str) -> date:
+    """YYYYMM, or any YYYYMMDD inside the month -> the first day of that month."""
+    return date(int(tok[:4]), int(tok[4:6]), 1) if len(tok) == 6 else _date(tok).replace(day=1)
 
 
 def _site(cfg: Config, words: list[str]) -> tuple[str | None, str]:
@@ -82,7 +95,7 @@ def _site(cfg: Config, words: list[str]) -> tuple[str | None, str]:
     if len(part) == 1:
         return part[0], ""
     if not part:
-        return None, f"Cabang '{q}' tidak ditemukan."
+        return None, f"Cabang '{q}' tidak ditemukan. Daftar cabang: /cabang"
     return None, "Cabang '" + q + "' cocok dengan lebih dari satu: " + ", ".join(k for s, k in low.items() if s in part[:8]) + "."
 
 
@@ -99,6 +112,8 @@ def run(db, cfg: Config, text: str, locked_site: str = "") -> str:
     help_ = help_text(cfg)
     if not toks or toks[0] in ("help", "bantuan", "start", "?"):
         return help_
+    if toks == ["cabang"] or toks == ["branch"]:
+        return "*Cabang untuk /eos-<nama>*\n" + ", ".join(s.lower().replace("branch ", "") for s in cfg.sites if s.lower().startswith("branch ")) + "."
     cmd, rest = toks[0], toks[1:]
     by_name = {}
     for c in _config(cfg)["commands"]:
@@ -106,30 +121,52 @@ def run(db, cfg: Config, text: str, locked_site: str = "") -> str:
             by_name.setdefault(n, c)
     c = by_name.get(cmd)
     if not c:
-        return f"Perintah '/{cmd}' tidak dikenal.\n\n" + help_
-    day, words = None, []
+        return f"Perintah '/{cmd}' tidak dikenal.\n" + HINT
+    is_month = c["scope"] == "month"
+    dates, words = [], []
     for t in rest:
-        if t.isdigit() and not DATE_RE.match(t):
-            return f"Tanggal '{t}' tidak valid. Pakai format YYYYMMDD, contoh 20261101.\n\n" + help_
-        if DATE_RE.match(t):
+        if is_month and re.match(r"^(\d{6}|\d{8})$", t):                  # a month: YYYYMM, or any date inside it
             try:
-                day = _date(t)
+                dates.append(_month(t))
             except ValueError:
-                return f"Tanggal '{t}' tidak valid. Pakai format YYYYMMDD, contoh 20261101.\n\n" + help_
+                return f"Bulan '{t}' tidak valid. Pakai format YYYYMM, contoh 202610.\n" + HINT
+        elif t.isdigit():
+            if not DATE_RE.match(t):
+                return f"Tanggal '{t}' tidak valid. Pakai format YYYYMMDD, contoh 20261101.\n" + HINT
+            try:
+                dates.append(_date(t))
+            except ValueError:
+                return f"Tanggal '{t}' tidak valid. Pakai format YYYYMMDD, contoh 20261101.\n" + HINT
         else:
             words.append(t)
     scope = _scope(cfg, c["scope"])
     if scope is None:
-        return f"Shift untuk perintah '/{cmd}' tidak ditemukan di pengaturan.\n\n" + help_
-    dated = scope in DATED or re.match(r"^s\d+$", scope)
-    if day and not dated:
-        return f"Perintah '/{cmd}' tidak memakai tanggal.\n\n" + help_
-    if day and day > cfg.now().date():
-        return "Tanggal itu belum terjadi.\n\n" + help_
+        return f"Shift untuk perintah '/{cmd}' tidak ditemukan di pengaturan.\n" + HINT
+    today, day = cfg.now().date(), None
+    if is_month:
+        if len(dates) != 1:
+            return "Sebutkan bulannya, contoh /month-202610.\n" + HINT
+        day = dates[0]
+        if day > today:
+            return "Bulan itu belum terjadi.\n" + HINT
+    elif dates:
+        if scope not in DATED and not re.match(r"^s\d+$", scope):
+            return f"Perintah '/{cmd}' tidak memakai tanggal.\n" + HINT
+        if max(dates) > today:
+            return "Tanggal itu belum terjadi.\n" + HINT
+        if len(dates) == 1:
+            day = dates[0]
+        elif len(dates) == 2 and scope == "duty":
+            d1, d2 = sorted(dates)
+            if (d2 - d1).days + 1 > MAX_RANGE_DAYS:
+                return f"Rentang terlalu panjang (maksimal {MAX_RANGE_DAYS} hari). Untuk satu bulan: /month-202610.\n" + HINT
+            scope = f"range:{d1:%Y%m%d}:{d2:%Y%m%d}"
+        else:
+            return "Pakai satu tanggal, atau dua tanggal untuk rentang hari (hanya perintah harian).\n" + HINT
     site = ""
     if c["kind"] == "eos":
         site, err = _site(cfg, [str(c["site"]).lower().replace("branch ", "")] if c.get("site") else (words if c.get("branch_arg") else []))
         if site is None:
-            return err + "\n\n" + help_
+            return err + "\n" + HINT
         site = locked_site or site
     return shift_summary(db, cfg, None, scope, day, c["kind"], site, MAX_CHARS)

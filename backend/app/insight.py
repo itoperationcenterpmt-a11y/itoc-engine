@@ -644,7 +644,7 @@ TXT = {
            "eos": "EOS", "branch": "Cabang: {x}", "all_branches": "Semua cabang", "st_net": "Status Jaringan : {s}", "st_dev": "Status Perangkat : {s}", "ok": "OK", "warn_n": "PERHATIAN ({n} link down)", "dev_warn": "PERHATIAN ({n} perangkat down)",
            "s_net": "🌐 *JARINGAN*", "s_dev": "🖥️ *PERANGKAT*", "dev_none": "Belum ada data perangkat dari Zabbix.", "dev_tot": "Perangkat: {t} unit, {d} down saat ini (ketersediaan {a}%).", "dev_ev": "Kejadian down {f}–{t}: {n} kejadian, total {h} jam.", "dev_line": "- {name} ({loc}): down {h} jam",
            "d_duty": "Hari tugas {d} ({h}.00–{h}.00 esok hari)",
-           "d_full": "Hari penuh {d}", "d_h1": "Setengah hari pertama, {d} (00.00–12.00)", "d_h2": "Setengah hari kedua, {d} (12.00–24.00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "24 jam terakhir", "d_7": "7 hari terakhir", "d_30": "30 hari terakhir", "d_month": "Bulan {m} {y}"},
+           "d_full": "Hari penuh {d}", "d_h1": "Setengah hari pertama, {d} (00.00–12.00)", "d_h2": "Setengah hari kedua, {d} (12.00–24.00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "24 jam terakhir", "d_7": "7 hari terakhir", "d_30": "30 hari terakhir", "d_month": "Bulan {m} {y}", "d_range": "Hari tugas {a} – {b}", "d_thismonth": "Bulan ini ({m} {y})", "d_lastmonth": "Bulan lalu ({m} {y})"},
 }
 SUMMARY_KINDS = ("full", "noc", "soc", "eos")
 
@@ -661,7 +661,7 @@ def summary_windows(cfg: Config) -> list[dict]:
     for i, s in enumerate(sh):
         end = sh[(i + 1) % len(sh)]["start"]
         out.append({"key": f"s{s['no']}", "label": f"Shift {s['name']} ({s['start']:02d}:00–{end:02d}:00)"})
-    return out + [{"key": "7d", "label": "Last 7 days"}, {"key": "30d", "label": "Last 30 days"}, {"key": "month", "label": "Whole month of the chosen date"}]
+    return out + [{"key": "7d", "label": "Last 7 days"}, {"key": "30d", "label": "Last 30 days"}, {"key": "month", "label": "Whole month of the chosen date"}, {"key": "thismonth", "label": "This month so far"}, {"key": "lastmonth", "label": "Last month"}]
 
 
 def _window(cfg: Config, scope: str, day: date | None) -> tuple[datetime, datetime, str]:
@@ -682,6 +682,16 @@ def _window(cfg: Config, scope: str, day: date | None) -> tuple[datetime, dateti
         first = datetime(d.year, d.month, 1)
         nxt = datetime(d.year + (d.month == 12), d.month % 12 + 1, 1)
         return first, nxt, t["d_month"].format(m=MONTHS[d.month - 1], y=d.year)
+    if scope in ("thismonth", "lastmonth"):
+        cur = datetime(now.year, now.month, 1)
+        first = cur if scope == "thismonth" else datetime(now.year - (now.month == 1), (now.month - 2) % 12 + 1, 1)
+        nxt = datetime(first.year + (first.month == 12), first.month % 12 + 1, 1)
+        return first, nxt, t["d_" + scope].format(m=MONTHS[first.month - 1], y=first.year)
+    if scope.startswith("range:"):                              # range:YYYYMMDD:YYYYMMDD, whole duty days from the first to the last date
+        d1, d2 = (date(int(x[:4]), int(x[4:6]), int(x[6:])) for x in scope.split(":")[1:3])
+        h0 = min(s["start"] for s in cfg.shifts)
+        a = datetime(d1.year, d1.month, d1.day) + timedelta(hours=h0)
+        return a, datetime(d2.year, d2.month, d2.day) + timedelta(days=1, hours=h0), t["d_range"].format(a=f"{d1.day} {MONTHS[d1.month - 1]}", b=f"{d2.day} {MONTHS[d2.month - 1]} {d2.year}")
     if scope in ("7d", "30d"):
         days = 7 if scope == "7d" else 30
         return now - timedelta(days=days), now, t["d_" + scope[:-1]]
@@ -845,10 +855,10 @@ def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: s
 
 def _link_lines(cfg: Config, t: dict, scope: str, day: date | None, kind: str, site: str, now: datetime) -> list[str]:
     base = (cfg.p("ui.public_url", "") or "").strip().rstrip("/")
-    if not base:
+    if not base or scope.startswith("range:"):                  # the page has no date-range view, so a range has no link
         return []
     d = day or cfg.clock.duty_date(now)
-    url = f"{base}/#insight?ins=summary&scope={scope}&kind={kind}" + (f"&day={d.isoformat()}" if scope not in ("24h", "7d", "30d") else "") + (f"&site={quote(site)}" if site else "")
+    url = f"{base}/#insight?ins=summary&scope={scope}&kind={kind}" + (f"&day={d.isoformat()}" if scope not in ("24h", "7d", "30d", "thismonth", "lastmonth") else "") + (f"&site={quote(site)}" if site else "")
     return ["", t["link"].format(u=url)]
 
 
