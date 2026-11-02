@@ -83,7 +83,7 @@ function readHash() {
 function writeHash() {
   const p = new URLSearchParams(); if (S.preset) p.set("p", S.preset); else { p.set("dari", S.from); p.set("sampai", S.to); }
   if (S.sf) p.set("shift", S.sf); if (S.site) p.set("lokasi", S.site); if (S.cmp) p.set("banding", "1");
-  if (S.tab === "insight" && S.insTab === "summary") { p.set("ins", "summary"); p.set("scope", S.sumScope || "duty"); p.set("kind", S.sumKind || "full"); if (S.sumDay && !["24h", "7d", "30d"].includes(S.sumScope || "duty")) p.set("day", S.sumDay); if (S.sumKind === "eos" && S.sumSite) p.set("site", S.sumSite); }
+  if (S.tab === "insight" && S.insTab === "summary") { p.set("ins", "summary"); p.set("scope", S.sumScope || "duty"); p.set("kind", S.sumKind || "full"); if (S.sumDay && !["24h", "7d", "30d"].includes(S.sumScope || "duty")) p.set("day", S.sumDay); if (["eos", "cctv", "wifi", "device", "link"].includes(S.sumKind) && S.sumSite) p.set("site", S.sumSite); }
   history.replaceState(null, "", "#" + S.tab + "?" + p.toString());
 }
 const nDays = () => Math.round((dayMs(S.to) - dayMs(S.from)) / 864e5) + 1;

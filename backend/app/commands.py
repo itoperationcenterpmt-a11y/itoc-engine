@@ -7,9 +7,9 @@ from datetime import date
 from .insight import shift_summary
 from .store import Config
 
-# One entry per command. name: what is typed after the slash. aliases: other names for it. kind: full | noc | soc | eos.
+# One entry per command. name: what is typed after the slash. aliases: other names for it. kind: full | noc | soc | eos | cctv | wifi | device | link.
 # scope: duty (the duty day) | day (00:00-24:00) | half1 | half2 | s1, s2, s3 (a shift by number) | shift:Pagi (a shift by name) | 24h | 7d | 30d | thismonth | lastmonth | month (the month is typed: /month-202610).
-# site: a fixed branch for the command (for example "Branch Parepare"). branch_arg: the branch is typed after the command (eos only). hidden: leave it out of /help.
+# site: a fixed branch for the command (for example "Branch Parepare"). branch_arg: the branch is typed after the command (eos, cctv, wifi, device, link). hidden: leave it out of /help.
 # group: commands with the same group share one line of /help, written with the "line" of the first of them ("help" is the text of the slash menu in the chat app).
 DEFAULT = {
     "commands": [
@@ -20,6 +20,10 @@ DEFAULT = {
         {"name": "noc", "kind": "noc", "scope": "duty", "group": "report", "line": "laporan NOC / SOC", "help": "laporan NOC hari tugas ini"},
         {"name": "soc", "kind": "soc", "scope": "duty", "group": "report", "help": "laporan SOC hari tugas ini"},
         {"name": "eos", "kind": "eos", "scope": "duty", "branch_arg": True, "help": "laporan EOS semua cabang, atau satu cabang: /eos-parepare"},
+        {"name": "cctv", "kind": "cctv", "scope": "duty", "branch_arg": True, "group": "area", "line": "status per bidang, bisa per cabang: /cctv-parepare", "help": "status CCTV (Milestone dan Zabbix)"},
+        {"name": "wifi", "kind": "wifi", "scope": "duty", "branch_arg": True, "group": "area", "help": "status WiFi (Access Point dan client)"},
+        {"name": "devices", "aliases": ["perangkat"], "kind": "device", "scope": "duty", "branch_arg": True, "group": "area", "help": "status perangkat Zabbix"},
+        {"name": "link", "aliases": ["web"], "kind": "link", "scope": "duty", "branch_arg": True, "group": "area", "help": "status link ISP dan web (PRTG dan Uptime Kuma)"},
         {"name": "7hari", "aliases": ["7d", "minggu"], "kind": "full", "scope": "7d", "help": "7 hari terakhir"},
         {"name": "thismonth", "aliases": ["bulanini"], "kind": "full", "scope": "thismonth", "group": "month", "line": "bulan ini / bulan lalu", "help": "laporan bulan ini"},
         {"name": "lastmonth", "aliases": ["bulanlalu"], "kind": "full", "scope": "lastmonth", "group": "month", "help": "laporan bulan lalu"},
@@ -29,7 +33,8 @@ DEFAULT = {
 }
 DATE_RE = re.compile(r"^(\d{8}|\d{6})$")            # YYYYMMDD; the short yymmdd form still works
 NAME_RE = re.compile(r"^[a-z0-9]{1,20}$")
-KINDS = ("full", "noc", "soc", "eos")
+KINDS = ("full", "noc", "soc", "eos", "cctv", "wifi", "device", "link")
+SITE_KINDS = ("eos", "cctv", "wifi", "device", "link")           # these accept a branch
 FIXED = ("duty", "day", "half1", "half2", "24h", "7d", "30d", "thismonth", "lastmonth", "month")
 DATED = ("duty", "day", "half1", "half2")                         # scopes that follow a typed date (two dates on "duty" make a range)
 MAX_RANGE_DAYS = 62
@@ -164,7 +169,7 @@ def run(db, cfg: Config, text: str, locked_site: str = "") -> str:
         else:
             return "Pakai satu tanggal, atau dua tanggal untuk rentang hari (hanya perintah harian).\n" + HINT
     site = ""
-    if c["kind"] == "eos":
+    if c["kind"] in SITE_KINDS:
         site, err = _site(cfg, [str(c["site"]).lower().replace("branch ", "")] if c.get("site") else (words if c.get("branch_arg") else []))
         if site is None:
             return err + "\n" + HINT

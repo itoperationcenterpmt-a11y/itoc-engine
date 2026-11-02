@@ -37,8 +37,9 @@ function insArea(tab = S.tab) {
   return `${head}<div class="grid">${insightPanel(I, 4, "c12", kinds, INS_ONLY[tab])}</div>`;
 }
 const sumFull = t => t + ((S.sumNote || "").trim() ? "\n\n📢 *CATATAN/INSTRUKSI*\n" + S.sumNote.trim() : "");
+const SUM_SITE = ["eos", "cctv", "wifi", "device", "link"];                 /* summaries that can be limited to one branch */
 async function insSum() {
-  const sc = S.sumScope || "duty", q = "scope=" + sc + (S.sumDay && !["24h", "7d", "30d"].includes(sc) ? "&day=" + S.sumDay : "") + "&kind=" + (S.sumKind || "full") + ((S.sumKind || "full") === "eos" ? "&site=" + encodeURIComponent(CFG.me.site || S.sumSite || "") : "");
+  const sc = S.sumScope || "duty", q = "scope=" + sc + (S.sumDay && !["24h", "7d", "30d"].includes(sc) ? "&day=" + S.sumDay : "") + "&kind=" + (S.sumKind || "full") + (SUM_SITE.includes(S.sumKind || "full") ? "&site=" + encodeURIComponent(CFG.me.site || S.sumSite || "") : "");
   try { const x = await api("/api/insights/summary?" + q); set({sumText: x.text}); } catch (er) { alert(er.message); }
 }
 const insBar = v => `<span class="hbar"><i style="width:${Math.max(2, v)}%;background:var(${v >= 80 ? "--good" : v >= 60 ? "--warn" : "--crit"})"></i></span>`;
@@ -65,9 +66,9 @@ function vInsight() {
     body = `` +
       tbl(["Location", "Health", "Score", "Link availability", "Devices down", "Tickets past SLA"], H.map(x => [x.site, {h: insBar(x.score)}, x.score, x.link == null ? "–" : pc(x.link, 2), x.devTotal ? x.devDown + " / " + x.devTotal : "–", x.overdue]), {r: [2, 3, 4, 5], tall: true, empty: "No location data yet."});
   } else if (tab === "summary") {
-    const sc = S.sumScope || "duty", wins = I.windows || [], eos = (S.sumKind || "full") === "eos", br = CFG.me.site || S.sumSite || "";
+    const sc = S.sumScope || "duty", wins = I.windows || [], eos = SUM_SITE.includes(S.sumKind || "full"), br = CFG.me.site || S.sumSite || "";
     body = `
-      <div class="insbar"><label class="sub">Type <select id="sumKind" aria-label="Summary type">${[["full", "Full"], ["noc", "NOC"], ["soc", "SOC (NDR and XDR)"], ["eos", "EOS (tickets, network, devices)"]].map(([k, l]) => `<option value="${k}" ${k === (S.sumKind || "full") ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <div class="insbar"><label class="sub">Type <select id="sumKind" aria-label="Summary type">${[["full", "Full"], ["noc", "NOC"], ["soc", "SOC (NDR and XDR)"], ["eos", "EOS (tickets, network, devices)"], ["cctv", "CCTV (Milestone and Zabbix)"], ["wifi", "WiFi (Access Points and clients)"], ["device", "Devices (Zabbix)"], ["link", "Links and web availability"]].map(([k, l]) => `<option value="${k}" ${k === (S.sumKind || "full") ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       ${eos ? `<label class="sub">Branch <select id="sumSite" aria-label="Branch" ${CFG.me.site ? "disabled" : ""}><option value="">All branches</option>${CFG.sites.map(s => `<option ${s === br ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label>` : ""}
       <label class="sub">Period <select id="sumScope" aria-label="Summary period">${wins.map(w => `<option value="${esc(w.key)}" ${w.key === sc ? "selected" : ""}>${esc(w.label)}</option>`).join("")}</select></label>
       ${["24h", "7d", "30d"].includes(sc) ? "" : `<label class="sub">Date <input type="date" id="sumDay" value="${esc(S.sumDay || nowShift().date)}" max="${esc(nowShift().today)}" min="${esc(CFG.params.data_start)}"></label>`}</div>

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Handover, Insight, User
 from ..security import current_user, can_see, rate_limit, require_admin, effective_site
-from ..insight import shift_summary, summary_windows as shift_summary_windows
+from ..insight import SITE_KINDS, SUMMARY_KINDS, shift_summary, summary_windows as shift_summary_windows
 from ..store import audit, bump_data, load_config
 
 router = APIRouter(prefix="/api/insights", tags=["insight"])
@@ -123,12 +123,12 @@ def summary(scope: str = "duty", day: date | None = None, kind: str = "full", si
     cfg = load_config(db)
     if scope not in {w["key"] for w in shift_summary_windows(cfg)}:
         raise HTTPException(422, "Unknown summary period")
-    if kind not in ("full", "noc", "soc", "eos"):
+    if kind not in SUMMARY_KINDS:
         raise HTTPException(422, "Unknown summary type")
     site = effective_site(user, db) or site
     if site and site not in cfg.sites:
         raise HTTPException(422, "Unknown branch")
-    text = shift_summary(db, cfg, None, scope, day, kind, site if kind == "eos" else "", max(0, min(3000 if max_chars is None and format == "text" else (max_chars or 0), 60000)))
+    text = shift_summary(db, cfg, None, scope, day, kind, site if kind in SITE_KINDS else "", max(0, min(3000 if max_chars is None and format == "text" else (max_chars or 0), 60000)))
     if format == "text":                                        # for senders that put the whole response in a message (a WhatsApp scheduler)
         return Response(content=text, media_type="text/plain; charset=utf-8")
     return {"text": text}
