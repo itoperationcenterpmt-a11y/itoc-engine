@@ -96,6 +96,15 @@ def run_now(db: Session = Depends(get_db), user: User = Depends(require_admin)):
     return r
 
 
+@router.get("/commands", dependencies=[Depends(rate_limit("inscmd", 60, 60))])
+def commands_list(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """The chat commands that are listed in /help (name, aliases, help line)."""
+    if not can_see(user, "insight"):
+        raise HTTPException(403, "This account has no access to Insights")
+    from .. import commands
+    return {"commands": commands.catalog(load_config(db))}
+
+
 @router.get("/command", dependencies=[Depends(rate_limit("inscmd", 60, 60))])
 def command(text: str = "/help", format: str = "text", db: Session = Depends(get_db), user: User = Depends(current_user)):
     """A chat command (/fullday, /fullday-261101, /pagi, /noc, /soc, /eos-parepare, /help) answered with the message to send back. A wrong command answers with the list of commands."""

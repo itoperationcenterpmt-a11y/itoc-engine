@@ -21,9 +21,9 @@ DEFAULT = {
         {"name": "eos", "kind": "eos", "scope": "duty", "branch_arg": True, "help": "laporan EOS semua cabang, atau satu cabang: /eos-parepare"},
         {"name": "7hari", "aliases": ["7d", "minggu"], "kind": "full", "scope": "7d", "help": "7 hari terakhir"},
     ],
-    "footer": ["Tambahkan tanggal yymmdd untuk hari lain, contoh /fullday-261101 atau /eos-parepare-261101.", "Hari tugas dimulai pukul 08.00 dan berakhir 08.00 keesokan harinya."],
+    "footer": ["Tambahkan tanggal YYYYMMDD untuk hari lain, contoh /fullday-20261101 atau /eos-parepare-20261101.", "Hari tugas dimulai pukul 08.00 dan berakhir 08.00 keesokan harinya."],
 }
-DATE_RE = re.compile(r"^(\d{6}|\d{8})$")
+DATE_RE = re.compile(r"^(\d{8}|\d{6})$")            # YYYYMMDD; the short yymmdd form still works
 NAME_RE = re.compile(r"^[a-z0-9]{1,20}$")
 KINDS = ("full", "noc", "soc", "eos")
 FIXED = ("duty", "day", "half1", "half2", "24h", "7d", "30d", "month")
@@ -45,6 +45,11 @@ def _config(cfg: Config) -> dict:
     if not cmds:
         return DEFAULT
     return {"commands": cmds, "footer": raw.get("footer", DEFAULT["footer"]) if isinstance(raw.get("footer"), list) else DEFAULT["footer"]}
+
+
+def catalog(cfg: Config) -> list[dict]:
+    """The commands that /help lists, for a chat app that offers them while the user types a slash."""
+    return [{"name": x["name"], "aliases": [str(a) for a in x.get("aliases", [])], "help": x.get("help") or x["name"]} for x in _config(cfg)["commands"] if not x.get("hidden")]
 
 
 def help_text(cfg: Config) -> str:
@@ -96,11 +101,13 @@ def run(db, cfg: Config, text: str, locked_site: str = "") -> str:
         return f"Perintah '/{cmd}' tidak dikenal.\n\n" + help_
     day, words = None, []
     for t in rest:
+        if t.isdigit() and not DATE_RE.match(t):
+            return f"Tanggal '{t}' tidak valid. Pakai format YYYYMMDD, contoh 20261101.\n\n" + help_
         if DATE_RE.match(t):
             try:
                 day = _date(t)
             except ValueError:
-                return f"Tanggal '{t}' tidak valid. Pakai format yymmdd, contoh 261101.\n\n" + help_
+                return f"Tanggal '{t}' tidak valid. Pakai format YYYYMMDD, contoh 20261101.\n\n" + help_
         else:
             words.append(t)
     scope = _scope(cfg, c["scope"])
