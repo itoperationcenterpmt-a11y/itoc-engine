@@ -54,8 +54,16 @@ def catalog(cfg: Config) -> list[dict]:
 
 def help_text(cfg: Config) -> str:
     c = _config(cfg)
-    lines = ["*Perintah TERA*"] + [f"/{x['name']} : {x.get('help') or x['name']}" for x in c["commands"] if not x.get("hidden")] + ["/help : daftar ini"]
-    return "\n".join(lines + [str(f) for f in c["footer"]])
+    shown = [x for x in c["commands"] if not x.get("hidden")]
+    lines = ["*Perintah TERA*  (ketik / atau /help untuk daftar ini)"]
+    for x in shown:
+        alias = ", ".join("/" + str(a).strip().lstrip("/") for a in x.get("aliases", []) if str(a).strip())
+        lines.append(f"/{x['name']}" + (f" ({alias})" if alias else "") + f" : {x.get('help') or x['name']}")
+    lines.append("/help : daftar ini")
+    lines += [str(f) for f in c["footer"]]
+    if any(x["kind"] == "eos" and x.get("branch_arg") for x in shown):
+        lines.append("Cabang untuk perintah EOS: " + ", ".join(s.lower().replace("branch ", "") for s in cfg.sites if s.lower().startswith("branch ")) + ".")
+    return "\n".join(lines)
 
 
 def _date(tok: str) -> date:
