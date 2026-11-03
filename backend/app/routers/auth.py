@@ -93,13 +93,13 @@ def change_pw(body: PwChange, request: Request, response: Response, user: User =
         raise HTTPException(400, "The old password is wrong")
     n = cfg.p("auth.min_password", 10)
     if len(body.new) < n:
-        raise HTTPException(400, f"Password minimal {n} karakter")
+        raise HTTPException(400, f"The new password needs at least {n} characters")
     if len(body.new.encode()) > 72:
-        raise HTTPException(400, "Password maksimal 72 byte")
+        raise HTTPException(400, "The new password is at most 72 bytes")
     if body.new == body.old or body.new.lower() in _WEAK or user.username in body.new.lower():
         raise HTTPException(400, "The password is too easy to guess or the same as the old one")
     user.password_hash, user.must_change_pw = hash_pw(body.new), False
-    audit(db, user.username, "Mengganti password", None, cfg.p("tz_offset_hours", 7))
+    audit(db, user.username, "Changed own password", None, cfg.p("tz_offset_hours", 7))
     db.commit()
     set_session(response, request, make_token(user))                # token lama gugur; sesi ini tetap berjalan
     return {"ok": True}

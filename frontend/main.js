@@ -390,6 +390,8 @@ document.addEventListener("click", async e => {
     else if (b.id === "fToggle") { const w = $("fwrap").classList.toggle("open"); b.setAttribute("aria-expanded", w); }
     else if (b.id === "railBtn") { const on = $("app").classList.toggle("rail"); b.textContent = on ? "›" : "‹"; try { localStorage.setItem("itoc.rail", on ? "1" : ""); } catch (_) {} }
     else if (b.id === "logout" || b.id === "logoutM" || b.id === "logoutS") logout();
+    else if (b.id === "pwOpen" || b.id === "pwOpenS") openPw();
+    else if (b.hasAttribute("data-pwclose")) $("dlgPw").close();
     else if (b.id === "theme" || b.id === "themeM" || b.id === "themeS" || b.id === "themeL") { const r = document.documentElement, dark = (r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark"; r.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("itoc.theme", r.dataset.theme); } catch (_) {} }
   } catch (err) { if (err) alert(err.message); }
 });
@@ -479,11 +481,25 @@ document.addEventListener("submit", async e => {
     try { const tk = f.querySelector("[name=cf-turnstile-response]"), r = await send("/api/auth/login", {username: v("lU"), password: $("lP").value, captcha: tk ? tk.value : ""}); boot(); }
     catch (err) { $("lMsg").textContent = err.message; }
   }
+  if (f.id === "pwSelf") {
+    const m = $("spMsg"); m.className = "msg"; m.textContent = "";
+    if ($("spNew").value !== $("spNew2").value) { m.className = "msg err"; m.textContent = "The password confirmation does not match."; return; }
+    try { await send("/api/auth/password", {old: $("spOld").value, new: $("spNew").value}); m.className = "msg ok"; m.textContent = "Password changed."; setTimeout(() => $("dlgPw").close(), 1200); }
+    catch (err) { m.className = "msg err"; m.textContent = err.message; }
+  }
   if (f.id === "pwF") {
     if ($("nP").value !== $("nP2").value) { $("lMsg").textContent = "The password confirmation does not match."; return; }
     try { await send("/api/auth/password", {old: $("oP").value, new: $("nP").value}); boot(); } catch (err) { $("lMsg").textContent = err.message; }
   }
 });
+
+/* Change the password of the signed-in account (the server checks the current password and the password rules) */
+function openPw() {
+  ["spOld", "spNew", "spNew2"].forEach(id => $(id).value = "");
+  $("spMsg").className = "msg"; $("spMsg").textContent = "";
+  $("pwHint").textContent = "At least " + ((CFG && CFG.params["auth.min_password"]) || 10) + " characters, not easy to guess, and different from the current one.";
+  $("dlgPw").showModal(); $("spOld").focus();
+}
 
 /* ---------- tooltip ---------- */
 const tip = $("tip");

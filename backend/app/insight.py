@@ -641,12 +641,18 @@ TXT = {
            "xdr": "XDR (Trend Micro): {n} alert baru", "xdr_open": ", {o} critical/high masih open", "xdr_model": "- model deteksi teratas: {x}",
            "al_noc": "Alert NOC : Kritis({c}) Peringatan({w}) Info({i})", "al_ndr": "Alert SOC (NDR) : C({c}) H({h}) M({m}) L({l}) N({n})", "al_xdr": "Alert SOC (XDR) : C({c}) H({h}) M({m}) L({l})",
            "find": "🔎 *TEMUAN OTOMATIS*", "crit": "KRITIS", "warn": "PERINGATAN", "link": "Link Pendukung : {u}",
-           "eos": "EOS", "branch": "Cabang: {x}", "all_branches": "Semua cabang", "st_net": "Status Jaringan : {s}", "st_dev": "Status Perangkat : {s}", "ok": "OK", "warn_n": "PERHATIAN ({n} link down)", "dev_warn": "PERHATIAN ({n} perangkat down)",
-           "s_net": "🌐 *JARINGAN*", "s_dev": "🖥️ *PERANGKAT*", "dev_none": "Belum ada data perangkat dari Zabbix.", "dev_tot": "Perangkat: {t} unit, {d} down saat ini (ketersediaan {a}%).", "dev_ev": "Kejadian down {f}–{t}: {n} kejadian, total {h} jam.", "dev_line": "- {name} ({loc}): down {h} jam",
+           "eos": "EOS", "n_cctv": "CCTV", "n_wifi": "WiFi", "n_device": "Perangkat", "n_link": "Link / Web", "branch": "Cabang: {x}", "all_branches": "Semua cabang", "st_net": "Status Jaringan : {s}", "st_dev": "Status Perangkat : {s}", "ok": "OK", "warn_n": "PERHATIAN ({n} link down)", "dev_warn": "PERHATIAN ({n} perangkat down)",
+           "s_net": "🌐 *JARINGAN*", "s_dev": "🖥️ *PERANGKAT*", "dev_none": "Belum ada data perangkat dari Zabbix.", "dev_tot": "Perangkat: {t} unit, {d} down saat ini (ketersediaan {a}%).", "dev_ev": "Kejadian down {f}–{t}: {n} kejadian, total {h} jam.", "dev_line": "- {name} ({loc}): down {h}",
            "d_duty": "Hari tugas {d} ({h}.00–{h}.00 esok hari)",
-           "d_full": "Hari penuh {d}", "d_h1": "Setengah hari pertama, {d} (00.00–12.00)", "d_h2": "Setengah hari kedua, {d} (12.00–24.00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "24 jam terakhir", "d_7": "7 hari terakhir", "d_30": "30 hari terakhir", "d_month": "Bulan {m} {y}"},
+           "st_cctv": "Status CCTV : {s}", "st_device": "Status Perangkat : {s}", "st_wifi": "Status WiFi : {s}", "st_link": "Status Link / Web : {s}", "st_srv": "Status Server Milestone : {s}", "srv_warn": "PERHATIAN ({n} server tidak sinkron)",
+           "ms_tot": "Milestone: {t} kamera ({r} merekam), server sinkron {s}/{n}", "ms_fail": ". Bermasalah: {x}", "ms_pa": "Public announcer: {t} unit, {d} down", "dev_loc": "Cabang dengan perangkat down terbanyak: {x}", "dev_kind": "Per kategori (down/total): {x}",
+           "ap_warn": "PERHATIAN ({n} AP offline)", "wifi_none": "Belum ada data WiFi dari Ruckus.", "wifi_ap": "Access Point: {o} dari {t} online, {f} offline", "wifi_cl": "Client aktif: {c} ({u} pengguna), sinyal lemah (di bawah {r} dBm): {w}",
+           "wifi_loc": "Cabang dengan AP offline: {x}", "wifi_line": "- {name} ({zone}): offline", "link_warn": "PERHATIAN ({n} link down, {w} monitor web down)",
+           "kuma": "Web (Uptime Kuma): {t} monitor, {d} down, availability {a}%", "kuma_line": "- {name} ({loc}): down", "kuma_none": "Web (Uptime Kuma): belum ada data.",
+           "d_full": "Hari penuh {d}", "d_h1": "Setengah hari pertama, {d} (00.00–12.00)", "d_h2": "Setengah hari kedua, {d} (12.00–24.00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "24 jam terakhir", "d_7": "7 hari terakhir", "d_30": "30 hari terakhir", "d_month": "Bulan {m} {y}", "d_range": "Hari tugas {a} – {b}", "d_thismonth": "Bulan ini ({m} {y})", "d_lastmonth": "Bulan lalu ({m} {y})"},
 }
-SUMMARY_KINDS = ("full", "noc", "soc", "eos")
+SUMMARY_KINDS = ("full", "noc", "soc", "eos", "cctv", "wifi", "device", "link")
+SITE_KINDS = ("eos", "cctv", "wifi", "device", "link")           # summaries that can be limited to one branch
 
 
 def _dt(d: datetime) -> str:
@@ -661,7 +667,7 @@ def summary_windows(cfg: Config) -> list[dict]:
     for i, s in enumerate(sh):
         end = sh[(i + 1) % len(sh)]["start"]
         out.append({"key": f"s{s['no']}", "label": f"Shift {s['name']} ({s['start']:02d}:00–{end:02d}:00)"})
-    return out + [{"key": "7d", "label": "Last 7 days"}, {"key": "30d", "label": "Last 30 days"}, {"key": "month", "label": "Whole month of the chosen date"}]
+    return out + [{"key": "7d", "label": "Last 7 days"}, {"key": "30d", "label": "Last 30 days"}, {"key": "month", "label": "Whole month of the chosen date"}, {"key": "thismonth", "label": "This month so far"}, {"key": "lastmonth", "label": "Last month"}]
 
 
 def _window(cfg: Config, scope: str, day: date | None) -> tuple[datetime, datetime, str]:
@@ -682,6 +688,16 @@ def _window(cfg: Config, scope: str, day: date | None) -> tuple[datetime, dateti
         first = datetime(d.year, d.month, 1)
         nxt = datetime(d.year + (d.month == 12), d.month % 12 + 1, 1)
         return first, nxt, t["d_month"].format(m=MONTHS[d.month - 1], y=d.year)
+    if scope in ("thismonth", "lastmonth"):
+        cur = datetime(now.year, now.month, 1)
+        first = cur if scope == "thismonth" else datetime(now.year - (now.month == 1), (now.month - 2) % 12 + 1, 1)
+        nxt = datetime(first.year + (first.month == 12), first.month % 12 + 1, 1)
+        return first, nxt, t["d_" + scope].format(m=MONTHS[first.month - 1], y=first.year)
+    if scope.startswith("range:"):                              # range:YYYYMMDD:YYYYMMDD, whole duty days from the first to the last date
+        d1, d2 = (date(int(x[:4]), int(x[4:6]), int(x[6:])) for x in scope.split(":")[1:3])
+        h0 = min(s["start"] for s in cfg.shifts)
+        a = datetime(d1.year, d1.month, d1.day) + timedelta(hours=h0)
+        return a, datetime(d2.year, d2.month, d2.day) + timedelta(days=1, hours=h0), t["d_range"].format(a=f"{d1.day} {MONTHS[d1.month - 1]}", b=f"{d2.day} {MONTHS[d2.month - 1]} {d2.year}")
     if scope in ("7d", "30d"):
         days = 7 if scope == "7d" else 30
         return now - timedelta(days=days), now, t["d_" + scope[:-1]]
@@ -715,6 +731,11 @@ def _ndr_part(db: Session, a: datetime, end: datetime) -> dict | None:
                     alert += v
                 cats[p[2] if len(p) > 2 else "-"] = cats.get(p[2] if len(p) > 2 else "-", 0) + v
     return {"from": rows[0][0], "to": rows[-1][0], "sev": sev, "total": int(total), "ch": int(ch), "alert": int(alert), "cats": sorted(((c, int(v)) for c, v in cats.items() if c not in ("-", "N/A")), key=lambda x: -x[1])[:3]}
+
+
+def _dur(h: float) -> str:
+    """Hours for a short time, days for a long one: a camera down for 7.000 hours is clearer as 297 days."""
+    return f"{_f(h / 24)} hari" if h >= 72 else f"{_f(h, 1)} jam"
 
 
 def _f(v, d: int = 0) -> str:
@@ -828,7 +849,7 @@ def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: s
         L.append(t["dev_ev"].format(f=f"{a:%d/%m}", t=f"{(end - timedelta(seconds=1)):%d/%m}", n=_f(H["events"]), h=_f(H["hours"], 1)))
         dev_max = min(10, max(3, tk_max))
         for x in D["down"][:dev_max]:
-            L.append(t["dev_line"].format(name=x["name"], loc=x["loc"], h=_f(x["ageH"] or 0, 1)))
+            L.append(t["dev_line"].format(name=x["name"], loc=x["loc"], h=_dur(x["ageH"] or 0)))
         if len(D["down"]) > dev_max:
             L.append(t["tk_more"].format(n=len(D["down"]) - dev_max).replace("tiket", "perangkat"))
     rows = db.scalars(select(M.Insight).where(M.Insight.severity.in_(["crit", "warn"]), M.Insight.kind.in_(["tickets", "links", "capacity", "devices"]), M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
@@ -845,11 +866,109 @@ def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: s
 
 def _link_lines(cfg: Config, t: dict, scope: str, day: date | None, kind: str, site: str, now: datetime) -> list[str]:
     base = (cfg.p("ui.public_url", "") or "").strip().rstrip("/")
-    if not base:
+    if not base or scope.startswith("range:"):                  # the page has no date-range view, so a range has no link
         return []
     d = day or cfg.clock.duty_date(now)
-    url = f"{base}/#insight?ins=summary&scope={scope}&kind={kind}" + (f"&day={d.isoformat()}" if scope not in ("24h", "7d", "30d") else "") + (f"&site={quote(site)}" if site else "")
+    url = f"{base}/#insight?ins=summary&scope={scope}&kind={kind}" + (f"&day={d.isoformat()}" if scope not in ("24h", "7d", "30d", "thismonth", "lastmonth") else "") + (f"&site={quote(site)}" if site else "")
     return ["", t["link"].format(u=url)]
+
+
+AREA_KINDS = ("cctv", "wifi", "device", "link")                  # one area each: status, key figures, the worst items, findings; all branches or one branch
+AREA_FINDINGS = {"cctv": {"cctv"}, "wifi": {"wifi"}, "device": {"devices"}, "link": {"links", "capacity"}}
+
+
+def _findings_lines(db: Session, t: dict, a: datetime, end: datetime, kinds: set, site: str, f_max: int) -> list[str]:
+    rows = db.scalars(select(M.Insight).where(M.Insight.severity.in_(["crit", "warn"]), M.Insight.kind.in_(sorted(kinds)), M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
+                      .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(150)).all()
+    seen, pick = set(), []
+    for r in rows:
+        if r.title not in seen and (not site or r.site == site or site in r.title or site in (r.detail or "")):
+            seen.add(r.title)
+            pick.append(r)
+    return (["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in pick[:f_max]]) if pick and f_max else []
+
+
+def _dev_lines(t: dict, D: dict, H: dict, d1: date, d2: date, site: str, n_down: int) -> list[str]:
+    """Device block shared by the CCTV and Devices summaries: totals, events of the period, the branches and devices with the most trouble."""
+    A = D["all"]
+    if not A["total"]:
+        return [t["dev_none"]]
+    L = [t["dev_tot"].format(t=_f(A["total"]), d=_f(A["down"]), a=_f((A["avail"] or 0) * 100, 1)), t["dev_ev"].format(f=f"{d1:%d/%m}", t=f"{d2:%d/%m}", n=_f(H["events"]), h=_f(H["hours"], 1))]
+    if not site:
+        worst = [r for r in sorted(D["byLoc"], key=lambda r: -r["down"]) if r["down"]][:5]
+        if worst:
+            L.append(t["dev_loc"].format(x=", ".join(f"{r['k'].replace('Branch ', '')} ({r['down']})" for r in worst)))
+    for x in D["down"][:n_down]:
+        L.append(t["dev_line"].format(name=x["name"], loc=x["loc"], h=_dur(x["ageH"] or 0)))
+    if len(D["down"]) > n_down:
+        L.append(t["tk_more"].format(n=len(D["down"]) - n_down).replace("tiket", "perangkat"))
+    return L
+
+
+def _area_summary(db: Session, cfg: Config, scope: str, day: date | None, kind: str, site: str, tk_max: int, f_max: int) -> str:
+    """Summary of one area (CCTV, WiFi, Zabbix devices, or links and web availability), for all branches or one branch."""
+    from .calc import cctv as CCTV, devices as DEV, kuma as KUMA, wifi as WIFI
+    t = TXT["id"]
+    now = cfg.now()
+    a, b, label = _window(cfg, scope, day)
+    end = min(b, now)
+    head = t["title"] + " · " + t["n_" + kind]
+    if a >= now:
+        return f"{head}\n{label}\n\n{t['not_started']}"
+    live = b > now
+    d1, d2 = a.date(), (end - timedelta(seconds=1)).date()
+    n_dev = min(10, max(3, tk_max))
+    L = _head_lines(cfg, t, head, a, b, end, now, label, live, scope)
+    L.insert(1, t["branch"].format(x=site or t["all_branches"]))
+    status, body = [], []
+    if kind in ("cctv", "device"):
+        zk = "CCTV" if kind == "cctv" else ""
+        D = DEV.build(db, cfg, site, zk, "", down_all=True)
+        H = DEV.history(db, cfg, d1, d2, site, zk)
+        n = D["all"]["down"]
+        if kind == "cctv" and not site:
+            M_ = CCTV.build(db, cfg, full=False)
+            bad_srv = M_["srv"]["failed"]
+            if M_["total"]:
+                body.append(t["ms_tot"].format(t=_f(M_["total"]), r=_f(M_["recording"]), s=M_["srv"]["ok"], n=M_["srv"]["total"]) + (t["ms_fail"].format(x=", ".join(bad_srv)) if bad_srv else ""))
+                if M_["pa"]["total"]:
+                    body.append(t["ms_pa"].format(t=M_["pa"]["total"], d=M_["pa"]["down"]))
+            status.append(t["st_srv"].format(s=t["ok"] if not bad_srv else t["srv_warn"].format(n=len(bad_srv))))
+        status.insert(0, t["st_" + kind].format(s=t["dev_warn"].format(n=n) if n else t["ok"]))
+        body += _dev_lines(t, D, H, d1, d2, site, n_dev)
+        if kind == "device" and D["byKind"]:
+            body.insert(1, t["dev_kind"].format(x=", ".join(f"{r['k']} {r['down']}/{r['total']}" for r in D["byKind"])))
+    elif kind == "wifi":
+        W = WIFI.build(db, cfg, site=site, unlimited=True)
+        off = W["apTotal"] - W["apOnline"]
+        status.append(t["st_wifi"].format(s=t["ap_warn"].format(n=off) if off else t["ok"]))
+        if not W["apTotal"]:
+            body.append(t["wifi_none"])
+        else:
+            body.append(t["wifi_ap"].format(o=W["apOnline"], t=W["apTotal"], f=off))
+            body.append(t["wifi_cl"].format(c=_f(W["total"]), u=_f(W["users"]), w=_f(W["weak"]), r=W["weakAt"]))
+            if not site:
+                worst = [r for r in W["byLocAp"] if r["apTotal"] - r["apOnline"] > 0][:6]
+                if worst:
+                    body.append(t["wifi_loc"].format(x=", ".join(f"{r['k'].replace('Branch ', '')} ({r['apTotal'] - r['apOnline']}/{r['apTotal']})" for r in worst)))
+            for x in W["apDown"][:n_dev]:
+                body.append(t["wifi_line"].format(name=x["name"], zone=x["zone"] or "-"))
+            if len(W["apDown"]) > n_dev:
+                body.append(t["tk_more"].format(n=len(W["apDown"]) - n_dev).replace("tiket", "AP"))
+    else:
+        net, n_links = _net_lines(db, t, a, end, site)
+        K = KUMA.build(db, cfg, d1, d2, site)
+        n_web = K["down"] if K["configured"] and K["total"] else 0
+        status.append(t["st_link"].format(s=t["link_warn"].format(n=n_links, w=n_web) if (n_links or n_web) else t["ok"]))
+        body += net
+        if K["configured"] and K["total"]:
+            body.append(t["kuma"].format(t=K["total"], d=K["down"], a=_f((K["avail"] or 0) * 100, 2) if K["avail"] is not None else "-"))
+            for m in [m for m in K["mons"] if m["status"] == 0][:n_dev]:
+                body.append(t["kuma_line"].format(name=m["name"], loc=m["loc"]))
+        else:
+            body.append(t["kuma_none"])
+    L += [t["s_status"]] + status + ["", t["s_mon"]] + body + _findings_lines(db, t, a, end, AREA_FINDINGS[kind], site, f_max)
+    return "\n".join(L + _link_lines(cfg, t, scope, day, kind, site, now))
 
 
 LEVELS = [(15, 8), (10, 6), (6, 4), (3, 3), (0, 2), (0, 0)]       # (tickets listed, findings listed): what is dropped first when a message has to fit a limit
@@ -870,6 +989,8 @@ def _summary(db: Session, cfg: Config, scope: str, day: date | None, kind: str, 
     kind = kind if kind in SUMMARY_KINDS else "full"
     if kind == "eos":
         return _eos_summary(db, cfg, scope, day, site, tk_max, f_max)
+    if kind in AREA_KINDS:
+        return _area_summary(db, cfg, scope, day, kind, site, tk_max, f_max)
     t = TXT["id"]
     now = cfg.now()
     a, b, label = _window(cfg, scope, day)

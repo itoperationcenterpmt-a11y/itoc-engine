@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Handover, Insight, User
 from ..security import current_user, can_see, rate_limit, require_admin, effective_site
-from ..insight import shift_summary, summary_windows as shift_summary_windows
+from ..insight import SITE_KINDS, SUMMARY_KINDS, shift_summary, summary_windows as shift_summary_windows
 from ..store import audit, bump_data, load_config
 
 router = APIRouter(prefix="/api/insights", tags=["insight"])
@@ -96,13 +96,24 @@ def run_now(db: Session = Depends(get_db), user: User = Depends(require_admin)):
     return r
 
 
+@router.get("/commands", dependencies=[Depends(rate_limit("inscmd", 60, 60))])
+def commands_list(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """The chat commands that are listed in /help (name, aliases, help line)."""
+    if not can_see(user, "insight"):
+        raise HTTPException(403, "This account has no access to Insights")
+    from .. import commands
+    return {"commands": commands.catalog(load_config(db), lambda m: can_see(user, m))}
+
+
 @router.get("/command", dependencies=[Depends(rate_limit("inscmd", 60, 60))])
 def command(text: str = "/help", format: str = "text", db: Session = Depends(get_db), user: User = Depends(current_user)):
     """A chat command (/fullday, /fullday-261101, /pagi, /noc, /soc, /eos-parepare, /help) answered with the message to send back. A wrong command answers with the list of commands."""
     if not can_see(user, "insight"):
         raise HTTPException(403, "This account has no access to Insights")
     from .. import commands
-    out = commands.run(db, load_config(db), text[:200], effective_site(user, db))
+    out = commands.run(db, load_config(db), text[:200], effective_site(user, db), lambda m: can_see(user, m))
+    audit(db, user.username, "Chat command " + " ".join(text[:80].split()), {"via": "API key" if getattr(user, "is_api", False) else "session", "answer": out.splitlines()[0][:60] if out else ""})
+    db.commit()
     return Response(content=out, media_type="text/plain; charset=utf-8") if format == "text" else {"text": out}
 
 
@@ -114,12 +125,18 @@ def summary(scope: str = "duty", day: date | None = None, kind: str = "full", si
     cfg = load_config(db)
     if scope not in {w["key"] for w in shift_summary_windows(cfg)}:
         raise HTTPException(422, "Unknown summary period")
-    if kind not in ("full", "noc", "soc", "eos"):
+    if kind not in SUMMARY_KINDS:
         raise HTTPException(422, "Unknown summary type")
+    from ..commands import kind_allowed
+    if not kind_allowed(kind, lambda m: can_see(user, m)):
+        raise HTTPException(403, "This account has no access to this summary type")
     site = effective_site(user, db) or site
     if site and site not in cfg.sites:
         raise HTTPException(422, "Unknown branch")
-    text = shift_summary(db, cfg, None, scope, day, kind, site if kind == "eos" else "", max(0, min(3000 if max_chars is None and format == "text" else (max_chars or 0), 60000)))
+    if getattr(user, "is_api", False):                          # a scheduler or bot pulling a report is recorded; people using the page are not
+        audit(db, user.username, f"Pulled shift summary {kind} ({scope})", {"day": str(day or ""), "site": site if kind in SITE_KINDS else ""})
+        db.commit()
+    text = shift_summary(db, cfg, None, scope, day, kind, site if kind in SITE_KINDS else "", max(0, min(3000 if max_chars is None and format == "text" else (max_chars or 0), 60000)))
     if format == "text":                                        # for senders that put the whole response in a message (a WhatsApp scheduler)
         return Response(content=text, media_type="text/plain; charset=utf-8")
     return {"text": text}
