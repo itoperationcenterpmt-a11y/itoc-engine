@@ -112,6 +112,8 @@ def command(text: str = "/help", format: str = "text", db: Session = Depends(get
         raise HTTPException(403, "This account has no access to Insights")
     from .. import commands
     out = commands.run(db, load_config(db), text[:200], effective_site(user, db), lambda m: can_see(user, m))
+    audit(db, user.username, "Chat command " + " ".join(text[:80].split()), {"via": "API key" if getattr(user, "is_api", False) else "session", "answer": out.splitlines()[0][:60] if out else ""})
+    db.commit()
     return Response(content=out, media_type="text/plain; charset=utf-8") if format == "text" else {"text": out}
 
 
@@ -131,6 +133,9 @@ def summary(scope: str = "duty", day: date | None = None, kind: str = "full", si
     site = effective_site(user, db) or site
     if site and site not in cfg.sites:
         raise HTTPException(422, "Unknown branch")
+    if getattr(user, "is_api", False):                          # a scheduler or bot pulling a report is recorded; people using the page are not
+        audit(db, user.username, f"Pulled shift summary {kind} ({scope})", {"day": str(day or ""), "site": site if kind in SITE_KINDS else ""})
+        db.commit()
     text = shift_summary(db, cfg, None, scope, day, kind, site if kind in SITE_KINDS else "", max(0, min(3000 if max_chars is None and format == "text" else (max_chars or 0), 60000)))
     if format == "text":                                        # for senders that put the whole response in a message (a WhatsApp scheduler)
         return Response(content=text, media_type="text/plain; charset=utf-8")

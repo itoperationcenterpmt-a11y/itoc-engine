@@ -7,13 +7,14 @@ Bentuk model (aman untuk JSON):
   chart = {"title", "kind": bar | stack | hbar | donut | line, "labels": [..], "series": [{"name","values"}]}; charts[0] = grafik utama (dipakai di Summary)
   table = {"title","heads","kinds","rows"}
   kind angka: n = bulat, f0/f1/f2 = desimal, p0/p1/p2 = persen dari pecahan, t = teks."""
+import re
 from datetime import datetime, timedelta
 from . import views as VW
 from .calc import soc as SOC, soc_fw as SOCFW, servicedesk as SD
 from .security import can_see
 
 PERM = {"performance": "servicedesk"}                                   # sections that share the access of another module
-SECTIONS = [("servicedesk", "Ticketing"), ("performance", "Performance"), ("noc", "Networking (PRTG)"), ("kuma", "Link / Web Availability"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("wifi", "WiFi (Ruckus)"), ("internet", "Internet Usage")]
+SECTIONS = [("servicedesk", "Ticketing"), ("performance", "Performance"), ("noc", "Networking (PRTG)"), ("kuma", "Link / Web Availability"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("cctv", "CCTV (Milestone + Zabbix)"), ("wifi", "WiFi (Ruckus)"), ("internet", "Internet Usage")]
 WEEKLY_AFTER = 31  # rentang harian lebih panjang dari ini diringkas per minggu (sama dengan dashboard Excel)
 _UK = {"type": "Threat type", "action": "Action", "severity": "Severity"}
 
@@ -541,6 +542,90 @@ def _kuma(db, cfg, f, preset="standar"):
     return s
 
 
+CCTV_IDS = ["cctv_zbx", "cctv_rec", "cctv_down_loc", "cctv_norec_srv", "cctv_h_daily", "cctv_h_events"]
+
+
+def _cctv(db, cfg, f, preset="standar"):
+    """CCTV in one report: the cameras and servers of Milestone together with the CCTV devices of Zabbix, per location, with the period history from Zabbix."""
+    from .calc import cctv as CCTV, devices as DEV
+    from .calc.network import site_resolver
+    every = preset == "lengkap"
+    s = {"key": "cctv", "title": "CCTV (Milestone + Zabbix)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    to_site, names = site_resolver(db), {}
+    for st in db.query(VW.M.Site).filter_by(active=True):
+        for nm in VW.NET.device_names(db, st.name):
+            names.setdefault(nm, st.name)
+
+    def server_site(n):
+        """A Milestone server name ("Tj-Emas", "Jamrud", "HO-Interconnect") to a location: the site names and aliases first, then a name that appears in exactly one alias."""
+        q = re.sub(r"[\s\-_]+", " ", (n or "").lower()).strip()
+        w = q.split()
+        hit = to_site(n, q, " ".join(w[:2]), w[0] if w else "")
+        if hit:
+            return hit
+        part = {st for nm, st in names.items() if q and (q in nm or nm.startswith(w[0] if w else "#"))}
+        return next(iter(part)) if len(part) == 1 else "Unmapped"
+    Mi = CCTV.build(db, cfg, full=True)
+    D = DEV.build(db, cfg, f.site, "CCTV", "", down_all=every)
+    H = DEV.history(db, cfg, f.d_from, f.d_to, f.site, "CCTV", every=every)
+    cams = [c for c in Mi["list"] if c["type"] != "pa" and (not f.site or server_site(c["server"]) == f.site)] if Mi["configured"] else []
+    srvs = [x for x in Mi["servers"] if not f.site or server_site(x["name"]) == f.site] if Mi["configured"] else []
+    A = D["all"]
+    if not cams and not A["total"]:
+        s["notes"].append("No CCTV data" + (f" for {f.site}" if f.site else "") + " yet: Milestone and the Zabbix CCTV devices have not reported." + (" Milestone: " + Mi["error"] if Mi.get("error") else ""))
+        return s
+    s["notes"].append("Milestone shows the cameras and recording as of the last sync; the Zabbix CCTV devices show the status now, and incidents and downtime follow the report period" + (" (recorded since " + H["since"][:10] + ")" if H.get("since") else "")
+                      + ". Milestone servers are matched to a location by name.")
+    en, rec = [c for c in cams if c["enabled"]], [c for c in cams if c["rec"]]
+    norec = [c for c in en if not c["rec"]]
+    zdown = [c for c in cams if c["zbx"] == "down"]
+    ok_srv = sum(1 for x in srvs if x["name"] not in Mi["serverErrors"])
+    s["kpis"] = [_kpi("Cameras (Milestone)", len(cams), "n", f"{fmt_n(sum(1 for c in cams if c['type'] == 'ptz'))} PTZ, {fmt_n(sum(1 for c in cams if c['type'] == 'fix'))} fixed"),
+                 _kpi("Recording", len(rec), "n", fmt_p(len(rec) / len(en), 1) + " of the enabled cameras" if en else ""), _kpi("Enabled but not recording", len(norec), "n", "Milestone"),
+                 _kpi("Milestone servers syncing", ok_srv, "n", f"of {fmt_n(len(srvs))}"), _kpi("CCTV devices (Zabbix)", A["total"], "n", f"{fmt_n(A['down'])} down now"),
+                 _kpi("Availability now", A["avail"], "p2", "online ÷ (online + down)")]
+    s["kpis"] += [_kpi("Down incidents (period)", H["events"], "n", "Zabbix CCTV devices"), _kpi("Period downtime (hours)", H["hours"], "f0", fmt_n(H["hosts"]) + " devices affected"),
+                  _kpi("Average recovery (hours)", H["mttr"], "f1", "resolved incidents"), _kpi("Period availability", H["avail"], "p2", "1 − downtime ÷ (devices × period)")]
+    # per location: Milestone cameras by the location of their server, Zabbix devices by their own location
+    loc = {}
+    for c in cams:
+        o = loc.setdefault(server_site(c["server"]), {"cam": 0, "rec": 0, "norec": 0, "zdev": 0, "zdown": 0})
+        o["cam"] += 1
+        o["rec"] += 1 if c["rec"] else 0
+        o["norec"] += 1 if (c["enabled"] and not c["rec"]) else 0
+    for r in D["byLoc"]:
+        o = loc.setdefault(r["k"], {"cam": 0, "rec": 0, "norec": 0, "zdev": 0, "zdown": 0})
+        o["zdev"], o["zdown"] = r["total"], r["down"]
+    rows = sorted(loc.items(), key=lambda kv: (-kv[1]["zdown"], -kv[1]["norec"], kv[0]))
+    by_srv = sorted(((x["name"], x["cameras"] - x["rec"]) for x in srvs), key=lambda r: -r[1])
+    s["charts"] = _pick(cfg, "cctv", CCTV_IDS, preset, [
+        _chart("Zabbix CCTV device status", ["Online", "Down", "Interface", "Maintenance"], [{"name": "Devices", "values": [A["up"], A["down"], A["deg"], A["maint"]]}], "donut") if A["total"] else None,
+        _chart("Milestone recording", ["Recording", "Enabled, not recording", "Disabled"], [{"name": "Cameras", "values": [len(rec), len(norec), len(cams) - len(en)]}], "donut") if cams else None,
+        _top("Top 10 locations by CCTV devices down", [(k, o["zdown"]) for k, o in rows], "Down"),
+        _top("Top 10 servers by cameras not recording", by_srv, "Cameras"),
+        _daily("CCTV downtime of all devices (hours)", [x["date"] for x in H["daily"]], [{"name": "Hours", "values": [x["hours"] for x in H["daily"]]}]),
+        _daily("CCTV down incidents", [x["date"] for x in H["daily"]], [{"name": "Incidents", "values": [x["events"] for x in H["daily"]]}])])
+    s["tables"].append(_table("Per location (Milestone + Zabbix)", ["Location", "Cameras", "Recording", "Not recording", "Zabbix devices", "Down now", "Availability"], ["t", "n", "n", "n", "n", "n", "p1"],
+                              [[k, o["cam"], o["rec"], o["norec"], o["zdev"], o["zdown"], 1 - o["zdown"] / o["zdev"] if o["zdev"] else None] for k, o in _cap(rows, preset, 25)]))
+    s["tables"].append(_table("Milestone servers", ["Server", "Location", "Cameras", "Recording", "Not recording", "Down (Zabbix)", "Licences used", "Sync"], ["t", "t", "n", "n", "n", "n", "t", "t"],
+                              [[x["name"], server_site(x["name"]), x["cameras"], x["rec"], x["cameras"] - x["rec"], x["down"], f"{x['licUsed']}/{x['licTotal']}" if x.get("licTotal") else "–", "failed" if x["name"] in Mi["serverErrors"] else "ok"] for x in srvs]))
+    s["tables"].append(_table("CCTV devices down (Zabbix)", ["Device", "Location", "Down for (h)", "Problem"], ["t", "t", "f1", "t"], [[x["name"], x["loc"], x["ageH"], x.get("problem")] for x in _cap(D["down"], preset, 30)]))
+    s["tables"].append(_table("Cameras down in Zabbix (matched in Milestone)", ["Camera", "Server", "Hardware", "IP", "Down since", "Problem"], ["t", "t", "t", "t", "t", "t"],
+                              [[c["name"], c["server"], c["hw"], c["ip"], datetime.utcfromtimestamp(c["zsince"] / 1000).strftime("%d/%m %H.%M") if c["zsince"] else "–", c["zprob"]] for c in _cap(zdown, preset, 25)]))
+    s["tables"].append(_table("Cameras enabled but not recording (Milestone)", ["Camera", "Server", "Hardware", "IP", "Zabbix"], ["t", "t", "t", "t", "t"], [[c["name"], c["server"], c["hw"], c["ip"], c["zbx"] or "–"] for c in _cap(norec, preset, 25)]))
+    s["tables"].append(_table("Downtime per location (period)", ["Location", "Incidents", "Downtime (h)", "Devices", "Availability"], ["t", "n", "f1", "n", "p1"], [[r["k"], r["events"], r["hours"], r["hosts"], r["avail"]] for r in H["byLoc"]]))
+    s["tables"].append(_table("Most frequently down CCTV devices (period)", ["Device", "Incidents", "Downtime (h)"], ["t", "n", "f1"], [[r["k"], r["events"], r["hours"]] for r in H["byHost"]]))
+    if A["down"]:
+        s["attention"].append(f"{A['down']} CCTV devices down in Zabbix, {D['chronic']} of them over {D['chronicDays']} days")
+    if norec:
+        s["attention"].append(f"{len(norec)} cameras are enabled but not recording in Milestone")
+    if Mi["srv"]["failed"] and not f.site:
+        s["attention"].append("Milestone servers that failed to sync: " + ", ".join(Mi["srv"]["failed"]))
+    if any(server_site(x["name"]) == "Unmapped" for x in srvs):
+        s["attention"].append("Some Milestone servers do not match a location (add the server name as a site alias)")
+    return s
+
+
 def _wifi(db, cfg, f, preset="standar"):
     """Client WiFi aktif dan Access Point dari Ruckus vSZ: kondisi terkini saat laporan dibuat; usage = trafik sesi yang sedang berjalan."""
     from .calc import wifi as WIFI
@@ -648,7 +733,7 @@ def _internet(db, cfg, f, preset="standar"):
     return s
 
 
-_BUILD = {"servicedesk": _servicedesk, "performance": _performance, "internet": _internet, "kuma": _kuma, "noc": _noc, "soc": _soc, "devices": _devices, "wifi": _wifi, "xdr": _xdr}
+_BUILD = {"servicedesk": _servicedesk, "performance": _performance, "internet": _internet, "kuma": _kuma, "noc": _noc, "soc": _soc, "devices": _devices, "cctv": _cctv, "wifi": _wifi, "xdr": _xdr}
 
 # Jenis laporan (bisa diubah di Admin → Operasional → Target dan Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
@@ -659,6 +744,7 @@ DEFAULT_KINDS = {
     "servicedesk": {"label": "Ticketing", "desc": "Tickets received, SLA, categories, technician ranking, open tickets", "title": "IT Operation Center - Ticketing Report", "subtitle": "ManageEngine service desk performance", "prefix": "Ticketing", "sections": ["servicedesk"]},
     "xdr": {"label": "XDR (Trend Micro)", "desc": "Vision One alerts: severity, detection models, status, backlog", "title": "IT Operation Center - XDR (Trend Micro) Report", "subtitle": "Vision One Workbench alerts", "prefix": "XDR", "sections": ["xdr"]},
     "devices": {"label": "Devices", "desc": "Zabbix device status: category, type, location, devices down", "title": "IT Operation Center - Devices Report", "subtitle": "Device status from Zabbix", "prefix": "Devices", "sections": ["devices"]},
+    "cctv": {"label": "CCTV (Milestone + Zabbix)", "desc": "Cameras, recording, and servers from Milestone together with the CCTV devices of Zabbix, per location", "title": "IT Operation Center - CCTV Report", "subtitle": "Milestone cameras and Zabbix CCTV devices", "prefix": "CCTV", "sections": ["cctv"]},
     "wifi": {"label": "WiFi (Ruckus)", "desc": "Active clients, Access Points, usage per SSID and AP", "title": "IT Operation Center - WiFi (Ruckus) Report", "subtitle": "Clients and Access Points from Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
     "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links, WiFi, internet usage, and link / web availability together", "title": "IT Operation Center - Network Report", "subtitle": "ISP links, WiFi, internet usage, and web availability", "prefix": "Network", "sections": ["noc", "wifi", "internet", "kuma"]},
     "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Palo Alto NDR and Trend Micro XDR together", "title": "IT Operation Center - Cyber Security Report", "subtitle": "Palo Alto NDR and Trend Micro XDR", "prefix": "Cyber", "sections": ["soc", "xdr"]},
@@ -668,7 +754,7 @@ DEFAULT_KINDS = {
 }
 
 
-_ORDER = ["summary", "network", "cyber", "servicedesk", "performance", "noc", "wifi", "internet", "kuma", "soc", "xdr", "devices", "full"]
+_ORDER = ["summary", "network", "cyber", "servicedesk", "performance", "noc", "wifi", "internet", "kuma", "soc", "xdr", "devices", "cctv", "full"]
 DEFAULT_KINDS = {k: DEFAULT_KINDS[k] for k in _ORDER}
 
 

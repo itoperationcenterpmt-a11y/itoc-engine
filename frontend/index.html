@@ -328,6 +328,9 @@ table.rt td.cut{white-space:normal;overflow:visible}
 .btn.ghost:hover{background:var(--wash);filter:none}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between}
 .formbox{background:var(--sunken);border-radius:8px;padding:12px}
+.pwdlg{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);padding:20px 22px;width:min(400px,92vw)}
+.pwdlg::backdrop{background:rgba(0,0,0,.5)}
+.pwdlg h3{margin:0 0 4px;font-size:calc(17px*var(--fs))}.pwdlg .fld{margin:10px 0;display:flex;flex-direction:column;gap:4px}.pwdlg .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 .form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 12px}
 .fld{display:flex;flex-direction:column;gap:3px;min-width:0}
 .fld.wide,.acts.wide{grid-column:1/-1}
@@ -610,6 +613,17 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
 </head>
 <body>
 <div id="login" hidden></div>
+<dialog id="dlgPw" class="pwdlg" aria-labelledby="pwTitle">
+  <form id="pwSelf" autocomplete="off">
+    <h3 id="pwTitle">Change my password</h3>
+    <span class="sub" id="pwHint"></span>
+    <div class="fld"><label for="spOld">Current password</label><input type="password" id="spOld" autocomplete="current-password" required></div>
+    <div class="fld"><label for="spNew">New password</label><input type="password" id="spNew" autocomplete="new-password" required></div>
+    <div class="fld"><label for="spNew2">Repeat new password</label><input type="password" id="spNew2" autocomplete="new-password" required></div>
+    <span class="msg" id="spMsg" role="alert"></span>
+    <div class="acts"><button type="button" class="btn ghost" data-pwclose>Cancel</button><button type="submit" class="btn">Save password</button></div>
+  </form>
+</dialog>
 <div id="app" class="shell" hidden>
 <aside class="side">
   <div class="brand brand-tera"><img class="g2" src="assets/tera-icon-rev.png" alt="TERA"><div class="bt"><h1 class="brandName"><span class="b1">TERA</span></h1><span class="bprod">Dashboard</span><span class="bby">by IT Operation Center</span></div><button class="railbtn" id="railBtn" type="button" aria-label="Menu">‹</button></div>
@@ -617,7 +631,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
   <button class="more" id="moreBtn" type="button" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Menu</span></button>
   <div class="side-foot">
     <span id="duty"></span>
-    <div class="who"><span class="av" id="av"></span><div class="who-t"><div id="me"></div><small id="role"></small></div><div class="side-act"><button class="iconbtn" id="theme" type="button" aria-label="Switch light or dark theme" title="Light or dark theme">◐</button><button class="iconbtn" id="logout" type="button" aria-label="Sign out" title="Sign out">⏻</button></div></div>
+    <div class="who"><span class="av" id="av"></span><div class="who-t"><div id="me"></div><small id="role"></small></div><div class="side-act"><button class="iconbtn" id="theme" type="button" aria-label="Switch light or dark theme" title="Light or dark theme">◐</button><button class="iconbtn" id="pwOpen" type="button" aria-label="Change password" title="Change my password">🔑</button><button class="iconbtn" id="logout" type="button" aria-label="Sign out" title="Sign out">⏻</button></div></div>
   </div>
 </aside>
 <div class="main">
@@ -649,7 +663,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
   </div>
 </div>
 </div>
-<div id="sheet" hidden><div class="sheet-bg" data-close-sheet></div><div class="sheet-box" role="dialog" aria-label="All menu"><div class="sheet-h"><b>All menu</b><button type="button" class="iconbtn" data-close-sheet>Close</button></div><div class="sheet-g" id="sheetGrid"></div><div class="sheet-f"><button class="iconbtn" id="themeS" type="button">◐ Theme</button><button class="iconbtn" id="logoutS" type="button">Sign out</button></div></div></div>
+<div id="sheet" hidden><div class="sheet-bg" data-close-sheet></div><div class="sheet-box" role="dialog" aria-label="All menu"><div class="sheet-h"><b>All menu</b><button type="button" class="iconbtn" data-close-sheet>Close</button></div><div class="sheet-g" id="sheetGrid"></div><div class="sheet-f"><button class="iconbtn" id="themeS" type="button">◐ Theme</button><button class="iconbtn" id="pwOpenS" type="button">Change password</button><button class="iconbtn" id="logoutS" type="button">Sign out</button></div></div></div>
 <div id="tip" hidden></div>
 <script src="core.js"></script>
 <script src="views.js"></script>
