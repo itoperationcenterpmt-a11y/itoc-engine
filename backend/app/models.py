@@ -46,6 +46,7 @@ class Role(Base):
     __tablename__ = "role"
     key: Mapped[str] = mapped_column(String(40), primary_key=True)
     label: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str | None] = mapped_column(String(300))               # siapa yang memakai role ini, tampil di Admin
     modules: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)  # ["*"] = semua
     can_write: Mapped[bool] = mapped_column(Boolean, default=True)           # serah terima, unggah
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -66,6 +67,7 @@ class User(Base):
     must_change_pw: Mapped[bool] = mapped_column(Boolean, default=True)
     last_login: Mapped[datetime | None] = mapped_column(DateTime)
     site: Mapped[str | None] = mapped_column(String(120))  # untuk role EOS: batasi ke branch sendiri
+    profile: Mapped[str] = mapped_column(String(40), default="default", server_default="default")   # chosen dashboard profile
     role: Mapped[Role] = relationship(lazy="joined")
 
 
@@ -77,6 +79,8 @@ class Site(Base):
     aliases: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort: Mapped[int] = mapped_column(Integer, default=0)
+    lat: Mapped[float | None] = mapped_column(Float)    # koordinat untuk peta Devices (opsional)
+    lon: Mapped[float | None] = mapped_column(Float)
 
 
 class Shift(Base):
@@ -149,9 +153,20 @@ class Widget(Base):
     sort: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class LayoutProfile(Base):
+    """Dashboard profile: a named set of page layouts (for example NOC wall, Management). Each user picks one; Super Admin edits them with Customize."""
+    __tablename__ = "layout_profile"
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str | None] = mapped_column(String(200))
+    builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Layout(Base):
-    """Tata letak halaman dashboard (Overview, Service Desk, NOC, SOC): urutan, ukuran, judul, tampil/sembunyi tiap blok. Diatur lewat tombol Customize."""
+    """Page layout (Overview, Ticketing, ...) inside one profile: order, size, title, and show/hide of each block. Edited with the Customize button."""
     __tablename__ = "layout"
+    profile: Mapped[str] = mapped_column(String(40), primary_key=True, default="default")
     page: Mapped[str] = mapped_column(String(40), primary_key=True)
     role: Mapped[str] = mapped_column(String(40), primary_key=True, default="")   # "" = berlaku untuk semua role
     key: Mapped[str] = mapped_column(String(80), primary_key=True)                 # kunci blok (dari judul bawaan)
@@ -321,9 +336,9 @@ class AuditLog(Base):
 # tabel master yang boleh di-CRUD dari menu Admin (urutan = urutan tampil)
 MASTER = {
     "site": (Site, "Lokasi"), "person": (Person, "Personel"), "team": (Team, "Tim"), "shift": (Shift, "Shift"),
-    "isp": (Isp, "ISP"), "sla_target": (SlaTarget, "Target SLA"), "prtg_sensor": (PrtgSensor, "Sensor & kapasitas"),
-    "module": (Module, "Modul / menu"), "widget": (Widget, "Widget grafik"), "role": (Role, "Role & akses"), "formula": (Formula, "Definisi rumus"),
-    "data_source": (DataSource, "Sumber data"),
+    "isp": (Isp, "ISP"), "sla_target": (SlaTarget, "Target SLA"), "prtg_sensor": (PrtgSensor, "Sensor dan Kapasitas"),
+    "module": (Module, "Menu"), "widget": (Widget, "Widget"), "role": (Role, "Role"), "formula": (Formula, "Rumus"),
+    "data_source": (DataSource, "Sumber Data"),
 }
 
 
@@ -352,6 +367,20 @@ class ApiKey(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class ShareLink(Base):
+    """A report link that works without signing in for at most 3 days: only the hash of the token is stored, plus what to build (spec) and whose rights apply (created_by)."""
+    __tablename__ = "share_link"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_by: Mapped[str] = mapped_column(String(60))
+    spec: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    downloads: Mapped[int] = mapped_column(Integer, default=0)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class Webhook(Base):
     """Tujuan notifikasi (Teams, Slack, Telegram, JSON umum). URL dienkripsi karena memuat token."""
     __tablename__ = "webhook"
@@ -373,8 +402,265 @@ class ZbxHost(Base):
     kind: Mapped[str] = mapped_column(String(40), default="")          # CCTV | OPERASIONAL (dari prefix host group)
     code: Mapped[str] = mapped_column(String(40), default="")          # kode lokasi dari nama grup, mis. JNR
     group_name: Mapped[str] = mapped_column(String(255), default="")
+    zone: Mapped[str] = mapped_column(String(40), default="")          # dari nama host: Entitas-Cabang-Zona-SubZona-KodePerangkat-Urut
+    subzone: Mapped[str] = mapped_column(String(80), default="")
+    dev_code: Mapped[str] = mapped_column(String(20), default="")
+    ip: Mapped[str] = mapped_column(String(45), default="", server_default="", index=True)   # first interface address (used to match Milestone cameras)
     groups: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    lat: Mapped[float | None] = mapped_column(Float)                   # host inventory location (Zabbix), drives the Devices map
+    lon: Mapped[float | None] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(20), default="up")      # up | down | maintenance | disabled
     down_since: Mapped[datetime | None] = mapped_column(DateTime)
     problem: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+class ZbxLocMap(Base):
+    """Pemetaan kode lokasi di nama host group Zabbix (mis. TJE, BLW) ke nama lokasi di master Lokasi. Kode baru terisi otomatis saat sinkron; Admin tinggal mengisi lokasinya."""
+    __tablename__ = "zbx_loc_map"
+    code: Mapped[str] = mapped_column(String(40), primary_key=True)
+    site: Mapped[str | None] = mapped_column(String(120))
+    note: Mapped[str | None] = mapped_column(String(200))
+
+
+MASTER["zbx_loc"] = (ZbxLocMap, "Kode Lokasi Zabbix")
+
+class DevCode(Base):
+    """Kamus kode perangkat pada nama host (mis. CFIX = CCTV Fixed). Kode baru terdaftar otomatis saat sinkron; Admin mengisi labelnya."""
+    __tablename__ = "dev_code"
+    code: Mapped[str] = mapped_column(String(20), primary_key=True)
+    label: Mapped[str | None] = mapped_column(String(80))
+    note: Mapped[str | None] = mapped_column(String(200))
+
+
+MASTER["dev_code"] = (DevCode, "Kode Perangkat")
+class WifiClient(Base):
+    """Client WiFi yang sedang terhubung menurut Ruckus SmartZone (vSZ): snapshot dari sinkron terakhir."""
+    __tablename__ = "wifi_client"
+    mac: Mapped[str] = mapped_column(String(20), primary_key=True)
+    ip: Mapped[str | None] = mapped_column(String(64))
+    username: Mapped[str | None] = mapped_column(String(160))
+    hostname: Mapped[str | None] = mapped_column(String(160))
+    ssid: Mapped[str | None] = mapped_column(String(120))
+    ap_name: Mapped[str | None] = mapped_column(String(160))
+    ap_mac: Mapped[str | None] = mapped_column(String(20))
+    zone: Mapped[str | None] = mapped_column(String(120))
+    os: Mapped[str | None] = mapped_column(String(120))
+    rssi: Mapped[int | None] = mapped_column(Integer)
+    vlan: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    rx_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    tx_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    raw: Mapped[dict | None] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+class KumaMonitor(Base):
+    """Uptime Kuma monitor: the latest status as read from its /metrics page (key = name|type)."""
+    __tablename__ = "kuma_monitor"
+    key: Mapped[str] = mapped_column(String(240), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    type: Mapped[str | None] = mapped_column(String(30))
+    url: Mapped[str | None] = mapped_column(String(300))
+    hostname: Mapped[str | None] = mapped_column(String(200))
+    port: Mapped[str | None] = mapped_column(String(10))
+    status: Mapped[int] = mapped_column(SmallInteger, default=1)          # 0 down, 1 up, 2 pending, 3 maintenance
+    response_ms: Mapped[float | None] = mapped_column(Float)
+    cert_days: Mapped[int | None] = mapped_column(Integer)
+    updated_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class KumaHourly(Base):
+    """Uptime Kuma samples per monitor and hour: how many samples, how many were down, and the response times. Availability = 1 - down / samples."""
+    __tablename__ = "kuma_hourly"
+    monitor_key: Mapped[str] = mapped_column(String(240), primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, primary_key=True)      # start of the hour
+    samples: Mapped[int] = mapped_column(Integer, default=0)
+    down: Mapped[int] = mapped_column(Integer, default=0)
+    sum_ms: Mapped[float] = mapped_column(Float, default=0)
+    n_ms: Mapped[int] = mapped_column(Integer, default=0)
+    max_ms: Mapped[float | None] = mapped_column(Float)
+    __table_args__ = (Index("ix_kuma_hourly_ts", "ts"),)
+
+
+class WifiAp(Base):
+    """Access Point dari Ruckus vSZ: snapshot status terkini."""
+    __tablename__ = "wifi_ap"
+    mac: Mapped[str] = mapped_column(String(20), primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(160))
+    zone: Mapped[str | None] = mapped_column(String(120))
+    ap_group: Mapped[str | None] = mapped_column(String(120))
+    status: Mapped[str | None] = mapped_column(String(40))
+    model: Mapped[str | None] = mapped_column(String(60))
+    ip: Mapped[str | None] = mapped_column(String(64))
+    clients: Mapped[int | None] = mapped_column(Integer)
+    firmware: Mapped[str | None] = mapped_column(String(60))
+    location: Mapped[str | None] = mapped_column(String(200))
+    last_seen: Mapped[datetime | None] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class WifiStat(Base):
+    """Riwayat per sinkron untuk grafik tren client dan trafik WiFi."""
+    __tablename__ = "wifi_stat"
+    at: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
+    clients: Mapped[int] = mapped_column(Integer, default=0)
+    users: Mapped[int] = mapped_column(Integer, default=0)
+    rx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    tx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    ap_online: Mapped[int] = mapped_column(Integer, default=0)
+    ap_total: Mapped[int] = mapped_column(Integer, default=0)
+
+class WifiSession(Base):
+    """Riwayat sesi client WiFi (satu baris per sesi): dasar laporan per zone, client, SSID, dan rentang waktu. Sesi aktif diperbarui tiap sinkron, sesi selesai dilengkapi dari riwayat vSZ."""
+    __tablename__ = "wifi_session"
+    mac: Mapped[str] = mapped_column(String(20), primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_seen: Mapped[datetime | None] = mapped_column(DateTime)
+    ip: Mapped[str | None] = mapped_column(String(64))
+    username: Mapped[str | None] = mapped_column(String(160))
+    hostname: Mapped[str | None] = mapped_column(String(160))
+    device: Mapped[str | None] = mapped_column(String(80))
+    ssid: Mapped[str | None] = mapped_column(String(120))
+    ap_mac: Mapped[str | None] = mapped_column(String(20))
+    ap_name: Mapped[str | None] = mapped_column(String(160))
+    zone: Mapped[str | None] = mapped_column(String(120))
+    loc: Mapped[str | None] = mapped_column(String(120))
+    auth: Mapped[str | None] = mapped_column(String(60))
+    rx_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    tx_bytes: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class ZbxEvent(Base):
+    """Riwayat kejadian down perangkat dari Zabbix (event problem yang cocok dengan pola down): dasar laporan downtime per lokasi, tipe, dan perangkat."""
+    __tablename__ = "zbx_event"
+    eventid: Mapped[str] = mapped_column(String(20), primary_key=True)
+    hostid: Mapped[str] = mapped_column(String(20), index=True)
+    host_name: Mapped[str | None] = mapped_column(String(255))
+    kind: Mapped[str | None] = mapped_column(String(40))
+    code: Mapped[str | None] = mapped_column(String(40))
+    dev_code: Mapped[str | None] = mapped_column(String(20))
+    name: Mapped[str | None] = mapped_column(String(255))
+    start_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class ZbxStat(Base):
+    """Cuplikan per jam jumlah perangkat menurut kategori dan status (untuk tren availability)."""
+    __tablename__ = "zbx_stat"
+    hour: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(40), primary_key=True)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    up: Mapped[int] = mapped_column(Integer, default=0)
+    down: Mapped[int] = mapped_column(Integer, default=0)
+    degraded: Mapped[int] = mapped_column(Integer, default=0)
+    maintenance: Mapped[int] = mapped_column(Integer, default=0)
+
+class XdrAlert(Base):
+    """Alert Workbench dari Trend Micro Vision One (XDR): satu baris per alert, diperbarui saat statusnya berubah."""
+    __tablename__ = "xdr_alert"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    incident_id: Mapped[str | None] = mapped_column(String(80))
+    model: Mapped[str | None] = mapped_column(String(300))
+    model_type: Mapped[str | None] = mapped_column(String(40))
+    severity: Mapped[str | None] = mapped_column(String(20), index=True)
+    score: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str | None] = mapped_column(String(40))
+    investigation_status: Mapped[str | None] = mapped_column(String(40))
+    provider: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    owners: Mapped[list | None] = mapped_column(JSONB)
+    impact: Mapped[dict | None] = mapped_column(JSONB)
+    indicators: Mapped[list | None] = mapped_column(JSONB)
+    link: Mapped[str | None] = mapped_column(String(600))
+    description: Mapped[str | None] = mapped_column(Text)
+    investigation_result: Mapped[str | None] = mapped_column(String(80))
+    entities: Mapped[list | None] = mapped_column(JSONB)          # host/akun terdampak: [{type, name, ips}]
+    techniques: Mapped[list | None] = mapped_column(JSONB)        # ID teknik MITRE ATT&CK
+    rules: Mapped[list | None] = mapped_column(JSONB)             # nama aturan deteksi yang cocok
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CctvHardware(Base):
+    """Hardware di Milestone XProtect (NVR/interconnect per lokasi): inventaris dari RESTful API, bukan status real-time."""
+    __tablename__ = "cctv_hardware"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    server: Mapped[str] = mapped_column(String(80), default="HO")
+    name: Mapped[str] = mapped_column(String(200))
+    address: Mapped[str | None] = mapped_column(String(300))
+    host: Mapped[str | None] = mapped_column(String(120))
+    model: Mapped[str | None] = mapped_column(String(80))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    recorder: Mapped[str | None] = mapped_column(String(120))
+    cameras: Mapped[int] = mapped_column(Integer, default=0)
+    cameras_enabled: Mapped[int] = mapped_column(Integer, default=0)
+    modified_at: Mapped[datetime | None] = mapped_column(DateTime)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CctvCamera(Base):
+    """Kamera di Milestone XProtect: satu baris per kamera, lokasi dan IP diurai dari nama kamera."""
+    __tablename__ = "cctv_camera"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    server: Mapped[str] = mapped_column(String(80), default="HO")
+    name: Mapped[str] = mapped_column(String(300))
+    location: Mapped[str | None] = mapped_column(String(160))
+    ip: Mapped[str | None] = mapped_column(String(45), index=True)
+    channel: Mapped[int | None] = mapped_column(Integer)
+    hardware_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    hardware: Mapped[str | None] = mapped_column(String(200))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    recording: Mapped[bool] = mapped_column(Boolean, default=False)
+    fps: Mapped[str | None] = mapped_column(String(10))
+    modified_at: Mapped[datetime | None] = mapped_column(DateTime)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Insight(Base):
+    """Temuan analisis otomatis (anomali, tren, kejadian berulang). Kunci unik mencegah duplikat; temuan yang tidak muncul lagi berstatus 'selesai'."""
+    __tablename__ = "insight"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(160))
+    kind: Mapped[str] = mapped_column(String(20))
+    severity: Mapped[str] = mapped_column(String(10))            # info | warn | crit
+    title: Mapped[str] = mapped_column(String(200))
+    detail: Mapped[str] = mapped_column(Text)
+    tab: Mapped[str | None] = mapped_column(String(30))          # halaman rujukan
+    site: Mapped[str | None] = mapped_column(String(120))
+    metric: Mapped[dict | None] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(10), default="new")    # new | read | dismissed | resolved
+    first_seen: Mapped[datetime] = mapped_column(DateTime)
+    last_seen: Mapped[datetime] = mapped_column(DateTime)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    ack_by: Mapped[str | None] = mapped_column(String(60))
+    ack_at: Mapped[datetime | None] = mapped_column(DateTime)
+    notified: Mapped[bool] = mapped_column(Boolean, default=False)
+    reason: Mapped[str | None] = mapped_column(String(200))             # why it was dismissed
+    suppress_until: Mapped[datetime | None] = mapped_column(DateTime)   # a dismissed finding stays hidden until then
+    handover_id: Mapped[int | None] = mapped_column(Integer)            # handover created from this finding
+    __table_args__ = (Index("ix_insight_key_open", "key", "status"),)
+
+
+class SocFwDay(Base):
+    """Palo Alto events per day and firewall (Panorama device name): severity and action counts, traffic."""
+    __tablename__ = "soc_fw_day"
+    day: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    fw: Mapped[str] = mapped_column(String(120), primary_key=True)
+    sev: Mapped[dict] = mapped_column(JSONB, default=dict)     # severity -> events
+    act: Mapped[dict] = mapped_column(JSONB, default=dict)     # action -> events
+    typ: Mapped[dict] = mapped_column(JSONB, default=dict)     # threat type -> events
+    cat: Mapped[dict] = mapped_column(JSONB, default=dict)     # threat category -> events
+    app: Mapped[dict] = mapped_column(JSONB, default=dict)     # application -> bytes (top 40)
+    src: Mapped[dict] = mapped_column(JSONB, default=dict)     # source IP -> bytes (top 25)
+    acat: Mapped[dict] = mapped_column(JSONB, default=dict)    # application category -> bytes
+    urlc: Mapped[dict] = mapped_column(JSONB, default=dict)    # web (URL) category -> requests
+    webu: Mapped[dict] = mapped_column(JSONB, default=dict)    # source IP -> web requests (top 25)
+    bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    sessions: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class SocFwMap(Base):
+    """Admin override: which location a firewall belongs to (the automatic name match is used when a firewall is not listed here)."""
+    __tablename__ = "soc_fw_map"
+    fw: Mapped[str] = mapped_column(String(120), primary_key=True)
+    site: Mapped[str | None] = mapped_column(String(120))

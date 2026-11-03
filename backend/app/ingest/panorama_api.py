@@ -1,0 +1,138 @@
+"""Panorama (PAN-OS XML API): uji koneksi dan pengambilan custom report. Tahap ini hanya untuk Test; sinkron otomatis menyusul setelah bentuk hasil report terkonfirmasi.
+Login memakai akun API khusus (Admin → Sumber Data → Integrasi, terenkripsi): key dibuat lewat keygen setiap kali dipakai, tidak disimpan."""
+import re
+import time
+import xml.etree.ElementTree as ET
+import httpx
+
+
+def api_url(base: str) -> str:
+    b = (base or "").strip().rstrip("/")
+    if not re.match(r"^https?://", b, re.I):
+        b = "https://" + b
+    return b + "/api/"
+
+
+def _parse(r: httpx.Response) -> ET.Element:
+    """PAN-OS menjawab kegagalan (kredensial salah, hak kurang) dengan HTTP 403 dan XML berisi alasan: alasan itu yang ditampilkan."""
+    try:
+        x = ET.fromstring(r.text)
+    except ET.ParseError:
+        r.raise_for_status()
+        raise RuntimeError("The Panorama response is not XML (wrong address, or not a Panorama?)")
+    if x.get("status") != "success":
+        msg = " ".join((e.text or "").strip() for e in x.iter() if e.tag in ("line", "msg") and (e.text or "").strip()) or r.text[:160]
+        raise RuntimeError(f"Panorama menolak (HTTP {r.status_code}, kode {x.get('code') or '-'}): {msg[:180]}")
+    r.raise_for_status()
+    return x
+
+def _retry(fn, tries: int = 3):
+    """Panorama kadang menjawab kosong/bukan XML atau memutus koneksi sesaat saat sibuk: ulangi dengan jeda 5 dan 15 detik. Penolakan resmi (kredensial, hak akses) tidak diulang."""
+    for i in range(tries):
+        try:
+            return fn()
+        except (httpx.TransportError, httpx.HTTPStatusError) as e:
+            err = e
+        except RuntimeError as e:
+            if "bukan XML" not in str(e):
+                raise
+            err = e
+        if i < tries - 1:
+            time.sleep(5 if i == 0 else 15)
+    raise err
+
+
+def keygen(cl: httpx.Client, base: str, user: str, pw: str) -> str:
+    x = _parse(cl.post(api_url(base), data={"type": "keygen", "user": user, "password": pw}))
+    key = x.findtext(".//key")
+    if not key:
+        raise RuntimeError("Panorama did not return a key")
+    return key
+
+
+def run_report(cl: httpx.Client, base: str, key: str, name: str, wait_s: int = 90, extra: dict | None = None) -> tuple[list[str], list[dict]]:
+    """Jalankan custom report secara asinkron lalu tunggu hasilnya. Mengembalikan (kolom, baris)."""
+    h = {"X-PAN-KEY": key}
+    x = _parse(cl.post(api_url(base), headers=h, data={"type": "report", "reporttype": "custom", "reportname": name, "async": "yes", **(extra or {})}))
+    job = x.findtext(".//job")
+    if not job:
+        raise RuntimeError("Panorama gave no job id for report " + name)
+    t0 = time.time()
+    while True:
+        y = _retry(lambda: _parse(cl.post(api_url(base), headers=h, data={"type": "report", "action": "get", "job-id": job})))
+        if (y.findtext(".//job/status") or "FIN").upper() == "FIN":
+            break
+        if time.time() - t0 > wait_s:
+            raise RuntimeError("Report not finished within %d seconds" % wait_s)
+        time.sleep(2)
+    rows = [{c.tag: (c.text or "").strip() for c in e} for e in y.iter("entry") if len(e)]
+    cols = list(rows[0].keys()) if rows else []
+    return cols, rows
+
+def run_log(cl: httpx.Client, base: str, key: str, log_type: str = "threat", nlogs: int = 5, query: str = "", wait_s: int = 60) -> tuple[list[str], list[dict]]:
+    """Ambil beberapa baris log (traffic, threat, url, ...) lewat job asinkron. Untuk uji hak Log dan melihat nama kolom."""
+    h = {"X-PAN-KEY": key}
+    data = {"type": "log", "log-type": log_type, "nlogs": str(nlogs), "async": "yes"}
+    if query:
+        data["query"] = query
+    x = _parse(cl.post(api_url(base), headers=h, data=data))
+    job = x.findtext(".//job")
+    if not job:
+        raise RuntimeError("Panorama gave no job id for log " + log_type)
+    t0 = time.time()
+    while True:
+        y = _parse(cl.post(api_url(base), headers=h, data={"type": "log", "action": "get", "job-id": job}))
+        if (y.findtext(".//job/status") or "FIN").upper() == "FIN":
+            break
+        if time.time() - t0 > wait_s:
+            raise RuntimeError("Log not finished within %d seconds" % wait_s)
+        time.sleep(1)
+    rows = [{c.tag: (c.text or "").strip() for c in e} for e in y.iter("entry") if len(e)]
+    return (list(rows[0].keys()) if rows else []), rows
+
+def _names(x: ET.Element, path: str) -> list[str]:
+    n = x.find(path)
+    return [e.get("name") for e in (n if n is not None else []) if e.tag == "entry" and e.get("name")]
+
+
+def find_report(cl: httpx.Client, base: str, key: str, name: str) -> tuple[list[str], list[str]]:
+    """Cari di config Panorama di mana report itu didefinisikan (shared atau device group). Butuh hak XML API Configuration minimal Read Only.
+    Mengembalikan (lokasi, daftar device group)."""
+    h = {"X-PAN-KEY": key}
+    get = lambda xp: _parse(cl.post(api_url(base), headers=h, data={"type": "config", "action": "get", "xpath": xp}))
+    found = []
+    if name in _names(get("/config/shared/reports"), ".//reports"):
+        found.append("shared")
+    dgp = "/config/devices/entry[@name='localhost.localdomain']/device-group"
+    dgs = _names(get(dgp), ".//device-group")
+    for dg in dgs:
+        try:
+            if name in _names(get(f"{dgp}/entry[@name='{dg}']/reports"), ".//reports"):
+                found.append("device-group " + dg)
+        except RuntimeError:
+            continue
+    return found, dgs
+
+def run_dynamic(cl: httpx.Client, base: str, key: str, typ: str, aggs: list[str], vals: list[str], period: str, query: str = "", topn: int = 500, wait_s: int = 300,
+                rng: tuple[str, str] | None = None) -> list[dict]:
+    """Dynamic report Panorama: agregat dari semua firewall terkelola, dihitung di Panorama. typ = threat | url | trsum | urlsum | appstat;
+    period = last-calendar-day, last-7-days, last-30-days, dan seterusnya; query = filter PAN-OS, mis. ( severity geq high )."""
+    h = {"X-PAN-KEY": key}
+    members = lambda xs: "".join(f"<member>{a}</member>" for a in xs)
+    when = f"<start-time>{rng[0]}</start-time><end-time>{rng[1]}</end-time>" if rng else f"<period>{period}</period>"      # rentang bebas (YYYY/MM/DD HH:MM:SS), tidak dibatasi 90 hari
+    cmd = (f"<type><{typ}><aggregate-by>{members(aggs)}</aggregate-by><values>{members(vals)}</values></{typ}></type>{when}"
+           + (f"<query>{query}</query>" if query else "") + f"<topn>{topn}</topn><topm>10</topm><caption>soc</caption>")
+    x = _retry(lambda: _parse(cl.post(api_url(base), headers=h, data={"type": "report", "reporttype": "dynamic", "reportname": "custom-dynamic-report", "cmd": cmd, "async": "yes"})))
+    job = x.findtext(".//job")
+    if not job:
+        raise RuntimeError("Panorama gave no job id for dynamic report " + typ)
+    t0 = time.time()
+    while True:
+        y = _retry(lambda: _parse(cl.post(api_url(base), headers=h, data={"type": "report", "action": "get", "job-id": job})))
+        if (y.findtext(".//job/status") or "FIN").upper() == "FIN":
+            break
+        if time.time() - t0 > wait_s:
+            raise RuntimeError("Dynamic report %s not finished within %d seconds" % (typ, wait_s))
+        time.sleep(2)
+    rep = y.find(".//report")
+    return [{c.tag: (c.text or "").strip() for c in e} for e in (rep if rep is not None else []) if e.tag == "entry"]

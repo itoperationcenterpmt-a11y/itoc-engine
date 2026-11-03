@@ -1,10 +1,11 @@
-import time
-from fastapi import APIRouter, Depends, HTTPException, Request
+from datetime import timedelta
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..db import get_db
-from ..models import User
-from ..security import check_pw, make_token, current_user, hash_pw
+from ..models import AuditLog, User
+from ..security import COOKIE, check_pw, make_token, current_user, hash_pw, set_session, rate_limit
 from ..store import load_config, audit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -13,6 +14,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 class Login(BaseModel):
     username: str
     password: str
+    captcha: str = ""
 
 
 class PwChange(BaseModel):
@@ -20,52 +22,84 @@ class PwChange(BaseModel):
     new: str
 
 
-# Batas percobaan gagal (per proses): 5 per akun dan 40 per alamat dalam 10 menit.
-_FAILS: dict[str, list[float]] = {}
+# Batas percobaan gagal: 5 per akun dan 40 per alamat dalam 10 menit. Dihitung dari audit_log (satu sumber untuk semua proses), jadi berlaku walau ada banyak worker.
 _WINDOW, _MAX_USER, _MAX_IP = 600, 5, 40
 _DUMMY = hash_pw("dummy-password-for-timing")
+_WEAK = {"password", "password1", "password123", "12345678", "123456789", "1234567890", "qwerty123", "admin123", "itoc1234", "welcome123", "pelindo123"}
 
 
-def _recent(key: str) -> list[float]:
-    now = time.time()
-    v = [t for t in _FAILS.get(key, []) if now - t < _WINDOW]
-    if v:
-        _FAILS[key] = v
-    else:
-        _FAILS.pop(key, None)
-    return v
+def _locked(db: Session, cfg, name: str, ip: str) -> bool:
+    since = cfg.now() - timedelta(seconds=_WINDOW)
+    q = db.query(func.count(AuditLog.id)).filter(AuditLog.action == "Login failed", AuditLog.at >= since)
+    return q.filter(AuditLog.username == name[:60]).scalar() >= _MAX_USER or q.filter(AuditLog.detail["ip"].astext == ip).scalar() >= _MAX_IP
+
+
+def _verify_captcha(db: Session, cfg, token: str, ip: str):
+    """Cloudflare Turnstile, only when a site key is set in the parameters and the secret is in the environment (ITOC_TURNSTILE_SECRET) or the secret store."""
+    if not cfg.p("security.turnstile_site_key", ""):
+        return
+    import os
+    import httpx
+    from .. import vault
+    secret = os.environ.get("ITOC_TURNSTILE_SECRET") or vault.cred(db, "turnstile.secret", "TURNSTILE_SECRET")
+    if not secret:
+        return                                                    # key set but no secret yet: do not lock everyone out
+    if not token:
+        raise HTTPException(400, "Complete the security verification first.")
+    try:
+        r = httpx.post("https://challenges.cloudflare.com/turnstile/v0/siteverify", data={"secret": secret, "response": token, "remoteip": ip}, timeout=8).json()
+    except Exception:
+        raise HTTPException(503, "The security verification service cannot be reached. Try again shortly.")
+    if not r.get("success"):
+        raise HTTPException(400, "Security verification failed. Reload the page and try again.")
 
 
 @router.post("/login")
-def login(body: Login, request: Request, db: Session = Depends(get_db)):
-    name = body.username.strip().lower()
+def login(body: Login, request: Request, response: Response, db: Session = Depends(get_db)):
+    cfg = load_config(db)
+    name = body.username.strip().lower()[:60]
     ip = request.client.host if request.client else "?"
-    ku, ki = "u:" + name, "i:" + ip
-    if len(_recent(ku)) >= _MAX_USER or len(_recent(ki)) >= _MAX_IP:
-        raise HTTPException(429, "Terlalu banyak percobaan login. Coba lagi dalam beberapa menit.")
+    if _locked(db, cfg, name, ip):
+        raise HTTPException(429, "Too many login attempts. Try again in a few minutes.")
+    _verify_captcha(db, cfg, body.captcha, ip)
     u = db.query(User).filter_by(username=name).one_or_none()
     ok = check_pw(body.password, u.password_hash if u else _DUMMY)   # waktu proses sama untuk akun yang tidak ada
     if not u or not u.active or not ok:
-        now = time.time()
-        _FAILS.setdefault(ku, []).append(now)
-        _FAILS.setdefault(ki, []).append(now)
-        raise HTTPException(401, "Username atau password salah")
-    _FAILS.pop(ku, None)
-    cfg = load_config(db)
+        audit(db, name, "Login failed", {"ip": ip}, cfg.p("tz_offset_hours", 7))
+        db.commit()
+        raise HTTPException(401, "Wrong username or password")
     u.last_login = cfg.now()
-    audit(db, u.username, "Login")
+    audit(db, u.username, "Login", {"ip": ip}, cfg.p("tz_offset_hours", 7))
     db.commit()
-    return {"token": make_token(u), "must_change_pw": u.must_change_pw}
+    set_session(response, request, make_token(u))
+    return {"must_change_pw": u.must_change_pw}
 
 
-@router.post("/password")
-def change_pw(body: PwChange, user: User = Depends(current_user), db: Session = Depends(get_db)):
+@router.get("/me")
+def me(user: User = Depends(current_user)):
+    return {"username": user.username}
+
+
+@router.post("/logout")
+def logout(request: Request, response: Response):
+    response.delete_cookie(COOKIE, path="/")
+    return {"ok": True}
+
+
+@router.post("/password", dependencies=[Depends(rate_limit("pw", 5, 600))])
+def change_pw(body: PwChange, request: Request, response: Response, user: User = Depends(current_user), db: Session = Depends(get_db)):
     cfg = load_config(db)
     if not check_pw(body.old, user.password_hash):
-        raise HTTPException(400, "Password lama salah")
-    if len(body.new) < cfg.p("auth.min_password", 10):
-        raise HTTPException(400, f"Password minimal {cfg.p('auth.min_password', 10)} karakter")
+        raise HTTPException(400, "The old password is wrong")
+    n = cfg.p("auth.min_password", 10)
+    if len(body.new) < n:
+        raise HTTPException(400, f"Password minimal {n} karakter")
+    if len(body.new.encode()) > 72:
+        raise HTTPException(400, "Password maksimal 72 byte")
+    if body.new == body.old or body.new.lower() in _WEAK or user.username in body.new.lower():
+        raise HTTPException(400, "The password is too easy to guess or the same as the old one")
     user.password_hash, user.must_change_pw = hash_pw(body.new), False
-    audit(db, user.username, "Mengganti password")
+    audit(db, user.username, "Mengganti password", None, cfg.p("tz_offset_hours", 7))
     db.commit()
+    set_session(response, request, make_token(user))                # token lama gugur; sesi ini tetap berjalan
     return {"ok": True}

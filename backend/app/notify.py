@@ -1,4 +1,4 @@
-"""Notifikasi webhook. Tujuan, jenis, dan peristiwa diatur di Admin -> Webhooks. Kegagalan hanya dicatat, tidak mengganggu proses utama."""
+"""Notifikasi webhook. Tujuan, jenis, dan peristiwa diatur di Admin → Notifikasi → Webhook. Kegagalan hanya dicatat, tidak mengganggu proses utama."""
 import logging
 import threading
 from datetime import datetime
@@ -8,9 +8,9 @@ from .db import session_scope
 from .models import Webhook
 
 log = logging.getLogger("itoc.notify")
-EVENTS = {"handover_new": "Handover baru (semua prioritas)", "handover_high": "Handover prioritas tinggi",
-          "sync_failed": "Sinkron sumber data gagal", "test": "Pesan uji"}
-KINDS = {"generic": "JSON umum", "teams": "Microsoft Teams", "slack": "Slack", "telegram": "Telegram"}
+EVENTS = {"handover_new": "New handover (all priorities)", "handover_high": "High-priority handover",
+          "sync_failed": "Data source sync failed", "insight_new": "Insight baru (peringatan dan kritis)", "test": "Test message"}
+KINDS = {"generic": "Generic JSON", "teams": "Microsoft Teams", "slack": "Slack", "telegram": "Telegram"}
 
 
 def _payload(kind: str, event: str, text: str, data: dict | None) -> dict:
@@ -20,7 +20,9 @@ def _payload(kind: str, event: str, text: str, data: dict | None) -> dict:
 
 
 def post(kind: str, url: str, event: str, text: str, data: dict | None = None) -> str:
-    r = httpx.post(url, json=_payload(kind, event, text, data), timeout=10)
+    from .netguard import check_url
+    check_url(url, "URL webhook")                                  # cek ulang saat kirim (DNS bisa berubah sejak disimpan)
+    r = httpx.post(url, json=_payload(kind, event, text, data), timeout=10, follow_redirects=False)
     r.raise_for_status()
     return f"HTTP {r.status_code}"
 
@@ -32,10 +34,10 @@ def _run(event: str, text: str, data: dict | None):
                 continue
             try:
                 url = vault.dec(w.url_enc)
-                w.last_status = post(w.kind, url, event, text, data) if url else "URL tidak terbaca (kunci enkripsi berubah?)"
+                w.last_status = post(w.kind, url, event, text, data) if url else "URL unreadable (did the encryption key change?)"
             except Exception as e:
                 log.warning("webhook %s: %s", w.name, e)
-                w.last_status = ("Gagal: " + str(e))[:190]
+                w.last_status = ("Failed: " + str(e))[:190]
             w.last_at = datetime.utcnow()
 
 

@@ -1,4 +1,4 @@
-"""Admin -> Integrations, API Keys, Email (SMTP), Webhooks. Rahasia disimpan terenkripsi (app/vault.py) dan tidak pernah dikirim balik."""
+"""Admin → Sumber Data → Integrasi, API Keys, Email (SMTP), Webhooks. Rahasia disimpan terenkripsi (app/vault.py) dan tidak pernah dikirim balik."""
 import hashlib
 import secrets
 from datetime import datetime, timedelta
@@ -9,9 +9,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from .. import mailer, notify, vault
 from ..db import get_db
-from ..ingest import zabbix
-from ..models import ApiKey, DataSource, Role, User, Webhook, ZbxHost
-from ..security import require_admin, require_admin_area
+from ..netguard import check_url
+from ..ingest import zabbix, ruckus, panorama_api, trendmicro, milestone, uptimekuma
+from ..models import ApiKey, CctvCamera, CctvHardware, DataSource, Role, User, Webhook, ZbxHost
+from ..security import rate_limit, require_admin, require_admin_area
 from ..store import audit, bump_config
 
 router = APIRouter(prefix="/api/admin", tags=["integrations"], dependencies=[Depends(require_admin_area)])
@@ -21,9 +22,15 @@ CREDS = {
     "manageengine": [("me.token", "API token", "token_env", "ME_AUTHTOKEN")],
     "prtg": [("prtg.user", "Username", "user_env", "PRTG_USER"), ("prtg.passhash", "Passhash", "passhash_env", "PRTG_PASSHASH")],
     "zabbix": [("zabbix.token", "API token", "token_env", "ZABBIX_TOKEN")],
+    "uptimekuma": [("kuma.user", "Username (leave empty when the password is an API key)", "user_env", "KUMA_USER"), ("kuma.pass", "API key, or the password of the username", "pass_env", "KUMA_PASS")],
+    "trendmicro": [("tm.token", "API key Vision One", "token_env", "TMV1_TOKEN")],
+    "milestone": [("ms.user", "Username Basic user Milestone (hak baca)", "user_env", "MS_USER"), ("ms.pass", "Password Basic user Milestone", "pass_env", "MS_PASS")],
+    "panorama": [("pano.user", "Panorama API account username", "user_env", "PANO_USER"), ("pano.pass", "Panorama API account password", "pass_env", "PANO_PASS")],
+    "ruckus": [("vsz.user", "Username API vSZ", "user_env", "VSZ_USER"), ("vsz.pass", "Password API vSZ", "pass_env", "VSZ_PASS"),
+              ("vsz.kill_user", "Disconnect account username (optional, a role with disconnect rights)", "kill_user_env", "VSZ_KILL_USER"), ("vsz.kill_pass", "Disconnect account password", "kill_pass_env", "VSZ_KILL_PASS")],
 }
 # isian daftar tambahan per konektor (disimpan di config sumber data): (kunci, label)
-EXTRA = {"zabbix": [("group_prefixes", "Prefix host group (satu per baris)"), ("down_patterns", "Nama trigger yang berarti perangkat down (satu per baris, cocok sebagian)")]}
+EXTRA = {"milestone": [("servers", "Milestone servers (one per line, format Name|address, e.g. Belawan|https://10.181.3.1). The same Basic user account is used on all servers")], "panorama": [("test_reports", "Panorama report names for the test (one per line, exactly as in Monitor > Manage Custom Reports)")], "zabbix": [("group_prefixes", "Host group prefixes (one per line)"), ("down_patterns", "Trigger names that mean a device is down (one per line, partial match)")]}
 
 
 def _cred_state(db: Session, src: DataSource):
@@ -41,6 +48,15 @@ def _zbx_stats(db: Session):
     return {"total": sum(rows.values()), **{k: rows.get(k, 0) for k in ("up", "down", "maintenance", "disabled")}}
 
 
+def _milestone_servers(db: Session, c: dict, errs: dict | None = None) -> list[dict]:
+    """Configured Milestone servers with what was last synced for each."""
+    from sqlalchemy import func
+    cams = {k: (n, u) for k, n, u in db.query(CctvCamera.server, func.count(), func.max(CctvCamera.fetched_at)).group_by(CctvCamera.server)}
+    hws = dict(db.query(CctvHardware.server, func.count()).group_by(CctvHardware.server).all())
+    lic, errs = milestone.server_licenses(c), errs or {}
+    return [{"name": n, "url": u, "enabled": on, "license": lic.get(n), "error": errs.get(n) if on else None, "cameras": cams.get(n, (None, None))[0], "hardware": hws.get(n), "updated": cams[n][1].isoformat() if n in cams and cams[n][1] else None} for n, u, on in milestone.servers_all(c)]
+
+
 @router.get("/integrations")
 def integrations(db: Session = Depends(get_db)):
     rows = []
@@ -50,7 +66,8 @@ def integrations(db: Session = Depends(get_db)):
                      "last_ok_at": s.last_ok_at.isoformat() if s.last_ok_at else None, "last_error": s.last_error,
                      "api_capable": s.key in CREDS, "creds": _cred_state(db, s),
                      "extra": [{"key": k, "label": lb, "value": (s.config or {}).get(k) or []} for k, lb in EXTRA.get(s.key, [])],
-                     "stats": _zbx_stats(db) if s.key == "zabbix" else None})
+                     "stats": _zbx_stats(db) if s.key == "zabbix" else None,
+                     "servers": _milestone_servers(db, s.config or {}, (s.cursor or {}).get("server_errors")) if s.key == "milestone" else None})
     return {"rows": rows}
 
 
@@ -69,10 +86,10 @@ class IntegrationIn(BaseModel):
 def integration_set(key: str, body: IntegrationIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     s = db.get(DataSource, key)
     if not s:
-        raise HTTPException(404, "Sumber tidak ditemukan")
+        raise HTTPException(404, "Source not found")
     if body.mode is not None:
         if body.mode not in ("api", "import") or (body.mode == "api" and key not in CREDS):
-            raise HTTPException(422, "Mode tidak valid untuk sumber ini")
+            raise HTTPException(422, "Invalid mode for this source")
         s.mode = body.mode
     if body.enabled is not None:
         s.enabled = body.enabled
@@ -80,12 +97,23 @@ def integration_set(key: str, body: IntegrationIn, db: Session = Depends(get_db)
         s.interval_min = max(1, min(body.interval_min, 1440))
     cfg = dict(s.config or {})
     if body.base_url is not None:
+        if body.base_url.strip():
+            try:
+                check_url(body.base_url, "Base URL")
+            except ValueError as e:
+                raise HTTPException(422, str(e))
         cfg["base_url"] = body.base_url.strip().rstrip("/")      # IP/host saja boleh; skema dan /zabbix dicari otomatis saat Test (Zabbix)
     if body.verify_tls is not None:
         cfg["verify_tls"] = body.verify_tls
     for k, vals in body.config_lists.items():
         if k in {e[0] for e in EXTRA.get(key, [])}:
             cfg[k] = [x.strip() for x in vals if x.strip()]
+            if key == "milestone" and k == "servers":
+                for ln in cfg[k]:
+                    try:
+                        check_url((ln.split("|") + [""])[1].strip() if "|" in ln else ln.strip(), "Milestone server address")
+                    except ValueError as e:
+                        raise HTTPException(422, str(e))
     s.config = cfg
     allowed = {c[0] for c in CREDS.get(key, [])}
     for name, val in body.secrets.items():
@@ -100,40 +128,140 @@ def integration_set(key: str, body: IntegrationIn, db: Session = Depends(get_db)
     return {"ok": True}
 
 
-@router.post("/integrations/{key}/test")
-def integration_test(key: str, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+@router.post("/integrations/{key}/test", dependencies=[Depends(rate_limit("itest", 12, 60))])
+def integration_test(key: str, server: str = "", db: Session = Depends(get_db), user: User = Depends(require_admin)):
     s = db.get(DataSource, key)
     if not s or key not in CREDS:
-        raise HTTPException(404, "Sumber ini tidak punya koneksi API")
+        raise HTTPException(404, "This source has no API connection")
     c = s.config or {}
-    if not c.get("base_url"):
-        raise HTTPException(422, "Base URL belum diisi")
+    if not c.get("base_url") and not (key == "milestone" and c.get("servers")):
+        raise HTTPException(422, "Base URL is not filled in")
     try:
         if key == "zabbix":
             tok = vault.cred(db, "zabbix.token", c.get("token_env", "ZABBIX_TOKEN"))
             if not tok:
-                raise HTTPException(422, "API token belum diisi")
+                raise HTTPException(422, "API token is not filled in")
             with httpx.Client(timeout=15, verify=c.get("verify_tls", True)) as cl:
                 url = zabbix.resolve(cl, c["base_url"])
                 ver = zabbix.rpc(cl, url, "apiinfo.version", {})                      # method ini wajib tanpa token
                 g = zabbix.rpc(cl, url, "hostgroup.get", {"output": ["groupid"], "search": {"name": c.get("group_prefixes") or ["CCTV-"]}, "searchByAny": True, "startSearch": True}, tok)
             s.config = {**c, "base_url": url[: -len("/api_jsonrpc.php")]}                  # simpan alamat yang terbukti benar
             db.commit()
-            return {"ok": True, "msg": f"Terhubung ke Zabbix {ver} di {s.config['base_url']}, token valid, {len(g)} host group cocok prefix"}
+            return {"ok": True, "msg": f"Connected to Zabbix {ver} at {s.config['base_url']}, token valid, {len(g)} host groups match the prefixes"}
+        if key == "uptimekuma":
+            try:
+                mons = uptimekuma.fetch(c["base_url"], vault.cred(db, "kuma.user", c.get("user_env", "KUMA_USER")), vault.cred(db, "kuma.pass", c.get("pass_env", "KUMA_PASS")), c.get("verify_tls", True), 15)
+            except RuntimeError as e:
+                raise HTTPException(422, str(e))
+            down = sum(1 for m in mons.values() if m["status"] == 0)
+            return {"ok": True, "msg": f"Connected to Uptime Kuma: {len(mons)} monitors found, {down} down now."}
+        if key == "trendmicro":
+            tok = vault.cred(db, "tm.token", c.get("token_env", "TMV1_TOKEN"))
+            if not tok:
+                raise HTTPException(422, "Vision One API key is not filled in")
+            from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+            base, out = trendmicro.root(c["base_url"]), []
+            with httpx.Client(timeout=30, verify=c.get("verify_tls", True), follow_redirects=False) as cl:
+                try:
+                    j = trendmicro.get(cl, base + "/v3.0/healthcheck/connectivity", tok)
+                    out.append("Connection: %s." % (j.get("status") or "OK"))
+                except RuntimeError as e:
+                    if "HTTP 401" in str(e):
+                        good = trendmicro.detect_region(cl, tok)
+                        raise HTTPException(422, ("The API key is valid in another region: change the Base URL to %s and test again." % good) if good and good.rstrip("/") != base.rstrip("/")
+                                            else "The API key was rejected in all regions: wrong, expired, or disabled in Vision One. Create a new key (Administration > API Keys).")
+                    out.append("Healthcheck: %s." % str(e)[:140])
+                now = _dt.now(_tz.utc)
+                items = trendmicro.fetch_alerts(cl, base, tok, now - _td(days=30), now, top=5, max_pages=1)
+            fields = ", ".join(sorted(items[0].keys())[:14]) if items else "-"
+            out.append("API key is valid. Workbench alerts in the last 30 days (sample): %d. Fields: %s." % (len(items), fields))
+            return {"ok": True, "msg": " ".join(out)}
+        if key == "panorama":
+            u, pw = vault.cred(db, "pano.user", c.get("user_env", "PANO_USER")), vault.cred(db, "pano.pass", c.get("pass_env", "PANO_PASS"))
+            if not u or not pw:
+                raise HTTPException(422, "Panorama API username/password is not filled in")
+            names = c.get("test_reports") or []                     # saved custom reports are no longer needed: the sync uses dynamic reports (all managed firewalls)
+            out = []
+            with httpx.Client(timeout=40, verify=c.get("verify_tls", False)) as cl:
+                k = panorama_api.keygen(cl, c["base_url"], u, pw)
+                out.append("Login succeeded and the key is valid.")
+                try:
+                    lc, lr = panorama_api.run_log(cl, c["base_url"], k, "threat", 3)
+                    out.append(f"Log threat: OK ({len(lr)} baris contoh, kolom: {', '.join(lc[:8]) or '-'}).")
+                except RuntimeError as e:
+                    out.append(f"Log threat: gagal ({e}).")
+                try:
+                    rows = panorama_api.run_dynamic(cl, c["base_url"], k, "threat", ["device_name"], ["repeatcnt"], "last-calendar-day", "", 100, wait_s=60)
+                    out.append(f"Dynamic report (what the sync uses): OK, {len(rows)} firewalls reported threat events yesterday.")
+                except RuntimeError as e:
+                    out.append(f"Dynamic report: failed ({str(e)[:140]}). The API account needs the Reports and Log permissions.")
+                for name in names:
+                    try:
+                        cols, rows = panorama_api.run_report(cl, c["base_url"], k, name, wait_s=60)
+                        out.append(f"Report {name}: OK, {len(rows)} baris, kolom: {', '.join(cols[:10]) or '-'}.")
+                    except RuntimeError as e:
+                        out.append(f"Report {name}: gagal ({e}).")
+                        try:                                      # telusuri di mana report itu didefinisikan, lalu coba dengan konteks device group
+                            where, dgs = panorama_api.find_report(cl, c["base_url"], k, name)
+                            out.append("Report location in config: " + (", ".join(where) or "not found in shared or in %d device groups" % len(dgs)) + ".")
+                            for w in where:
+                                if not w.startswith("device-group "):
+                                    continue
+                                for pname in ("dg", "vsys", "device-group"):
+                                    try:
+                                        cols, rows = panorama_api.run_report(cl, c["base_url"], k, name, wait_s=60, extra={pname: w[13:]})
+                                        out.append("Percobaan %s=%s: OK, %d baris, kolom: %s." % (pname, w[13:], len(rows), ", ".join(cols[:10]) or "-"))
+                                        break
+                                    except RuntimeError as e2:
+                                        out.append("Attempt %s=%s: failed (%s)." % (pname, w[13:], str(e2)[:90]))
+                        except RuntimeError as e3:
+                            out.append("The report location cannot be traced (%s). Give the role XML API > Configuration = Read Only to trace it." % str(e3)[:100])
+            return {"ok": True, "msg": " ".join(out)}
+        if key == "milestone":
+            u, pw = vault.cred(db, "ms.user", c.get("user_env", "MS_USER")), vault.cred(db, "ms.pass", c.get("pass_env", "MS_PASS"))
+            if not u or not pw:
+                raise HTTPException(422, "Milestone username/password is not filled in")
+            out, good = [], 0
+            for nm, url, _on in milestone.servers_all(c):
+                if server and nm != server:
+                    continue
+                try:
+                    with httpx.Client(timeout=30, verify=c.get("verify_tls", False), follow_redirects=False) as cl:
+                        tk = milestone.login(cl, url, u, pw)
+                        r = milestone.probe(cl, url, tk)
+                    good += 1
+                    out.append(f"[{nm}] login OK. " + " ".join(r[:4]))
+                except (RuntimeError, httpx.HTTPError) as e:
+                    out.append(f"[{nm}] GAGAL: {str(e)[:120]}.")
+            if not good:
+                raise HTTPException(502, " ".join(out))
+            return {"ok": True, "msg": f"{good} of {len(out)} Milestone servers connected. " + " ".join(out)}
+        if key == "ruckus":
+            u, pw = vault.cred(db, "vsz.user", c.get("user_env", "VSZ_USER")), vault.cred(db, "vsz.pass", c.get("pass_env", "VSZ_PASS"))
+            if not u or not pw:
+                raise HTTPException(422, "vSZ API username/password is not filled in")
+            with httpx.Client(timeout=20, verify=c.get("verify_tls", True)) as cl:
+                rt = ruckus.root(c["base_url"])
+                ver, tk = ruckus.login(cl, rt, u, pw)
+                try:
+                    lst, total = ruckus.fetch_clients(cl, rt, ver, tk, limit=1, max_rows=1)
+                finally:
+                    ruckus.logout(cl, rt, ver, tk)
+            return {"ok": True, "msg": f"Connected to vSZ (API {ver}), login valid, {total} active WiFi clients"}
         if key == "manageengine":
             tok = vault.cred(db, "me.token", c.get("token_env", "ME_AUTHTOKEN"))
             if not tok:
-                raise HTTPException(422, "API token belum diisi")
+                raise HTTPException(422, "API token is not filled in")
             r = httpx.get(c["base_url"] + "/api/v3/requests", params={"input_data": '{"list_info":{"row_count":1}}'},
                           headers={"authtoken": tok, "Accept": "application/vnd.manageengine.sdp.v3+json"}, timeout=15, verify=c.get("verify_tls", True))
         else:
             u, p = vault.cred(db, "prtg.user", c.get("user_env", "PRTG_USER")), vault.cred(db, "prtg.passhash", c.get("passhash_env", "PRTG_PASSHASH"))
             if not u:
-                raise HTTPException(422, "Username PRTG belum diisi")
+                raise HTTPException(422, "PRTG username is not filled in")
             r = httpx.get(c["base_url"] + "/api/table.json", params={"content": "sensors", "columns": "objid", "count": 1, "username": u, "passhash": p},
                           timeout=15, verify=c.get("verify_tls", True))
         r.raise_for_status()
-        return {"ok": True, "msg": f"Terhubung (HTTP {r.status_code})"}
+        return {"ok": True, "msg": f"Connected (HTTP {r.status_code})"}
     except HTTPException:
         raise
     except httpx.HTTPStatusError as e:
@@ -141,7 +269,7 @@ def integration_test(key: str, db: Session = Depends(get_db), user: User = Depen
     except RuntimeError as e:
         raise HTTPException(502, str(e)[:200])
     except Exception as e:
-        raise HTTPException(502, "Tidak bisa terhubung: " + str(e)[:160])
+        raise HTTPException(502, "Cannot connect: " + str(e)[:160])
 
 
 # ---------------- API keys ----------------
@@ -164,7 +292,7 @@ def apikeys(db: Session = Depends(get_db)):
 def apikey_create(body: KeyIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     r = db.get(Role, body.role_key)
     if not body.name.strip() or not r or r.is_admin:
-        raise HTTPException(422, "Nama wajib diisi dan role tidak boleh admin")
+        raise HTTPException(422, "A name is required and the role must not be admin")
     raw = "itoc_" + secrets.token_urlsafe(32)
     k = ApiKey(name=body.name.strip(), prefix=raw[:10], key_hash=hashlib.sha256(raw.encode()).hexdigest(), role_key=body.role_key,
                site=body.site or None, created_by=user.username, expires_at=datetime.now() + timedelta(days=body.days) if body.days else None)
@@ -174,11 +302,34 @@ def apikey_create(body: KeyIn, db: Session = Depends(get_db), user: User = Depen
     return {"ok": True, "key": raw}
 
 
+class KeyEditIn(BaseModel):
+    name: str
+    role_key: str
+    site: str | None = None
+    days: int | None = None          # None = keep the current expiry, 0 = no expiry, N = expires in N days from now
+
+
+@router.put("/apikeys/{kid}")
+def apikey_edit(kid: int, body: KeyEditIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    k = db.get(ApiKey, kid)
+    r = db.get(Role, body.role_key)
+    if not k or k.revoked_at:
+        raise HTTPException(404, "Key not found or already revoked")
+    if not body.name.strip() or not r or r.is_admin:
+        raise HTTPException(422, "A name is required and the role must not be admin")
+    k.name, k.role_key, k.site = body.name.strip(), body.role_key, body.site or None
+    if body.days is not None:
+        k.expires_at = datetime.now() + timedelta(days=body.days) if body.days else None
+    audit(db, user.username, f"Edited API key {k.name} (role {k.role_key})")
+    db.commit()
+    return {"ok": True}
+
+
 @router.delete("/apikeys/{kid}")
 def apikey_revoke(kid: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     k = db.get(ApiKey, kid)
     if not k:
-        raise HTTPException(404, "Tidak ditemukan")
+        raise HTTPException(404, "Not found")
     k.revoked_at = datetime.now()
     audit(db, user.username, "Mencabut API key " + k.name)
     db.commit()
@@ -206,7 +357,7 @@ def smtp_get(db: Session = Depends(get_db)):
 @router.put("/smtp")
 def smtp_set(body: SmtpIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     if body.security not in ("starttls", "ssl", "none"):
-        raise HTTPException(422, "Keamanan harus starttls, ssl, atau none")
+        raise HTTPException(422, "Security must be starttls, ssl, or none")
     old = mailer.config(db)
     c = {"host": body.host.strip(), "port": body.port, "security": body.security, "user": body.user.strip(), "from": body.sender.strip(),
          "from_name": body.from_name.strip(), "password": body.password if body.password else old.get("password", "")}
@@ -223,11 +374,11 @@ class TestMail(BaseModel):
 @router.post("/smtp/test")
 def smtp_test(body: TestMail, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     if "@" not in body.to:
-        raise HTTPException(422, "Alamat email tidak valid")
+        raise HTTPException(422, "Invalid email address")
     try:
-        mailer.send(db, [body.to.strip()], "Uji email - Dashboard IT Pelindo Multi Terminal", "Pengaturan SMTP berfungsi.")
+        mailer.send(db, [body.to.strip()], "TERA Dashboard test email", "The SMTP settings work.")
     except Exception as e:
-        raise HTTPException(502, "Gagal mengirim: " + str(e)[:200])
+        raise HTTPException(502, "Failed to send: " + str(e)[:200])
     return {"ok": True, "msg": "Email uji terkirim ke " + body.to}
 
 
@@ -243,7 +394,7 @@ class HookIn(BaseModel):
 def _mask(db: Session, w: Webhook) -> str:
     u = vault.dec(w.url_enc) or ""
     p = urlsplit(u)
-    return f"{p.scheme}://{p.netloc}/…" if p.netloc else "(tidak terbaca)"
+    return f"{p.scheme}://{p.netloc}/…" if p.netloc else "(unreadable)"
 
 
 def _hook_json(db, w):
@@ -258,11 +409,16 @@ def hooks(db: Session = Depends(get_db)):
 
 def _check_hook(body: HookIn, new: bool):
     if not body.name.strip() or body.kind not in notify.KINDS:
-        raise HTTPException(422, "Nama wajib diisi dan jenis harus dikenal")
+        raise HTTPException(422, "A name is required and the type must be known")
     if any(e not in notify.EVENTS or e == "test" for e in body.events):
-        raise HTTPException(422, "Peristiwa tidak dikenal")
+        raise HTTPException(422, "Unknown event")
     if (new or body.url) and not (body.url or "").startswith(("http://", "https://")):
-        raise HTTPException(422, "URL harus diawali http:// atau https://")
+        raise HTTPException(422, "The URL must start with http:// or https://")
+    if body.url:
+        try:
+            check_url(body.url, "URL webhook")
+        except ValueError as e:
+            raise HTTPException(422, str(e))
 
 
 @router.post("/webhooks")
@@ -279,7 +435,7 @@ def hook_create(body: HookIn, db: Session = Depends(get_db), user: User = Depend
 def hook_update(wid: int, body: HookIn, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     w = db.get(Webhook, wid)
     if not w:
-        raise HTTPException(404, "Tidak ditemukan")
+        raise HTTPException(404, "Not found")
     _check_hook(body, False)
     w.name, w.kind, w.events, w.enabled = body.name.strip(), body.kind, body.events, body.enabled
     if body.url:
@@ -293,7 +449,7 @@ def hook_update(wid: int, body: HookIn, db: Session = Depends(get_db), user: Use
 def hook_delete(wid: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     w = db.get(Webhook, wid)
     if not w:
-        raise HTTPException(404, "Tidak ditemukan")
+        raise HTTPException(404, "Not found")
     audit(db, user.username, "Menghapus webhook " + w.name)
     db.delete(w)
     db.commit()
@@ -305,13 +461,13 @@ def hook_test(wid: int, db: Session = Depends(get_db), user: User = Depends(requ
     w = db.get(Webhook, wid)
     url = vault.dec(w.url_enc) if w else None
     if not w or not url:
-        raise HTTPException(404, "Webhook tidak ditemukan atau URL tidak terbaca")
+        raise HTTPException(404, "Webhook not found or its URL cannot be read")
     try:
-        st = notify.post(w.kind, url, "test", "Pesan uji dari Dashboard IT Pelindo Multi Terminal")
+        st = notify.post(w.kind, url, "test", "Test message from the TERA Dashboard")
     except Exception as e:
-        w.last_status, w.last_at = ("Gagal: " + str(e))[:190], datetime.utcnow()
+        w.last_status, w.last_at = ("Failed: " + str(e))[:190], datetime.utcnow()
         db.commit()
-        raise HTTPException(502, "Gagal mengirim: " + str(e)[:160])
+        raise HTTPException(502, "Failed to send: " + str(e)[:160])
     w.last_status, w.last_at = st, datetime.utcnow()
     db.commit()
     return {"ok": True, "msg": "Terkirim (" + st + ")"}

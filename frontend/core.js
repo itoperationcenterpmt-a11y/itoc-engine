@@ -1,27 +1,29 @@
-/* ITOC Dashboard — inti frontend. Tidak ada data atau parameter yang tertanam:
-   semuanya dari GET /api/config (master & parameter) dan GET /api/view/<halaman> (angka hasil hitung server). */
+/* ITOC Dashboard — frontend core. No data or parameters are embedded:
+   everything comes from GET /api/config (masters & parameters) and GET /api/view/<page> (figures calculated by the server). */
 "use strict";
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const nf = new Intl.NumberFormat("id-ID"), fmt = n => nf.format(Math.round(n || 0));
 const fx = (n, d = 1) => n == null || isNaN(n) ? "–" : n.toLocaleString("id-ID", {minimumFractionDigits: d, maximumFractionDigits: d});
 const pc = (n, d = 1) => n == null || isNaN(n) ? "–" : fx(n * 100, d) + "%";
+const pl = (n, w) => n + " " + w + (n === 1 ? "" : "s");
 const pad = n => String(n).padStart(2, "0");
 const dayMs = s => Date.parse(s + "T00:00:00Z"), iso = ms => new Date(ms).toISOString().slice(0, 10);
 const addDays = (s, n) => iso(dayMs(s) + n * 864e5);
 
-let CFG = null, V = {}, PAR, MB = [], HR = [], TABS = [], APPLY = {}, PRESETS = [], SN = [], SC = [], NS = 3, CODES = [], OFFC = "O", OFF = 3, TEAMS = [], ROLES = {}, RUMUS = {}, DIMS = {}, MODS = {}, NST = {}, UST = {}, GROUPS = [], BRAND = "Dashboard IT Pelindo Multi Terminal", BSPLIT = 2, FOOT = "";
+let CFG = null, V = {}, PAR, MB = [], HR = [], TABS = [], APPLY = {}, PRESETS = [], SN = [], SC = [], NS = 3, CODES = [], OFFC = "O", OFF = 3, TEAMS = [], ROLES = {}, RUMUS = {}, DIMS = {}, MODS = {}, NST = {}, UST = {}, GROUPS = [], BRAND = "TERA Dashboard", BSPLIT = 2, FOOT = "";
 const dmon = s => { const d = new Date(dayMs(s)); return d.getUTCDate() + " " + MB[d.getUTCMonth()]; };
 const dfull = s => { const d = new Date(dayMs(s)); return d.getUTCDate() + " " + MB[d.getUTCMonth()] + " " + d.getUTCFullYear(); };
 const dlong = s => { const d = new Date(dayMs(s)); return HR[d.getUTCDay()] + ", " + d.getUTCDate() + " " + MB[d.getUTCMonth()] + " " + d.getUTCFullYear(); };
-const dtime = ms => { if (ms == null) return "–"; const d = new Date(ms); return d.getUTCDate() + " " + MB[d.getUTCMonth()] + " " + pad(d.getUTCHours()) + "." + pad(d.getUTCMinutes()); };
-const hm = ms => { const d = new Date(ms); return pad(d.getUTCHours()) + "." + pad(d.getUTCMinutes()); };
+const DEVTAB = t => t === "devices" || t in (CFG.params["dev.tab_kinds"] || {});   // Devices summary and its Network / CCTV / Operational sub-menus
+const dtime = ms => { if (ms == null) return "–"; const d = new Date(ms); return d.getUTCDate() + " " + MB[d.getUTCMonth()] + " " + d.getUTCFullYear() + ", " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()); };
+const hm = ms => { const d = new Date(ms); return pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()); };
 
 /* ---------- API ---------- */
-const API = {token: localStorage.getItem("itoc.token") || ""};
+/* Session = HttpOnly cookie from the server (not readable by JavaScript). The X-Requested-With header is required for data changes (CSRF protection). */
 async function api(path, o = {}) {
-  const h = Object.assign({}, o.body && !(o.body instanceof FormData) ? {"Content-Type": "application/json"} : {}, API.token ? {Authorization: "Bearer " + API.token} : {});
-  const r = await fetch(path, Object.assign({}, o, {headers: h}));
+  const h = Object.assign({"X-Requested-With": "itoc"}, o.body && !(o.body instanceof FormData) ? {"Content-Type": "application/json"} : {});
+  const r = await fetch(path, Object.assign({credentials: "same-origin"}, o, {headers: h}));
   const j = (r.headers.get("content-type") || "").includes("json") ? await r.json() : null;
   if (r.status === 401 && !path.startsWith("/api/auth/login")) { logout(j && j.detail); throw new Error("Sesi berakhir"); }
   if (!r.ok) throw new Error(j ? (typeof j.detail === "string" ? j.detail : (j.detail || []).map(x => x.msg || x).join("; ")) : r.statusText);
@@ -29,7 +31,7 @@ async function api(path, o = {}) {
 }
 const send = (path, body, method = "POST") => api(path, {method, body: body instanceof FormData ? body : JSON.stringify(body)});
 
-/* ---------- konfigurasi dari server ---------- */
+/* ---------- configuration from the server ---------- */
 function applyConfig(c) {
   CFG = c; const P = c.params;
   PAR = c.par; MB = P["ui.months"]; HR = P["ui.weekdays_short"];
@@ -50,7 +52,7 @@ const shiftOf = h => { const L = SHIFTS(); let cur = L[L.length - 1]; for (const
 const shiftHours = i => { const L = SHIFTS(), k = L.findIndex(s => s.no === i); return k < 0 ? "" : pad(L[k].start) + ".00–" + pad(L[(k + 1) % L.length].start) + ".00"; };
 const nowMs = () => Date.now() + (CFG ? CFG.params.tz_offset_hours : 7) * 36e5;
 function nowShift() { const j = nowMs(), h = new Date(j).getUTCHours(); return {date: iso(j - SHIFTS()[0].start * 36e5), today: iso(j), shift: shiftOf(h), clock: hm(j)}; }
-/* indeks kode shift (0..NS-1) atau OFF, menurut pola rotasi di Admin → Parameter → rotation */
+/* shift code index (0..NS-1) or OFF, following the rotation pattern in Admin → Parameters → rotation */
 function codeOf(g, date) {
   const R = CFG.rotation || {}, t = CFG.teams.find(x => x.code === String(g)); if (!R.pattern || !t) return OFF;
   const diff = Math.round((dayMs(date) - dayMs(R.anchor)) / 864e5) + (t.offset || 0) * (R.team_step || 0), L = R.pattern.length;
@@ -62,7 +64,7 @@ const prTone = v => ((CFG.params["ho.priorities"] || []).find(x => x.value === v
 const roleAccess = k => { const r = CFG.roles[k]; if (!r) return "–"; return r.modules.includes("*") ? "All" : r.modules.map(m => (MODS[m] || {label: m}).label).join(", "); };
 
 /* ---------- state + filter seragam ---------- */
-const S = {tab: "", pers: "", rkind: "", rpreset: "standar", layEdit: false, layRole: "", preset: "", from: "", to: "", sf: 0, site: "", cmp: false, dim: "kategori", sdim: "type", stop: "", sensor: "", hoSt: "open", adm: "pengguna", hoForm: false, closing: null, msg: "", addUser: false, params: null, mkey: "", mdata: null, medit: null};
+const S = {tab: "", pers: "", rkind: "", rpreset: "standar", layEdit: false, layRole: "", preset: "", from: "", to: "", sf: 0, site: "", kind: "", dstat: "", grp: "", dtype: "", rgrp: "", rtech: "", risp: "", cmp: false, dim: "kategori", sdim: "type", stop: "", sensor: "", hoSt: "open", adm: "pengguna", hoForm: false, closing: null, msg: "", addUser: false, params: null, mkey: "", mdata: null, medit: null};
 function setPreset(p) {
   const t = nowShift().today, d = new Date(dayMs(t)); S.preset = p;
   if (p === "hari") S.from = S.to = t;
@@ -76,10 +78,12 @@ function readHash() {
   const p = new URLSearchParams(q || ""); setPreset(p.get("p") || CFG.params["ui.default_preset"]);
   if (p.get("dari") && p.get("sampai") && !p.get("p")) { S.preset = ""; S.from = p.get("dari"); S.to = p.get("sampai"); }
   S.sf = +p.get("shift") || 0; S.site = CFG.me.site || p.get("lokasi") || ""; S.cmp = p.get("banding") === "1";
+  if (S.tab === "insight" && p.get("ins") === "summary") { S.insTab = "summary"; S.sumScope = p.get("scope") || "duty"; S.sumDay = p.get("day") || ""; S.sumKind = p.get("kind") || "full"; S.sumSite = p.get("site") || ""; S.sumText = ""; S.sumPending = true; }       // link shared from the shift summary
 }
 function writeHash() {
   const p = new URLSearchParams(); if (S.preset) p.set("p", S.preset); else { p.set("dari", S.from); p.set("sampai", S.to); }
   if (S.sf) p.set("shift", S.sf); if (S.site) p.set("lokasi", S.site); if (S.cmp) p.set("banding", "1");
+  if (S.tab === "insight" && S.insTab === "summary") { p.set("ins", "summary"); p.set("scope", S.sumScope || "duty"); p.set("kind", S.sumKind || "full"); if (S.sumDay && !["24h", "7d", "30d"].includes(S.sumScope || "duty")) p.set("day", S.sumDay); if (S.sumKind === "eos" && S.sumSite) p.set("site", S.sumSite); }
   history.replaceState(null, "", "#" + S.tab + "?" + p.toString());
 }
 const nDays = () => Math.round((dayMs(S.to) - dayMs(S.from)) / 864e5) + 1;

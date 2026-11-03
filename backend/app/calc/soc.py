@@ -57,16 +57,18 @@ def check(db: Session, cfg: Config, d_from: date, d_to: date, merged_=None):
 
 
 def batch_for(batches: list[SocBatch], d_from: date, d_to: date):
-    """Batch valid dengan tabel laporan Top yang paling banyak beririsan dengan periode."""
-    best, bo = None, 0
+    """Batch valid dengan tabel laporan Top yang paling cocok dengan periode: irisan terbanyak, lalu impor manual (CSV) di atas Panorama API, lalu rentang yang lebih ketat."""
+    best, bk = None, None
     for b in batches:
         if not b.tables or b.status == "failed":
             continue
         o = (min(d_to, b.date_to) - max(d_from, b.date_from)).days + 1
-        if o > bo:
-            bo, best = o, b
+        if o <= 0:
+            continue
+        k = (o, b.uploaded_by != "Panorama API", -(b.date_to - b.date_from).days, b.uploaded_at)
+        if bk is None or k > bk:
+            best, bk = b, k
     return best
-
 
 def calc(days: dict, cfg: Config, d_from: date, d_to: date) -> dict:
     SEV, TTYPE, TACT = cfg.p("soc.severities"), cfg.p("soc.threat_types"), cfg.p("soc.actions")
@@ -100,7 +102,7 @@ def calc(days: dict, cfg: Config, d_from: date, d_to: date) -> dict:
             row["total"] += c
             if blk: row["blk"] += c
             tot += c
-            put(sev, p[0], c, ch, blk); put(typ, p[1], c, ch, blk); put(act, p[3], c, ch, blk); put(cat, p[2] or "(kosong)", c, ch, blk)
+            put(sev, p[0], c, ch, blk); put(typ, p[1], c, ch, blk); put(act, p[3], c, ch, blk); put(cat, p[2] or "(blank)", c, ch, blk)
             put(dr, "int" if p[4] == "1" else "ext", c, ch, blk)
         for key, c in x["url"].items():
             p = key.split("|")

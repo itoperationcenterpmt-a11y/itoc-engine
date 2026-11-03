@@ -1,0 +1,126 @@
+# Tutorial Integrasi Dashboard IT Pelindo Multi Terminal
+
+Semua pengaturan ada di **Admin → Integrations**. Setiap kartu punya: Base URL, kredensial (disimpan terenkripsi, tidak pernah ditampilkan lagi), Verifikasi TLS, interval, tombol **Test**, dan **Sync now**.
+Urutan umum: isi Base URL dan kredensial → **Test** → aktifkan (Enabled) → **Sync now** → cek hasilnya di menu terkait.
+
+> Verifikasi TLS: untuk sertifikat internal (self-signed) set **Tidak**. Untuk sertifikat resmi biarkan **Ya**.
+> Dashboard hanya membaca data. Satu-satunya aksi tulis adalah Disconnect/Deauth client WiFi (butuh akun vSZ khusus, lihat bagian Ruckus).
+
+---
+
+## 1. Ruckus vSZ (WiFi)
+
+**Akun API di vSZ**
+1. Login UI vSZ (`https://IP-vSZ:8443`) sebagai Super Admin.
+2. Administration → Admins and Roles → Administrators → Create. Isi username (mis. `itoc-dashboard`), password kuat, role baca saja.
+3. Login sekali dengan akun itu agar tidak diminta ganti password.
+4. (Untuk Disconnect) buat akun kedua dengan role yang boleh memutus client, isi di kolom "akun putus-sesi".
+
+**Di dashboard**: Base URL cukup IP vSZ (https dan port 8443 ditambahkan otomatis). Isi username dan password, Test, aktifkan, Sync now. Interval disarankan 5 menit.
+Dokumentasi API versi Anda: `https://IP-vSZ:8443/wsg/apiDoc/` (di server dashboard harus bisa dibuka).
+
+**Data yang diambil**: client aktif, Access Point, dan sesi yang sudah selesai (`query/historicalclient`). Dashboard menyimpan sendiri setiap sesi (tabel `wifi_session`, lama simpan parameter `wifi.history_days`, bawaan 90 hari), karena riwayat di vSZ hanya sekitar beberapa minggu.
+**Catatan**: vSZ tidak memberi data aplikasi/website yang diakses lewat API. "Dominan" di dashboard = SSID, zone, lokasi, AP, tipe perangkat, dan client dengan usage terbesar. Data per aplikasi/website hanya ada di firewall (Panorama), lihat bagian 5.
+**Username portal**: terisi hanya bila login portal dicatat vSZ (WLAN Hotspot WISPr/802.1x yang diotentikasi lewat vSZ). Kalau terisi `N/A`, otentikasi terjadi di luar vSZ.
+
+---
+
+## 2. Zabbix 7.x (Devices)
+
+1. Zabbix → Users → User groups → buat grup `dashboard-ro` dengan permission **Read** pada host group yang dipantau (CCTV-*, OPERASIONAL-*, NETWORK-*, dst).
+2. Users → Users → buat user `dashboard` (role **User**), masukkan ke grup di atas.
+3. Users → API tokens → Create API token untuk user itu. Salin token (hanya tampil sekali).
+4. Dashboard: Base URL = IP atau `https://host/zabbix`, token, Prefix host group (satu per baris), Nama trigger "down". Test, aktifkan, Sync now.
+
+**Riwayat**: sinkron pertama menarik kejadian down 60 hari ke belakang lewat `event.get` (parameter `dev.history_days`), sinkron berikutnya menambah yang baru dan melengkapi waktu pulih. Disimpan di `zbx_event`; cuplikan per jam di `zbx_stat`. Pilih rentang di filter Period pada menu Devices atau Report.
+
+---
+
+## 3. ManageEngine ServiceDesk Plus (Ticketing)
+
+Konektor memakai API v3 dengan header `authtoken` (SDP on-premise).
+1. SDP → Admin → Developer Space → **API Keys** (SDP versi lama: Admin → Technicians → edit teknisi → Generate API Key).
+2. Buat key untuk akun teknisi khusus dengan hak **melihat semua request** (mis. role SDAdmin atau role baca yang boleh View All Requests).
+3. Uji dari server dashboard:
+   `curl -k -H "authtoken: KEY" -H "Accept: application/vnd.manageengine.sdp.v3+json" "https://HOST:PORT/api/v3/requests?input_data={\"list_info\":{\"row_count\":1}}"`
+   Hasilnya harus JSON dengan `response_status` sukses.
+4. Dashboard: Base URL = `https://HOST:PORT` (tanpa `/api`), API token, Test, aktifkan, interval 15 menit.
+5. Sinkron pertama menarik 90 hari ke belakang (`backfill_days`), berikutnya hanya tiket yang berubah.
+
+Catatan: SDP Cloud (Zoho) memakai OAuth dan belum didukung. Bila nama field di SDP Anda berbeda, pemetaan ada di konfigurasi sumber (`api_fields`).
+
+---
+
+## 4. PRTG (Networking)
+
+1. PRTG → Setup → Account Settings → User Accounts → buat user `dashboard` (tipe Read-only) pada grup dengan hak **Read** ke probe/grup yang berisi sensor trafik.
+2. Ambil passhash: login sebagai user itu → My Account → **Show passhash**, atau buka `https://PRTG/api/getpasshash.htm?username=dashboard&password=PASSWORD`.
+3. Beri **tag** `itoc_link` pada sensor trafik yang ingin dipantau (sesuai `sensor_tag`; ubah di konfigurasi bila memakai tag lain).
+4. Dashboard: Base URL `https://PRTG`, username, **passhash** (bukan password), Test, aktifkan, interval 60 menit.
+5. Isi kapasitas link di Admin → Master Data → Sensor & kapasitas.
+
+Catatan: nama channel harus sama dengan konfigurasi (`Traffic In (speed)(RAW)`, `Traffic Out (speed)(RAW)`, `Downtime(RAW)`, `coverage(RAW)`) dan bahasa PRTG Inggris. Data jam-an diambil lewat `historicdata.json` (30 hari pada sinkron pertama), jadi riwayat selalu ada selama PRTG menyimpannya.
+
+---
+
+## 5. Panorama (Cyber Security)
+
+Panorama punya API (PAN-OS XML API). Dashboard memakainya lewat **dynamic report**: Panorama menghitung agregat dari semua firewall terkelola, jadi **tidak perlu custom report**. (Custom report yang dibuat langsung di firewall tidak terlihat dari Panorama, dan tidak dibutuhkan.)
+
+**Role dan akun API (hak minimum)**
+1. Panorama → Device → Admin Roles → Add, Role = **Panorama**.
+2. Tab **XML API**: aktifkan **Report** dan **Log**; lainnya **Disable**. Tab **Web UI**, **REST API**, **Plugins**: **Disable**. Tab **Command Line**: **None**.
+3. Device → Administrators → Add `dashboard-api`, pakai role itu, password kuat.
+
+**Di dashboard**: Admin → Integrations → Panorama: Base URL (IP Panorama), username dan password akun API, Verifikasi TLS = Tidak bila sertifikat internal, Mode = **API**, Status = Aktif. **Test connection** untuk menguji login dan log, lalu **Sync now**.
+
+**Yang diambil dan disimpan** (di database dashboard, sama seperti impor CSV):
+- **Ringkasan harian** (ancaman, URL, aplikasi): satu batch per hari, mulai `backfill_days` hari ke belakang (bawaan 14, maksimal 90) sampai kemarin. Tiap sinkron memproses maksimal `max_days_per_run` hari (bawaan 4), sisanya di sinkron berikutnya. Hari yang sudah ada dari impor CSV tidak ditimpa.
+- **Laporan Top** (sumber serangan, host internal, high/critical, URL diblokir, aplikasi, rule/zone, trafik, ditolak): beberapa batch periode, supaya tabel di bawah halaman Cyber Security mengikuti filter periode: 30 hari terakhir, 7 hari terakhir, bulan berjalan (diperbarui tiap `top_refresh_h` jam, bawaan 12), dan tiap bulan penuh sejak `backfill_from` (sekali saja). Halaman memilih batch yang paling cocok dengan periode filter; bila sama cocoknya, impor manual (CSV) didahulukan daripada API.
+- **Jadwal**: Panorama ditarik otomatis tiap **00.00 dan 12.00 WIB** (pengaturan `schedule` di config sumber data; kosongkan untuk memakai interval biasa). Bila server mati saat jamnya, penarikan yang terlewat dijalankan sekali begitu server hidup. Tombol **Tarik dari Panorama sekarang** (halaman NDR dan halaman Data, untuk role dengan hak unggah SOC) menarik segera di latar belakang. Impor CSV manual (mis. tiap pukul 00.00) tetap dipakai sebagai validasi: bila hari yang sama sudah ada dari API, CSV yang dipakai, dan impor mencatat selisih dengan data API bila lebih dari 3% (kolom Catatan di riwayat batch).
+- Batch dari API bernama "Panorama API · ...". Impor CSV (Admin → Upload RAW SOC) tetap berfungsi sebagai cadangan.
+
+**Batasan yang perlu diketahui**
+- Dynamic report meringkas alamat IP ke blok /24 (mis. `10.185.25.0/24`), tidak sampai IP host.
+- Kolom "host name" dan beberapa nama ancaman DNS tidak tersedia di agregat (tampil sebagai ID). Kolom URL hanya ada di laporan URL diblokir.
+- Riwayat harian dibatasi oleh retensi log di Panorama (praktisnya sekitar 90 hari).
+- Hasil bisa sedikit berbeda dari custom report di firewall karena sumbernya log yang dikumpulkan Panorama.
+
+**Alternatif Syslog** (bila API tidak diizinkan): Device → Server Profiles → Syslog, lalu Objects → Log Forwarding. Di server dashboard jalankan penerima (rsyslog atau syslog-ng) dan agregasi per hari. Cara ini memberi data per IP host, tetapi perlu pekerjaan tambahan.
+---
+
+## 6. Trend Micro Vision One (XDR)
+
+Dashboard memakai REST API Vision One v3 untuk menarik **alert Workbench** dan menyimpannya di database dashboard (tabel `xdr_alert`). Menu **XDR** menampilkan severity, status, model deteksi, backlog critical/high, dan cakupan dampak; ada juga di Overview, katalog widget, dan Report.
+
+**Buat API key di Vision One**
+1. Console Vision One → **Administration → User Roles** → Add role (mis. `dashboard-readonly`). Beri hak minimum: **Workbench: View, filter, and search**. Hak lain tidak perlu.
+2. **Administration → API Keys → Add API key**: isi nama (mis. `itoc-dashboard`), pilih role tadi, atur masa berlaku (catat tanggal kedaluwarsa agar bisa diganti tepat waktu), status Enabled.
+3. Salin key (hanya tampil sekali).
+
+**Alamat regional (Base URL)**: sesuaikan dengan region akun Vision One Anda.
+| Region | Base URL |
+|---|---|
+| Amerika Serikat | `https://api.xdr.trendmicro.com` |
+| Singapura | `https://api.sg.xdr.trendmicro.com` |
+| India | `https://api.in.xdr.trendmicro.com` |
+| Australia / Selandia Baru | `https://api.au.xdr.trendmicro.com` |
+| Jepang | `https://api.xdr.trendmicro.co.jp` |
+| Eropa | `https://api.eu.xdr.trendmicro.com` |
+| Timur Tengah dan Afrika | `https://api.mea.xdr.trendmicro.com` |
+
+**Di dashboard**: Admin → Integrations → **Trend Micro XDR**: isi Base URL regional dan API key, **Test connection**, Mode = API, Status = Aktif, lalu **Sync now**. Server dashboard harus bisa membuka HTTPS ke alamat itu (akses internet keluar).
+Sinkron pertama menarik 30 hari ke belakang (`backfill_days`, maksimal 365); berikutnya hanya alert yang baru atau berubah (interval 15 menit). Halaman XDR membaca dari database, bukan langsung dari Vision One.
+
+**Catatan**: bentuk jawaban API ditulis mengikuti dokumentasi Vision One v3. Tombol Test menampilkan nama field yang benar-benar diterima, jadi bila ada perbedaan versi, kirim hasil Test-nya untuk disesuaikan.
+
+## 7. Uptime Kuma (Network)
+
+Uptime Kuma dibaca lewat halaman Prometheus-nya (`/metrics`), hanya baca.
+
+1. Di Uptime Kuma: **Settings > API Keys**, buat satu API key (boleh tanpa kedaluwarsa). Alternatifnya pakai username dan password akun Kuma.
+2. Di TERA: **Admin > Data Sources > Integrations > Uptime Kuma**. Isi **Base URL** (alamat Kuma saja, contoh `http://10.1.1.5:3001`, tanpa `/metrics`).
+3. Kredensial: kalau memakai API key, kosongkan Username dan isi API key di kolom Password. Kalau memakai akun, isi keduanya. Nilainya disimpan terenkripsi.
+4. Klik **Test**, lalu nyalakan sumbernya. Sinkron berjalan tiap 5 menit; setiap sinkron menambah satu sampel per monitor, dan ketersediaan dihitung dari sampel itu (1 − sampel down ÷ semua sampel). Monitor yang sedang maintenance tidak dihitung.
+5. Menu **Network > Link / Web Availability** muncul untuk role yang punya akses PRTG (role lain diatur di **Admin > Access > Roles**). Report tersedia sebagai jenis **Link / Web Availability** dan ikut jenis **Network**.
+6. Lokasi monitor diambil dari nama atau host monitor yang cocok dengan nama atau alias lokasi (Admin > Data Sources > Mapping, kolom Aliases). Monitor yang tidak cocok tampil di bagian "Unmapped"; beri nama monitor awalan kode lokasi (contoh `BDJ - Website`) atau tambahkan alias lokasinya.

@@ -1,4 +1,6 @@
-# Dashboard IT PMT — Python + PostgreSQL
+# TERA — Dashboard Terpusat IT Pelindo Multi Terminal (IT PMT)
+
+Python + PostgreSQL.
 
 Versi engine dari mockup `ITOC Dashboard Revisi`. Perhitungan pindah ke server (FastAPI), data dan seluruh konfigurasi di PostgreSQL. Frontend tetap tampilan yang sama, tetapi hanya merender hasil dari API.
 
@@ -10,7 +12,7 @@ docker compose up -d --build  # db + api (migrasi & seed konfigurasi otomatis) +
 docker compose exec api python -m app.cli create-user superadmin1 "Super Admin 1" superadmin
 docker compose exec api python -m app.cli seed-demo     # opsional, data dummy untuk mencoba
 ```
-Buka http://localhost:8000, login dengan password awal yang dicetak, lalu ganti password.
+Dengan Caddy/proxy yang sudah ada di server: aplikasi listen di 127.0.0.1:8000 dan Caddy yang memberi HTTPS (contoh: `deploy/Caddyfile.example`). Tanpa proxy lain: buat sertifikat uji `sh deploy/gen-cert.sh <nama-host-atau-IP>` lalu `docker compose --profile proxy up -d`, dan buka https://localhost (peringatan browser muncul sampai sertifikat resmi dipasang). Login dengan password awal yang dicetak, lalu ganti password.
 
 Setelah memperbarui kode dari versi sebelumnya (jalankan `docker compose up -d --build`; tabel `prtg_daily` dibuat otomatis oleh migrasi) (label menu, filter Jadwal, badge SOC), terapkan sekali ke database yang sudah ada. Perintah ini hanya menimpa tabel menu dan role, parameter yang sudah Anda ubah di Admin tidak disentuh:
 ```bash
@@ -120,7 +122,13 @@ Semua tabel di atas bisa diubah dari **Admin → Master data** dan **Admin → P
 ## Produksi (checklist sebelum naik server)
 - **Rahasia:** salin `.env.example` ke `.env`, isi `ITOC_JWT_SECRET` dan `ITOC_SECRET_KEY` dengan string acak panjang (48+ karakter) dan `DB_PASSWORD` yang kuat. `.env` tidak ikut repository (`.gitignore`). Mengganti `ITOC_SECRET_KEY` setelah ada rahasia tersimpan membuat rahasia itu harus diisi ulang di Admin.
 - **Mode produksi:** set `ITOC_ENV=production` agar `seed-demo`, `seed-demo-itcare`, dan `seed-users` (akun uji `password123`) diblokir. Buat akun asli dengan `python -m app.cli create-user`.
-- **HTTPS:** jalankan di belakang reverse proxy (Nginx, Caddy, atau Traefik) dengan TLS. Jangan mengekspos port 8000 langsung. Port PostgreSQL hanya listen di `127.0.0.1`; di server, jangan dipublikasikan sama sekali (hapus bagian `ports` db di compose).
+- **HTTPS:** dua pilihan. (1) Server sudah punya Caddy/proxy bersama: pakai `deploy/Caddyfile.example`, api hanya terbuka di 127.0.0.1:8000. (2) Tanpa proxy lain: container `proxy` (Nginx, profil `proxy`, `deploy/nginx.conf`) memegang port 80 dan 443; ganti `certs/tls.crt` dan `certs/tls.key` dengan sertifikat CA perusahaan lalu `docker compose restart proxy`. Port PostgreSQL hanya listen di `127.0.0.1`; di server, jangan dipublikasikan sama sekali (hapus bagian `ports` db di compose).
 - **Dokumentasi API** (`/docs`) mati; nyalakan sementara dengan `ITOC_DOCS=true` hanya bila perlu.
 - **Backup:** jadwalkan `pg_dump` harian dan uji restore. Volume `pgdata` adalah satu-satunya tempat data.
 - **Akun uji:** nonaktifkan atau hapus semua akun `password123` sebelum dipakai pengguna sungguhan.
+## Devices (Zabbix: CCTV dan Gate System)
+- Konektor di Admin → Integrations → Zabbix: Base URL (IP atau host saja boleh), API token (terenkripsi), prefix host group, dan nama trigger yang berarti down. Sinkron tiap 5 menit.
+- Kategori = prefix host group; labelnya di parameter `dev.kind_labels`. Kategori baru muncul otomatis di filter, grafik, dan katalog widget.
+- Lokasi diambil dari kode di nama grup lewat Admin → Master Data → "Zabbix: kode ke lokasi" (kode baru terisi otomatis saat sinkron; isi lokasinya bila kosong).
+- Peta memakai kolom `lat` dan `lon` di Master Data → Lokasi (nilai awal perkiraan, mohon dikoreksi). Peta berupa SVG mandiri tanpa server peta. Garis pantai dari `frontend/assets/id-map.json` (Natural Earth 1:50m Admin 0 Countries, domain publik, disederhanakan ke wilayah Indonesia, 58 KB); alamat berkasnya di parameter `dev.basemap_url` (kosongkan untuk peta tanpa garis pantai).
+- Filter lokasi, kategori, dan status ada di bar filter halaman Devices. Widget Devices tersedia gabungan dan per kategori lewat Customize → Add widget.

@@ -1,5 +1,6 @@
-"""Devices (CCTV, Gate System) dari snapshot Zabbix (tabel zbx_host). Lokasi dari kode di nama host group dipetakan lewat alias lokasi (master Lokasi);
-kode yang belum dikenal tampil apa adanya. Label kategori diambil dari parameter dev.kind_labels."""
+"""Devices (CCTV, Gate System, dan kategori lain) dari snapshot Zabbix (tabel zbx_host).
+Kategori = prefix host group (label di parameter dev.kind_labels). Lokasi dari kode di nama grup: tabel pemetaan zbx_loc_map lebih dulu, lalu alias lokasi,
+lalu kode apa adanya. Koordinat peta dari master Lokasi (lat, lon)."""
 from datetime import datetime
 from sqlalchemy.orm import Session
 from .. import models as M
@@ -7,8 +8,10 @@ from ..store import Config
 from ..timeutil import ms
 from .network import device_names
 
+ORDER = {"down": 0, "degraded": 1, "maintenance": 2, "up": 3, "disabled": 4}
 
-def _loc_map(db: Session) -> dict:
+
+def _alias_map(db: Session) -> dict:
     out = {}
     for s in db.query(M.Site).filter_by(active=True):
         for n in device_names(db, s.name):
@@ -16,46 +19,176 @@ def _loc_map(db: Session) -> dict:
     return out
 
 
-def build(db: Session, cfg: Config, site: str = "") -> dict:
+def _agg(items):
+    c = {k: 0 for k in ("up", "down", "degraded", "maintenance", "disabled")}
+    for h, _ in items:
+        c[h.status] = c.get(h.status, 0) + 1
+    up, down = c["up"], c["down"]
+    return {"total": len(items), "up": up, "down": down, "deg": c["degraded"], "maint": c["maintenance"], "off": c["disabled"], "avail": up / (up + down) if up + down else None}
+
+
+def build(db: Session, cfg: Config, site: str = "", kind: str = "", status: str = "", full: bool = False, grp: str = "", dtype: str = "", down_all: bool = False) -> dict:
     labels = cfg.p("dev.kind_labels", {}) or {}
-    amap = _loc_map(db)
-    rows = []
-    for h in db.query(M.ZbxHost).all():
-        loc = amap.get((h.code or "").lower()) or (h.code or "-")
-        if site and loc != site:
-            continue
-        rows.append((h, loc))
-    src = db.get(M.DataSource, "zabbix")
+    chronic_h = 24 * int(cfg.p("dev.chronic_days", 30) or 30)
+    amap = _alias_map(db)
+    cmap = {m.code.lower(): m.site for m in db.query(M.ZbxLocMap) if m.site}
+    sites = {s.name: s for s in db.query(M.Site)}
+    dlabel = {d.code: (d.label or d.code) for d in db.query(M.DevCode)}
     now = cfg.now()
+    unmapped: dict = {}
+    allrows = []
+    for h in db.query(M.ZbxHost).all():
+        c = (h.code or "").lower()
+        loc = cmap.get(c) or amap.get(c)
+        if not loc:
+            loc = h.code or "-"
+            unmapped[loc] = unmapped.get(loc, 0) + 1
+        allrows.append((h, loc))
+    by_site = [r for r in allrows if not site or r[1] == site]
+    base = [r for r in by_site if (not kind or r[0].kind == kind) and (not grp or grp in (r[0].groups or []))]      # sebelum filter tipe: dipakai untuk ringkasan per tipe
+    rows = [r for r in base if not dtype or (r[0].dev_code or "-") == dtype]
 
-    def agg(items):
-        up = sum(1 for h, _ in items if h.status == "up")
-        down = sum(1 for h, _ in items if h.status == "down")
-        mt = sum(1 for h, _ in items if h.status == "maintenance")
-        off = sum(1 for h, _ in items if h.status == "disabled")
-        deg = sum(1 for h, _ in items if h.status == "degraded")
-        return {"total": len(items), "up": up, "down": down, "deg": deg, "maint": mt, "off": off, "avail": up / (up + down) if up + down else None}
+    def age(h):
+        return round((now - h.down_since).total_seconds() / 3600, 1) if h.down_since else None
 
-    kinds = {}
-    for h, loc in rows:
-        kinds.setdefault(h.kind or "-", []).append((h, loc))
-    locs = {}
-    for h, loc in rows:
-        locs.setdefault(loc, []).append((h, loc))
-    by_kind = sorted(({"k": labels.get(k, k), "key": k, **agg(v)} for k, v in kinds.items()), key=lambda x: -x["total"])
-    by_loc = sorted(({"k": k, **agg(v)} for k, v in locs.items()), key=lambda x: (-x["down"], -x["total"], x["k"]))
-    down = []
-    for h, loc in rows:
-        if h.status == "down":
-            age = (now - h.down_since).total_seconds() / 3600 if h.down_since else None
-            down.append({"name": h.name, "kind": labels.get(h.kind, h.kind), "loc": loc, "since": ms(h.down_since) if h.down_since else None,
-                         "ageH": round(age, 1) if age is not None else None, "problem": h.problem or ""})
-    down.sort(key=lambda d: (d["ageH"] is None, -(d["ageH"] or 0), d["name"]))
-    last = max((h.updated_at for h, _ in rows), default=None)
+    def item(h, loc):
+        return {"name": h.name, "kind": h.kind, "kindLabel": labels.get(h.kind, h.kind), "loc": loc, "type": h.dev_code or "", "typeLabel": dlabel.get(h.dev_code, h.dev_code) if h.dev_code else "Unclassified", "zone": h.zone or "", "subzone": h.subzone or "", "status": h.status,
+                "since": ms(h.down_since) if h.down_since else None, "ageH": age(h), "problem": h.problem or ""}
+
+    tg = {}
+    for r in base:
+        tg.setdefault(r[0].dev_code or "-", []).append(r)
+    by_type = sorted(({"code": c, "k": dlabel.get(c, c) if c != "-" else "Unclassified", **_agg(v)} for c, v in tg.items()), key=lambda x: (-x["total"], x["k"]))
+    kinds, locs = {}, {}
+    for r in by_site:
+        kinds.setdefault(r[0].kind or "-", []).append(r)
+    for r in rows:
+        locs.setdefault(r[1], []).append(r)
+    by_kind = sorted(({"k": labels.get(k, k), "key": k, **_agg(v)} for k, v in kinds.items()), key=lambda x: -x["total"])
+    by_loc = sorted(({"k": k, **_agg(v)} for k, v in locs.items()), key=lambda x: (-x["down"], -x["total"], x["k"]))
+    down = sorted((item(h, loc) for h, loc in rows if h.status == "down"), key=lambda d: (d["ageH"] is None, -(d["ageH"] or 0), d["name"]))
+    cdays = chronic_h // 24
+    buckets = [("less than 1 day", 0, 24), ("1 to 7 days", 24, 168), (f"7 to {cdays} days", 168, chronic_h), (f"over {cdays} days", chronic_h, 1e12)]
+    age_dist = [{"k": lb, "n": sum(1 for d in down if d["ageH"] is not None and lo <= d["ageH"] < hi)} for lb, lo, hi in buckets]
+    nt = sum(1 for d in down if d["ageH"] is None)
+    if nt:
+        age_dist.append({"k": "no time", "n": nt})
+    def where(loc, hosts):
+        """Position of a location: the median of its Zabbix hosts' inventory coordinates (Zabbix is the source), else the coordinates in the Locations master."""
+        ll = sorted(h.lat for h, _ in hosts if h.lat is not None and h.lon is not None)
+        lo = sorted(h.lon for h, _ in hosts if h.lat is not None and h.lon is not None)
+        if ll:
+            return ll[len(ll) // 2], lo[len(lo) // 2], "zabbix", len(ll)
+        s = sites.get(loc)
+        return (s.lat, s.lon, "master", 0) if s is not None and s.lat is not None and s.lon is not None else (None, None, "", 0)
+    mp, nocoord = [], []
+    for k, v in locs.items():
+        a = _agg(v)
+        la, lo_, src, n = where(k, v)
+        if la is not None:
+            mp.append({"k": k, "lat": la, "lon": lo_, "src": src, "geo": n, **a})
+        else:
+            nocoord.append(k)
+    # daftar group (untuk filter) dan data peta per group (untuk widget peta yang dikhususkan, mis. Network-SDWAN); mengikuti filter lokasi saja
+    gcount, gmaps = {}, {}
+    for h, loc in by_site:
+        for gname in (h.groups or []):
+            gcount.setdefault(gname, [h.kind or "-", 0])[1] += 1
+            gmaps.setdefault(gname, {}).setdefault(loc, []).append((h, loc))
+    groups = sorted(({"name": n, "kind": v[0], "n": v[1]} for n, v in gcount.items()), key=lambda x: x["name"])
+    group_maps = {}
+    for gname, lg in gmaps.items():
+        pts = []
+        for loc, v in lg.items():
+            la, lo_, src, n = where(loc, v)
+            if la is not None:
+                pts.append({"k": loc, "lat": la, "lon": lo_, "src": src, "geo": n, **_agg(v)})
+        group_maps[gname] = pts
+    kind_loc, kind_down = {}, {}
+    for key, v in kinds.items():
+        lg = {}
+        for h, loc in v:
+            lg.setdefault(loc, []).append((h, loc))
+        kind_loc[key] = sorted(({"k": k, **_agg(x)} for k, x in lg.items()), key=lambda x: (-x["down"], -x["total"], x["k"]))[:8]
+        kind_down[key] = sorted((item(h, loc) for h, loc in v if h.status == "down"), key=lambda d: (d["ageH"] is None, -(d["ageH"] or 0), d["name"]))[:10]
+    lst, list_n = [], 0
+    if full:
+        sel = [r for r in rows if not status or r[0].status == status]
+        list_n = len(sel)
+        sel.sort(key=lambda r: (ORDER.get(r[0].status, 9), -(age(r[0]) or 0), r[0].name))
+        lst = [item(h, loc) for h, loc in sel[:500]]
+    src = db.get(M.DataSource, "zabbix")
+    last = max((h.updated_at for h, _ in allrows), default=None)
     every = (src.interval_min if src else 5) or 5
     stale = bool(last) and (datetime.utcnow() - last).total_seconds() > every * 60 * 3
-    chronic = sum(1 for d in down if d["ageH"] is not None and d["ageH"] > 24 * 30)
-    return {"all": agg(rows), "chronic": chronic, "byKind": by_kind, "byLoc": by_loc, "down": down[:200], "downN": len(down),
-            "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": stale,
-            "configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled),
-            "error": src.last_error if src else None}
+    return {"all": _agg(rows), "chronic": sum(1 for d in down if d["ageH"] is not None and d["ageH"] > chronic_h), "chronicDays": cdays,
+            "byKind": by_kind, "byLoc": by_loc, "down": down if down_all else down[:200], "downN": len(down), "ageDist": age_dist, "map": mp, "noCoord": sorted(nocoord),
+            "byType": by_type, "groups": groups, "groupMaps": group_maps, "unmapped": [{"code": c, "n": n} for c, n in sorted(unmapped.items(), key=lambda x: -x[1])], "kindLoc": kind_loc, "kindDown": kind_down,
+            "list": lst, "listN": list_n, "updated": ms(last + (now - datetime.utcnow())) if last else None, "stale": stale,
+            "configured": bool(src and (src.config or {}).get("base_url")), "enabled": bool(src and src.enabled), "error": src.last_error if src else None}
+
+def history(db: Session, cfg: Config, a, b, site: str = "", kind: str = "", dtype: str = "", every: bool = False) -> dict:
+    """Riwayat down dari tabel zbx_event pada rentang tanggal a..b: kejadian, downtime (jam), perangkat terdampak, MTTR, per hari, lokasi, tipe, perangkat, dan masalah dominan."""
+    from datetime import time as _t, timedelta
+    labels = cfg.p("dev.kind_labels", {}) or {}
+    amap, cmap = _alias_map(db), {m.code.lower(): m.site for m in db.query(M.ZbxLocMap) if m.site}
+    dlabel = {d.code: (d.label or d.code) for d in db.query(M.DevCode)}
+    now = cfg.now()
+    t0, t1 = datetime.combine(a, _t.min), min(datetime.combine(b + timedelta(days=1), _t.min), now)
+    hosts = {h.hostid: h for h in db.query(M.ZbxHost)}
+    loc_of = lambda c: cmap.get((c or "").lower()) or amap.get((c or "").lower()) or (c or "-")
+    base = [h for h in hosts.values() if (not site or loc_of(h.code) == site) and (not kind or h.kind == kind) and (not dtype or (h.dev_code or "-") == dtype)]
+    ov = lambda s, e, x0, x1: max(0.0, (min(e, x1) - max(s, x0)).total_seconds()) / 3600
+    evs = db.query(M.ZbxEvent).filter(M.ZbxEvent.start_at < t1, (M.ZbxEvent.end_at.is_(None)) | (M.ZbxEvent.end_at >= t0)).all()
+    daily = {}
+    d = a
+    while d <= b:
+        daily[d] = [0, 0.0]
+        d += timedelta(days=1)
+    tot_h, n_ev, dur_closed, per = 0.0, 0, [], {"loc": {}, "type": {}, "host": {}, "prob": {}, "kind": {}}
+    for e in evs:
+        h = hosts.get(e.hostid)
+        code = e.code if h is None else h.code
+        loc = loc_of(code)
+        dc = (e.dev_code or "-") if h is None else (h.dev_code or "-")
+        kd = e.kind or (h.kind if h else "")
+        if (site and loc != site) or (kind and kd != kind) or (dtype and dc != dtype):
+            continue
+        end = e.end_at or now
+        hrs = ov(e.start_at, end, t0, t1)
+        if hrs <= 0:
+            continue
+        n_ev += 1
+        tot_h += hrs
+        if e.end_at and t0 <= e.start_at < t1:
+            dur_closed.append((e.end_at - e.start_at).total_seconds() / 3600)
+        if a <= e.start_at.date() <= b:
+            daily[e.start_at.date()][0] += 1
+        x = e.start_at.date()
+        while x <= end.date() and x <= b:
+            if x >= a:
+                daily[x][1] += ov(e.start_at, end, datetime.combine(x, _t.min), datetime.combine(x + timedelta(days=1), _t.min))
+            x += timedelta(days=1)
+        for key, k in (("loc", loc), ("type", dc), ("host", e.host_name or e.hostid), ("prob", e.name or "-"), ("kind", kd or "-")):
+            p = per[key].setdefault(k, [0, 0.0, set()])
+            p[0] += 1
+            p[1] += hrs
+            p[2].add(e.hostid)
+    period_h = max((t1 - t0).total_seconds() / 3600, 1)
+    n_dev = len(base)
+    rank = lambda key, n=10, name=lambda k: k: [{"k": name(k), "key": k, "events": v[0], "hours": round(v[1], 1), "hosts": len(v[2])} for k, v in sorted(per[key].items(), key=lambda x: -x[1][1])[:None if every else n]]
+    cnt_by = lambda f: {}
+    out = {"from": a.isoformat(), "to": b.isoformat(), "events": n_ev, "hours": round(tot_h, 1), "hosts": len({h for v in per["host"].values() for h in v[2]}), "devices": n_dev,
+           "mttr": round(sum(dur_closed) / len(dur_closed), 1) if dur_closed else None, "avail": max(0.0, 1 - tot_h / (n_dev * period_h)) if n_dev else None,
+           "daily": [{"date": k.isoformat(), "events": v[0], "hours": round(v[1], 1)} for k, v in daily.items()],
+           "byLoc": rank("loc"), "byType": rank("type", 10, lambda k: dlabel.get(k, k) if k != "-" else "Unclassified"), "byKind": rank("kind", 10, lambda k: labels.get(k, k)),
+           "byHost": [{"k": r["k"], "events": r["events"], "hours": r["hours"]} for r in rank("host", 15)], "byProb": [{"k": r["k"], "events": r["events"], "hours": r["hours"]} for r in rank("prob", 8)]}
+    # availability per lokasi = 1 - downtime / (jumlah perangkat lokasi * lama periode)
+    cnt = {}
+    for h in base:
+        cnt[loc_of(h.code)] = cnt.get(loc_of(h.code), 0) + 1
+    for r in out["byLoc"]:
+        r["avail"] = max(0.0, 1 - r["hours"] / (cnt.get(r["key"], 0) * period_h)) if cnt.get(r["key"]) else None
+    first = db.query(M.func.min(M.ZbxEvent.start_at)).scalar() if hasattr(M, "func") else None
+    out["since"] = first.isoformat() if first else None
+    return out

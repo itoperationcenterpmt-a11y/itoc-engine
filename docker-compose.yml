@@ -17,16 +17,53 @@ services:
     environment:
       ITOC_DATABASE_URL: postgresql+psycopg://itoc:${DB_PASSWORD:-itoc}@db:5432/itoc
       ITOC_RUN_SCHEDULER: "false"
+    volumes:
+      - ./backups/manual:/srv/backups        # cadangan pengaman dari Admin → System → Restore (terpisah dari backup terjadwal)
     depends_on:
       db: {condition: service_healthy}
-    ports: ["8000:8000"]
-    command: sh -c "python -m app.cli migrate && python -m app.cli seed-config && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --no-server-header"
+    ports: ["127.0.0.1:8000:9000"]         # hanya untuk akses lokal di mesin ini; tidak terbuka ke jaringan
+    networks:
+      default: {}
+      edge: {aliases: [tera-api]}           # Caddy di compose lain bergabung ke jaringan tera-edge dan memanggil tera-api:9000
+    command: sh -c "python -m app.cli migrate && python -m app.cli seed-config && uvicorn app.main:app --host 0.0.0.0 --port 9000 --workers 2 --no-server-header --proxy-headers --forwarded-allow-ips='*'"
+  proxy:
+    profiles: ["proxy"]                      # opsional, hanya bila server tidak punya Caddy/proxy lain: docker compose --profile proxy up -d
+    image: nginx:1.27-alpine
+    depends_on: [api]
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/certs:ro
+    restart: unless-stopped
+  backup:
+    profiles: ["backup"]                     # opsional: docker compose --profile backup up -d (lihat docs/Panduan-Backup.md)
+    build: ./deploy/backup
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      TZ: Asia/Jakarta
+      DB_PASSWORD: ${DB_PASSWORD:-itoc}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      BACKUP_AT: ${BACKUP_AT:-02:00}
+    volumes: [./backups:/backups]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups -name 'itoc-*.dump.age' -mmin -1560 | grep -q ."]   # ada backup dalam 26 jam terakhir
+      interval: 1h
+      start_period: 26h
   worker:
     build: .
     env_file: .env
     environment:
       ITOC_DATABASE_URL: postgresql+psycopg://itoc:${DB_PASSWORD:-itoc}@db:5432/itoc
     depends_on: [api]
+    healthcheck: {disable: true}            # image memeriksa port 9000 yang hanya ada di api; worker tidak membuka port
     command: python -m app.worker
+networks:
+  edge:
+    name: tera-edge                         # jaringan khusus antara Caddy dan TERA saja; aplikasi lain memakai jaringan sendiri
 volumes:
   pgdata:

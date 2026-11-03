@@ -1,0 +1,979 @@
+"""Automatic insights: statistical analysis of data already stored in the database (no external service, no AI).
+
+Methods: compare the latest value with what is normal (median and robust MAD deviation of earlier data, same weekday when there is a weekly pattern),
+trend slopes with a forecast against targets, repeat counts, SLA risk from ticket age, cross-source correlation at the same location, incident grouping,
+and a location health score. Every finding carries its numbers and comparison. Findings are stored in the insight table with a unique key; a finding that no
+longer appears is closed automatically. A dismissed finding stays hidden for the chosen number of days."""
+import statistics
+from urllib.parse import quote
+from datetime import date, datetime, timedelta
+from sqlalchemy import func, or_, select, text
+from sqlalchemy.orm import Session
+from . import models as M
+from .store import Config
+
+MIN_BASE = 5          # minimum comparison points before something is judged anomalous
+ZCUT = 3.0            # robust z threshold
+WD = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+CLOSED = ("closed", "resolved", "cancelled", "canceled")
+
+
+def holding(cfg) -> tuple:
+    """Statuses whose SLA clock is paused (On hold). An open ticket in one of them is not counted as late, old, or about to breach."""
+    return tuple(s.lower() for s in (cfg.p("sd.onhold_statuses", ["Onhold", "On Hold"]) or [])) if cfg.p("sd.onhold_pauses_sla", True) else ()
+
+
+def robust(base: list[float], x: float):
+    """(median, deviation, z). Deviation = MAD x 1.4826, or the standard deviation when MAD is 0. None when there is too little comparison data."""
+    if len(base) < MIN_BASE:
+        return None
+    med = statistics.median(base)
+    sd = statistics.median([abs(v - med) for v in base]) * 1.4826 or (statistics.pstdev(base) if len(base) > 1 else 0.0)
+    z = (x - med) / sd if sd else (0.0 if x == med else (99.0 if x > med else -99.0))
+    return med, sd, max(-99.0, min(99.0, z))
+
+
+def slope(ys: list[float]) -> float:
+    """Slope of the linear regression against the day index (per day)."""
+    n = len(ys)
+    if n < 3:
+        return 0.0
+    mx, my = (n - 1) / 2, sum(ys) / n
+    den = sum((i - mx) ** 2 for i in range(n))
+    return sum((i - mx) * (y - my) for i, y in enumerate(ys)) / den if den else 0.0
+
+
+def fmt(v, d=0) -> str:
+    return f"{v:,.{d}f}"
+
+
+def _ins(key, kind, sev, title, detail, tab, metric=None, site=None):
+    return {"key": key, "kind": kind, "severity": sev, "title": title, "detail": detail, "tab": tab, "metric": metric or {}, "site": site}
+
+
+def _midnight(d: date) -> datetime:
+    return datetime.combine(d, datetime.min.time())
+
+
+def _site_of(db: Session):
+    """code -> location name, using the same mapping as the Devices page."""
+    from .calc.devices import _alias_map
+    amap = _alias_map(db)
+    cmap = {m.code.lower(): m.site for m in db.query(M.ZbxLocMap) if m.site}
+    return lambda code: cmap.get((code or "").lower()) or amap.get((code or "").lower())
+
+
+def _sensor_names(db: Session) -> dict:
+    sens = list(db.scalars(select(M.PrtgSensor)))
+    per: dict = {}
+    for x in sens:
+        per[x.device] = per.get(x.device, 0) + 1
+    return {x.id: ((x.device or x.name) + (f" ({x.name})" if per.get(x.device, 0) > 1 else "")) for x in sens}
+
+
+def _daily_down(db: Session, start: date, end: date) -> dict:
+    """{sensor: {day: minutes down}} from hourly data, days start up to but excluding end."""
+    rows = db.execute(select(M.PrtgHourly.sensor_id, func.date(M.PrtgHourly.ts), func.sum(M.PrtgHourly.down_s)).where(M.PrtgHourly.ts >= _midnight(start), M.PrtgHourly.ts < _midnight(end)).group_by(M.PrtgHourly.sensor_id, func.date(M.PrtgHourly.ts))).all()
+    out: dict = {}
+    for sid, d, down in rows:
+        out.setdefault(sid, {})[d] = (down or 0) / 60
+    return out
+
+
+# ---------------- detectors: tickets ----------------
+def d_tickets(db: Session, cfg: Config) -> list[dict]:
+    """Tickets in on the last full day against the same weekday over the previous 8 weeks."""
+    today = cfg.now().date()
+    rows = db.execute(select(func.date(M.Ticket.created_at), func.count()).where(M.Ticket.created_at >= _midnight(today - timedelta(days=64))).group_by(func.date(M.Ticket.created_at))).all()
+    by = {d: n for d, n in rows}
+    last = today - timedelta(days=1)
+    if not by:
+        return []
+    x = by.get(last, 0)
+    base = [by.get(last - timedelta(days=7 * k), 0) for k in range(1, 9) if (last - timedelta(days=7 * k)) >= min(by)]
+    r = robust(base, x)
+    if r and r[2] >= ZCUT and x >= 1.5 * r[0] and x - r[0] >= 5:
+        return [_ins(f"ticket_volume:{last}", "tickets", "warn", f"Ticket volume spiked on {WD[last.weekday()]} {last:%d/%m}",
+                     f"{x} tickets came in, normally about {fmt(r[0])} on a {WD[last.weekday()]} (last 8 weeks). Check the categories and locations with the most tickets.", "servicedesk",
+                     {"value": x, "normal": round(r[0], 1), "z": round(r[2], 1)})]
+    return []
+
+
+def d_ticket_sites(db: Session, cfg: Config) -> list[dict]:
+    """Tickets per location on the last full day against the same weekday over the previous 8 weeks."""
+    today = cfg.now().date()
+    rows = db.execute(select(M.Ticket.site, func.date(M.Ticket.created_at), func.count()).where(M.Ticket.created_at >= _midnight(today - timedelta(days=64)), M.Ticket.site != "").group_by(M.Ticket.site, func.date(M.Ticket.created_at))).all()
+    ser: dict = {}
+    for s, d, n in rows:
+        ser.setdefault(s, {})[d] = n
+    last, out = today - timedelta(days=1), []
+    for s, by in ser.items():
+        x = by.get(last, 0)
+        base = [by.get(last - timedelta(days=7 * k), 0) for k in range(1, 9)]
+        r = robust(base, x)
+        if r and r[2] >= ZCUT and x >= 3 and x >= 2 * r[0] + 2:
+            out.append((x, s, r))
+    return [_ins(f"ticket_site:{s}:{last}", "tickets", "warn", f"Tickets at {s} are {fmt(x / max(r[0], 0.5), 1)}x the usual", f"{x} tickets on {last:%d/%m}, normally about {fmt(r[0], 1)} on a {WD[last.weekday()]}.",
+                  "servicedesk", {"value": x, "normal": round(r[0], 1), "z": round(r[2], 1)}, s) for x, s, r in sorted(out, key=lambda t: -t[0])[:3]]
+
+
+def d_ticket_trends(db: Session, cfg: Config) -> list[dict]:
+    """Week over week volume, and weekly median resolution time and SLA rate (rolling 7 day windows ending yesterday)."""
+    today, out = cfg.now().date(), []
+    ends = [today - timedelta(days=1 + 7 * k) for k in range(6)][::-1]          # oldest first
+    since = _midnight(ends[0] - timedelta(days=6))
+    n_in = {e: db.scalar(select(func.count()).select_from(M.Ticket).where(M.Ticket.created_at >= _midnight(e - timedelta(days=6)), M.Ticket.created_at < _midnight(e + timedelta(days=1)))) or 0 for e in ends[-2:]}
+    prev, cur = n_in[ends[-2]], n_in[ends[-1]]
+    if prev >= 20 and cur >= 1.4 * prev:
+        out.append(_ins("ticket_wow", "tickets", "warn", f"Tickets are up {fmt((cur / prev - 1) * 100)}% on the previous week", f"{cur} tickets in the last 7 days against {prev} in the 7 days before. Look for a common cause such as one location or category.", "servicedesk",
+                        {"last_7_days": cur, "previous_7_days": prev}))
+    rows = db.execute(select(M.Ticket.resolved_at, M.Ticket.created_at, M.Ticket.onhold_h, M.Ticket.sla_name).where(M.Ticket.resolved_at.is_not(None), M.Ticket.resolved_at >= since)).all()
+    med, sla = [], []
+    for e in ends:
+        a, b = _midnight(e - timedelta(days=6)), _midnight(e + timedelta(days=1))
+        hrs, ok, tot = [], 0, 0
+        for res, cre, hold, sn in rows:
+            if a <= res < b:
+                h = max(0.0, (res - cre).total_seconds() / 3600 - (hold or 0))
+                hrs.append(h)
+                if sn in cfg.sla:
+                    tot += 1
+                    ok += 1 if h <= cfg.sla[sn] else 0
+        med.append(statistics.median(hrs) if len(hrs) >= 5 else None)
+        sla.append(ok / tot if tot >= 5 else None)
+    m = med[-4:]
+    if None not in m and m[0] and all(m[i + 1] > m[i] for i in range(3)) and m[3] >= 1.2 * m[0]:
+        out.append(_ins("resolution_trend", "tickets", "warn", "Resolution time has worsened for 3 weeks in a row", f"Median resolution time went from {fmt(m[0], 1)} h to {fmt(m[3], 1)} h (weekly windows). Check technician workload and long-running tickets.", "servicedesk",
+                        {"weekly_median_hours": [round(v, 1) for v in m]}))
+    s = sla[-4:]
+    low = float(cfg.p("sd.sla_warn", 0.9) or 0.9)
+    if None not in s and s[3] < low and s[0] - s[3] >= 0.05 and s[3] < s[2] <= s[1] + 0.02:
+        out.append(_ins("sla_trend", "tickets", "warn", "Ticket SLA compliance is falling", f"Within SLA fell from {fmt(s[0] * 100, 1)}% to {fmt(s[3] * 100, 1)}% over 4 weeks (target {fmt(low * 100)}%).", "servicedesk", {"weekly_sla": [round(v, 3) for v in s]}))
+    return out
+
+
+def d_sla_risk(db: Session, cfg: Config) -> list[dict]:
+    """Open tickets that will pass their SLA target within 2 hours, and the count already past it."""
+    now, out, soon, over = cfg.now(), [], [], 0
+    rows = db.execute(select(M.Ticket.id, M.Ticket.site, M.Ticket.sla_name, M.Ticket.created_at, M.Ticket.onhold_h).where(M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED + holding(cfg)))).all()
+    for tid, site, sn, cre, hold in rows:
+        tgt = cfg.sla.get(sn)
+        if not tgt:
+            continue
+        remain = tgt - ((now - cre).total_seconds() / 3600 - (hold or 0))
+        if remain < 0:
+            over += 1
+        elif remain <= 2:
+            soon.append((remain, tid, site))
+    if soon:
+        soon.sort()
+        out.append(_ins("sla_risk", "tickets", "crit" if len(soon) >= 5 else "warn", f"{len(soon)} open tickets will pass their SLA within 2 hours",
+                        "Closest: " + ", ".join(f"#{t} ({s or 'no location'}, {fmt(r * 60)} min left)" for r, t, s in soon[:3]) + ".", "servicedesk", {"count": len(soon), "already_past_sla": over}))
+    return out
+
+
+# ---------------- detectors: network ----------------
+def d_links(db: Session, cfg: Config) -> list[dict]:
+    """Link downtime on the last full day (and today so far) against the previous 28 days, and links that drop repeatedly in 7 days."""
+    out, today = [], cfg.now().date()
+    name = _sensor_names(db)
+    ser = _daily_down(db, today - timedelta(days=29), today + timedelta(days=1))
+    flagged = []
+    for sid, s in ser.items():
+        for day, label in ((today - timedelta(days=1), "yesterday"), (today, "today")):
+            x = s.get(day)
+            if x is None:
+                continue
+            r = robust([v for d, v in s.items() if d < today - timedelta(days=1)], x)
+            if r and x >= (90 if day == today else 30) and r[2] >= ZCUT and x >= 2 * r[0] + 15:
+                flagged.append((x, sid, day, label, r))
+    latest: dict = {}
+    for f in flagged:                                   # one finding per link: the latest affected day
+        if f[1] not in latest or f[2] > latest[f[1]][2]:
+            latest[f[1]] = f
+    device = {x.id: x.device for x in db.scalars(select(M.PrtgSensor))}
+    groups: dict = {}
+    for f in latest.values():
+        groups.setdefault((device.get(f[1]) or f[1], f[2]), []).append(f)
+    shown = 0
+    for (dev, day), fs in sorted(groups.items(), key=lambda g: -max(f[0] for f in g[1])):
+        if shown >= 6:
+            break
+        if len(fs) >= 2:                                # several links at one location affected together
+            names = ", ".join(sorted(name.get(f[1], f[1]) for f in fs))
+            worst = max(f[0] for f in fs)
+            out.append(_ins(f"link_site:{dev}:{day}", "links", "crit", f"{len(fs)} links at {dev} are affected together",
+                            f"{names}: longest downtime {fmt(worst)} min {'today' if day == today else 'yesterday'} ({day:%d/%m}), normally close to 0. Links from different ISPs failing together points to the site (power, equipment, or cabling) rather than the ISP.",
+                            "noc", {"links": len(fs), "longest_downtime_min": round(worst, 1)}, dev))
+        else:
+            x, sid, day, label, (med, sd, z) = fs[0]
+            loc = name.get(sid, sid)
+            out.append(_ins(f"link_down:{sid}:{day}", "links", "crit" if x >= 240 else "warn", f"Link {loc} downtime is far above normal",
+                            f"{fmt(x)} min down {label} ({day:%d/%m}{', so far' if day == today else ''}), normally {fmt(med)} min per day (previous 28 days).", "noc", {"value": round(x, 1), "normal": round(med, 1), "z": round(z, 1)}, loc))
+        shown += 1
+    since = _midnight(today - timedelta(days=6))
+    cnt = db.execute(select(M.PrtgEvent.sensor_id, func.count()).where(M.PrtgEvent.start_at >= since).group_by(M.PrtgEvent.sensor_id).having(func.count() >= 5).order_by(func.count().desc()).limit(5)).all()
+    for sid, n in cnt:
+        loc = name.get(sid, sid)
+        out.append(_ins(f"link_flap:{sid}:{today}", "links", "warn", f"Link {loc} keeps dropping", f"{n} outages in the last 7 days. Check the equipment, cabling, or ISP at this location.", "noc", {"value": n, "window_days": 7}, loc))
+    return out
+
+
+def d_availability(db: Session, cfg: Config) -> list[dict]:
+    """Network availability trend over the last 21 full days and a 14 day forecast against the target."""
+    today = cfg.now().date()
+    rows = db.execute(select(func.date(M.PrtgHourly.ts), func.sum(M.PrtgHourly.down_s), func.count()).where(M.PrtgHourly.seen.is_(True), M.PrtgHourly.ts >= _midnight(today - timedelta(days=21)), M.PrtgHourly.ts < _midnight(today)).group_by(func.date(M.PrtgHourly.ts)).order_by(func.date(M.PrtgHourly.ts))).all()
+    ys = [1 - (down or 0) / (n * 3600) for _, down, n in rows if n >= 24]
+    if len(ys) < 10:
+        return []
+    target = float(cfg.p("net.target", 0.995) or 0.995)
+    b = slope(ys)
+    now_v = sum(ys[-3:]) / 3
+    if b <= -0.0004 and now_v >= target and now_v + b * 14 < target:
+        days = int((now_v - target) / -b)
+        return [_ins("avail_trend", "links", "warn", "Network availability is falling toward the target",
+                     f"Average availability is {fmt(now_v * 100, 2)}% and dropping {fmt(-b * 100, 3)} points per day. At this rate it crosses the {fmt(target * 100, 1)}% target in about {days} days.", "noc",
+                     {"now": round(now_v, 5), "slope_per_day": round(b, 6), "target": target, "days_to_target": days})]
+    return []
+
+
+def d_capacity(db: Session, cfg: Config) -> list[dict]:
+    """Daily peak utilization per link over 28 days: forecast when it reaches 90% of capacity, and links already above the peak threshold."""
+    today, out = cfg.now().date(), []
+    cap = {s.id: s.capacity_mbps for s in db.scalars(select(M.PrtgSensor).where(M.PrtgSensor.capacity_mbps.is_not(None), M.PrtgSensor.active.is_(True)))}
+    if not cap:
+        return out
+    name = _sensor_names(db)
+    peak = float(cfg.p("net.util_peak", 0.85) or 0.85)
+    rows = db.execute(select(M.PrtgHourly.sensor_id, func.date(M.PrtgHourly.ts), func.max(func.greatest(M.PrtgHourly.in_mbps, M.PrtgHourly.out_mbps))).where(M.PrtgHourly.ts >= _midnight(today - timedelta(days=28)), M.PrtgHourly.ts < _midnight(today)).group_by(M.PrtgHourly.sensor_id, func.date(M.PrtgHourly.ts))).all()
+    ser: dict = {}
+    for sid, d, v in rows:
+        if sid in cap and v is not None:
+            ser.setdefault(sid, {})[d] = v / cap[sid]
+    found = []
+    for sid, s in ser.items():
+        ys = [s[d] for d in sorted(s)]
+        if len(ys) < 14:
+            continue
+        cur, b = sum(ys[-3:]) / 3, slope(ys)
+        if cur >= peak:
+            found.append((cur, sid, f"link_cap_now:{sid}", "warn", f"Link {name.get(sid, sid)} peak utilization is {fmt(cur * 100)}% of capacity",
+                          f"Daily peak averaged {fmt(cur * 100)}% over the last 3 days (threshold {fmt(peak * 100)}%, capacity {fmt(cap[sid])} Mbps). Consider more capacity or traffic shaping.", {"peak_pct": round(cur * 100, 1), "capacity_mbps": cap[sid]}))
+        elif cur >= 0.6 and b >= 0.004:
+            days = int((0.9 - cur) / b)
+            if days <= 60:
+                found.append((cur, sid, f"link_cap_trend:{sid}", "warn" if days <= 30 else "info", f"Link {name.get(sid, sid)} may reach 90% capacity in about {days} days",
+                              f"Daily peak is {fmt(cur * 100)}% of capacity and rising {fmt(b * 100, 2)} points per day (capacity {fmt(cap[sid])} Mbps).", {"peak_pct": round(cur * 100, 1), "days_to_90pct": days, "capacity_mbps": cap[sid]}))
+    for cur, sid, key, sev, title, detail, metric in sorted(found, key=lambda t: -t[0])[:5]:
+        out.append(_ins(key, "capacity", sev, title, detail, "noc", metric, name.get(sid, sid)))
+    return out
+
+
+# ---------------- detectors: security ----------------
+def d_ndr(db: Session, cfg: Config) -> list[dict]:
+    """Critical and high events per full day against the previous 30 days."""
+    today = cfg.now().date()
+    rows = db.execute(text("SELECT DISTINCT ON (day) day, threats FROM soc_day WHERE day >= :a AND day < :b ORDER BY day, batch_id DESC"), {"a": today - timedelta(days=35), "b": today}).all()
+    if len(rows) < MIN_BASE + 1:
+        return []
+    ch = {d: sum(v for k, v in (t or {}).items() if k.split("|")[0] in ("critical", "high")) for d, t in rows}
+    last = max(ch)
+    r = robust([v for d, v in ch.items() if d < last], ch[last])
+    if r and r[2] >= ZCUT and ch[last] >= 1.5 * r[0] and ch[last] - r[0] >= 20:
+        return [_ins(f"ndr_spike:{last}", "security", "warn", f"NDR (Palo Alto): critical and high events spiked on {last:%d/%m}", f"{fmt(ch[last])} critical + high events, normally about {fmt(r[0])} per day (last 30 days). Open NDR and check the top sources, and whether the firewall blocked them: alert-only events are not blocked.",
+                     "soc", {"value": ch[last], "normal": round(r[0], 1), "z": round(r[2], 1)})]
+    return []
+
+
+def d_ndr_traffic(db: Session, cfg: Config) -> list[dict]:
+    """Traffic through a firewall yesterday against its previous 28 days (unusually high or a sudden stop), with the top source IPs of that day."""
+    from .calc.soc_fw import site_map, short
+    day = cfg.now().date() - timedelta(days=1)
+    rows = db.execute(select(M.SocFwDay.fw, M.SocFwDay.day, M.SocFwDay.bytes, M.SocFwDay.src).where(M.SocFwDay.day >= day - timedelta(days=28), M.SocFwDay.day <= day)).all()
+    by: dict = {}
+    for fw, d, b, src in rows:
+        by.setdefault(fw, {})[d] = (b, src)
+    smap = site_map(db, list(by))
+    out = []
+    for fw, days in by.items():
+        if day not in days:
+            continue
+        base = [b for d, (b, _) in days.items() if d < day and b > 0]
+        if len(base) < 7:
+            continue
+        cur = days[day][0]
+        r = robust(base, cur)
+        if not r:
+            continue
+        name, med = smap.get(fw) or fw, r[0]
+        if r[2] >= ZCUT and cur >= 2 * med and cur - med >= 50e9:
+            top = sorted((days[day][1] or {}).items(), key=lambda kv: -kv[1])[:3]
+            out.append(_ins(f"ndr_traffic:{fw}:{day:%Y%m%d}", "security", "warn", f"NDR (Palo Alto): traffic through {short(name)} firewall was {fmt(cur / med, 1)}x higher than usual on {day:%d/%m}",
+                            f"{fmt(cur / 1e9)} GB, normally about {fmt(med / 1e9)} GB per day. A large transfer can be a backup or an update, or data leaving the network." + (" Top sources: " + ", ".join(f"{ip} ({fmt(b / 1e9)} GB)" for ip, b in top) + "." if top else ""), "soc",
+                            {"gb": round(cur / 1e9, 1), "normal_gb": round(med / 1e9, 1), "z": round(r[2], 1)}, name))
+        elif r[2] <= -ZCUT and med >= 20e9 and cur <= 0.3 * med:
+            out.append(_ins(f"ndr_traffic_low:{fw}:{day:%Y%m%d}", "security", "info", f"NDR (Palo Alto): traffic through {short(name)} firewall dropped sharply on {day:%d/%m}",
+                            f"{fmt(cur / 1e9)} GB, normally about {fmt(med / 1e9)} GB per day. Check the link, or whether the firewall stopped sending logs to Panorama.", "soc",
+                            {"gb": round(cur / 1e9, 1), "normal_gb": round(med / 1e9, 1), "z": round(r[2], 1)}, name))
+    return sorted(out, key=lambda i: -i["metric"]["gb"])[:5]
+
+
+def d_xdr(db: Session, cfg: Config) -> list[dict]:
+    out, now = [], cfg.now()
+    old = db.execute(select(func.count(), func.min(M.XdrAlert.created_at)).where(M.XdrAlert.severity.in_(["critical", "high"]), func.lower(func.coalesce(M.XdrAlert.status, "")) != "closed",
+                                                                                 func.lower(func.coalesce(M.XdrAlert.investigation_status, "")) != "closed", M.XdrAlert.created_at < now - timedelta(hours=72))).one()
+    if old[0]:
+        age = (now - old[1]).days
+        out.append(_ins("xdr_backlog", "security", "crit" if old[0] >= 5 else "warn", f"XDR (Trend Micro): {old[0]} critical or high alerts open for more than 72 hours", f"The oldest is {age} days old. An open alert means a possible threat is still unhandled: review each one in Vision One, then close it or escalate.", "xdr", {"count": old[0], "oldest_days": age}))
+    cnt: dict = {}
+    for ents in db.scalars(select(M.XdrAlert.entities).where(M.XdrAlert.created_at >= now - timedelta(days=7))):
+        for n in {e.get("name") for e in (ents or []) if e.get("type") == "host" and e.get("name")}:
+            cnt[n] = cnt.get(n, 0) + 1
+    for h, n in sorted(cnt.items(), key=lambda x: -x[1])[:3]:
+        if n >= 3:
+            out.append(_ins(f"xdr_repeat:{h}", "security", "warn", f"XDR (Trend Micro): host {h} keeps appearing in alerts", f"{n} alerts in the last 7 days. Check in Vision One whether the host needs to be isolated or cleaned.", "xdr", {"alerts_7_days": n}))
+    return out
+
+
+def d_xdr_tickets(db: Session, cfg: Config) -> list[dict]:
+    """Open critical or high XDR alerts: how many have a related ticket, and which tickets belong to the busiest detection model."""
+    from .calc import xdr_tickets
+    now = cfg.now()
+    rows = db.scalars(select(M.XdrAlert).where(M.XdrAlert.severity.in_(["critical", "high"]), func.lower(func.coalesce(M.XdrAlert.status, "")) != "closed",
+                                               func.lower(func.coalesce(M.XdrAlert.investigation_status, "")) != "closed", M.XdrAlert.created_at >= now - timedelta(days=30))).all()
+    if not rows:
+        return []
+    ref = xdr_tickets.refs(db, rows)
+    out, bare = [], [r for r in rows if not ref.get(r.id)]
+    if len(bare) >= 3:
+        hosts = sorted({e.get("name") for r in bare for e in (r.entities or []) if e.get("type") == "host" and e.get("name")})[:5]
+        out.append(_ins("xdr_noticket", "security", "crit" if len(bare) >= 10 else "warn", f"XDR (Trend Micro): {len(bare)} of {len(rows)} open critical or high alerts have no ticket",
+                        "No ManageEngine ticket mentions the affected host in the 30 days after the alert. Open a ticket so the response is tracked." + (f" Hosts: {', '.join(hosts)}." if hosts else ""), "xdr",
+                        {"open_alerts": len(rows), "without_ticket": len(bare), "with_ticket": len(rows) - len(bare)}))
+    by: dict = {}
+    for r in rows:
+        by.setdefault(r.model or "-", []).append(r)
+    model, grp = max(by.items(), key=lambda x: len(x[1]))
+    if len(grp) >= 5:
+        tk = sorted({t["id"] for r in grp for t in ref.get(r.id, [])})[:6]
+        out.append(_ins(f"xdr_model:{model}", "security", "warn", f"XDR (Trend Micro): detection model \"{model}\" triggered {len(grp)} open alerts",
+                        "The same model keeps firing across hosts. Check whether it is one campaign or a rule that needs tuning." + (f" Related tickets: {', '.join(tk)}." if tk else " No related ticket found."), "xdr",
+                        {"alerts": len(grp), "hosts": len({e.get("name") for r in grp for e in (r.entities or []) if e.get("type") == "host"}), "tickets": tk or "none"}))
+    return out
+
+
+def d_ndr_mix(db: Session, cfg: Config) -> list[dict]:
+    """Share of critical and high events and categories that are new this week."""
+    today = cfg.now().date()
+    rows = db.execute(text("SELECT DISTINCT ON (day) day, threats FROM soc_day WHERE day >= :a AND day < :b ORDER BY day, batch_id DESC"), {"a": today - timedelta(days=35), "b": today}).all()
+    if len(rows) < 8:
+        return []
+    cat = lambda t: {k.split("|")[2] if len(k.split("|")) > 2 else "-": v for k, v in (t or {}).items()}
+    old: set = set()
+    new: dict = {}
+    cut = today - timedelta(days=7)
+    for d, t in rows:
+        for c, v in cat(t).items():
+            if d < cut:
+                old.add(c)
+            else:
+                new[c] = new.get(c, 0) + v
+    fresh = sorted(((c, v) for c, v in new.items() if c not in old and c != "-" and v >= 10), key=lambda x: -x[1])[:3]
+    if not fresh:
+        return []
+    return [_ins("ndr_newcat:" + fresh[0][0], "security", "info", f"NDR (Palo Alto): new threat category {fresh[0][0]}", f"{fmt(fresh[0][1])} events this week from a category not seen in the previous weeks. Check whether it is a real new threat or only a signature update." + (f" Also new: {', '.join(c for c, _ in fresh[1:])}." if len(fresh) > 1 else ""), "soc",
+                 {"events": fresh[0][1], "new_categories": len(fresh)})]
+
+
+def d_kuma(db: Session, cfg: Config) -> list[dict]:
+    """Uptime Kuma monitors that are down now and were already down in the previous sample hour (so a single failed check does not raise a finding)."""
+    now = cfg.now()
+    hour = now.replace(minute=0, second=0, microsecond=0)
+    out = []
+    for m in db.scalars(select(M.KumaMonitor).where(M.KumaMonitor.status == 0, M.KumaMonitor.updated_at >= now - timedelta(minutes=30))).all()[:20]:
+        prev = db.scalar(select(M.KumaHourly.down).where(M.KumaHourly.monitor_key == m.key, M.KumaHourly.ts == hour - timedelta(hours=1)))
+        cur = db.scalar(select(M.KumaHourly.down).where(M.KumaHourly.monitor_key == m.key, M.KumaHourly.ts == hour))
+        if (prev or 0) > 0 and (cur or 0) > 0:
+            out.append(_ins(f"kuma_down:{m.key}", "links", "warn", f"Link / web availability: {m.name} has been down for over an hour",
+                            "The monitor failed in the last two sample hours. Check the service or the link it depends on, and the other findings for the same location.", "kuma", {"response_ms": m.response_ms or 0}))
+    return out
+
+
+def d_wifi_zones(db: Session, cfg: Config) -> list[dict]:
+    """Offline Access Points concentrated in one zone, and Access Points offline for a long time."""
+    rows = db.execute(select(M.WifiAp.zone, func.count(), func.count().filter(~func.lower(func.coalesce(M.WifiAp.status, "")).startswith("online")))
+                      .group_by(M.WifiAp.zone)).all()
+    out = []
+    for z, tot, off in sorted(rows, key=lambda x: -(x[2] or 0))[:2]:
+        if off and off >= 3 and off / tot >= 0.3:
+            out.append(_ins(f"wifi_zone:{z}", "wifi", "warn", f"{off} of {tot} Access Points in zone {z or '-'} are offline", "Offline Access Points are concentrated in one zone, which usually points to a switch, PoE, or power problem there.", "wifi", {"offline": off, "total": tot}, z))
+    return out
+
+
+def d_milestone(db: Session, cfg: Config) -> list[dict]:
+    """Milestone servers that fail to sync, and cameras that are offline in one server or hardware model."""
+    out = []
+    src = db.get(M.DataSource, "milestone")
+    errs = ((src.cursor or {}).get("server_errors") or {}) if src else {}
+    if errs:
+        names = sorted(errs)[:4]
+        out.append(_ins("ms_sync", "cctv", "warn", f"{len(errs)} Milestone server(s) failed to sync", f"{', '.join(names)}. Cameras from these servers are not updated. Check the server address, credentials, and the API Gateway.", "integrations", {"servers": len(errs)}))
+    down = {ip for (ip,) in db.execute(select(M.ZbxHost.ip).where(M.ZbxHost.status == "down", M.ZbxHost.ip.isnot(None)))}
+    by: dict = {}
+    for srv, ip, en in db.execute(select(M.CctvCamera.server, M.CctvCamera.ip, M.CctvCamera.enabled)):
+        if en is False:
+            continue
+        x = by.setdefault(srv or "-", [0, 0])
+        x[0] += 1
+        x[1] += 1 if ip and ip in down else 0
+    for srv, (tot, off) in sorted(by.items(), key=lambda x: -x[1][1])[:2]:
+        if off >= 5 and off / max(tot, 1) >= 0.15:
+            out.append(_ins(f"ms_off:{srv}", "cctv", "warn" if off / tot < 0.4 else "crit", f"{off} of {tot} cameras on {srv} are offline", "A high offline share on one server usually means a recorder, switch, or uplink problem rather than single cameras.", "cctv", {"offline": off, "total": tot}, srv))
+    return out
+
+
+# ---------------- detectors: devices and WiFi ----------------
+def d_devices(db: Session, cfg: Config) -> list[dict]:
+    """Devices down now against the last 7 days (per kind), and long-running down devices."""
+    out, now = [], cfg.now()
+    for kind in [k for (k,) in db.execute(select(M.ZbxStat.kind).distinct())]:
+        rows = db.execute(select(M.ZbxStat.hour, M.ZbxStat.down).where(M.ZbxStat.kind == kind, M.ZbxStat.hour >= now - timedelta(days=7)).order_by(M.ZbxStat.hour)).all()
+        if len(rows) < MIN_BASE + 1:
+            continue
+        x = rows[-1][1]
+        r = robust([d for _, d in rows[:-1]], x)
+        if r and r[2] >= ZCUT and x - r[0] >= 10:
+            out.append(_ins(f"dev_down:{kind}", "devices", "warn", f"Devices down ({kind}) are far above normal", f"{x} devices are down now, normally about {fmt(r[0])}. This often means a network or power problem in one area.", "devices",
+                            {"value": x, "normal": round(r[0], 1), "z": round(r[2], 1)}))
+    chronic = db.scalar(select(func.count()).select_from(M.ZbxHost).where(M.ZbxHost.status == "down", M.ZbxHost.down_since < now - timedelta(days=30)))
+    if chronic:
+        out.append(_ins("dev_chronic", "devices", "info", f"{chronic} devices have been down for more than 30 days", "Devices that stay down hurt availability. Decide whether to repair, replace, or stop monitoring them.", "devices", {"count": chronic}))
+    return out
+
+
+def d_flapping_devices(db: Session, cfg: Config) -> list[dict]:
+    """Hosts with many down events in 7 days (maintenance hosts excluded)."""
+    now = cfg.now()
+    maint = {h for (h,) in db.execute(select(M.ZbxHost.hostid).where(M.ZbxHost.status == "maintenance"))}
+    rows = db.execute(select(M.ZbxEvent.hostid, M.ZbxEvent.host_name, func.count()).where(M.ZbxEvent.start_at >= now - timedelta(days=7)).group_by(M.ZbxEvent.hostid, M.ZbxEvent.host_name).having(func.count() >= 6).order_by(func.count().desc()).limit(8)).all()
+    return [_ins(f"dev_flap:{hid}", "devices", "warn", f"Device {nm} keeps going down", f"{n} down events in the last 7 days. Check power, cabling, and the uplink.", "devices", {"events_7_days": n}) for hid, nm, n in rows if hid not in maint][:5]
+
+
+def d_incidents(db: Session, cfg: Config) -> list[dict]:
+    """Group device down events that start together at one location (within 10 minutes) into a single incident."""
+    now, out = cfg.now(), []
+    site_of = _site_of(db)
+    rows = db.execute(select(M.ZbxEvent.code, M.ZbxEvent.hostid, M.ZbxEvent.start_at).where(M.ZbxEvent.start_at >= now - timedelta(hours=24)).order_by(M.ZbxEvent.code, M.ZbxEvent.start_at)).all()
+    by: dict = {}
+    for code, hid, at in rows:
+        by.setdefault(site_of(code) or code or "-", []).append((at, hid))
+    for site, ev in by.items():
+        ev.sort()
+        cur = [ev[0]]
+        for e in ev[1:] + [None]:
+            if e and (e[0] - cur[-1][0]).total_seconds() <= 600:
+                cur.append(e)
+                continue
+            hosts = {h for _, h in cur}
+            if len(hosts) >= 5:
+                start = cur[0][0]
+                out.append(_ins(f"incident:{site}:{start:%Y%m%d%H}", "devices", "crit" if len(hosts) >= 20 else "warn", f"{len(hosts)} devices went down together at {site}",
+                                f"All started within {max(1, int((cur[-1][0] - start).total_seconds() / 60))} min from {start:%H:%M} on {start:%d/%m}. Treated as one incident, likely a shared cause such as power or an uplink.", "devices", {"devices": len(hosts)}, site))
+            cur = [e] if e else []
+    return sorted(out, key=lambda i: -i["metric"]["devices"])[:4]
+
+
+def d_wifi(db: Session, cfg: Config) -> list[dict]:
+    """WiFi clients against the same hour on earlier days, and Access Points that are offline."""
+    out = []
+    last = db.scalar(select(M.WifiStat).order_by(M.WifiStat.at.desc()).limit(1))
+    if not last:
+        return out
+    if last.ap_total and last.ap_total - last.ap_online >= max(3, int(last.ap_total * 0.1)):
+        out.append(_ins("wifi_ap_off", "wifi", "warn", f"{last.ap_total - last.ap_online} of {last.ap_total} Access Points are offline", "More than 10% of Access Points are offline. Check the zones and locations on the WiFi page.", "wifi", {"offline": last.ap_total - last.ap_online, "total": last.ap_total}))
+    same = [r for (r,) in db.execute(select(M.WifiStat.clients).where(func.extract("hour", M.WifiStat.at) == last.at.hour, M.WifiStat.at < last.at - timedelta(hours=3), M.WifiStat.at >= last.at - timedelta(days=14)))]
+    r = robust(same, last.clients)
+    if r and r[0] >= 30 and last.clients <= 0.6 * r[0] and r[2] <= -ZCUT:
+        out.append(_ins("wifi_drop", "wifi", "warn", "WiFi clients dropped sharply", f"{last.clients} clients now, normally about {fmt(r[0])} at this hour. This may be a controller, ISP, or power problem.", "wifi", {"value": last.clients, "normal": round(r[0], 1), "z": round(r[2], 1)}))
+    return out
+
+
+# ---------------- detectors: cross-source and data quality ----------------
+def d_site_multi(db: Session, cfg: Config) -> list[dict]:
+    """A location with two or more signals at once: link downtime today, many devices down, and a ticket spike."""
+    today = cfg.now().date()
+    site_of = _site_of(db)
+    sites = {s.name for s in db.scalars(select(M.Site).where(M.Site.active.is_(True)))}
+    link_down: dict = {}
+    sens_dev = {x.id: x.device for x in db.scalars(select(M.PrtgSensor))}
+    for sid, s in _daily_down(db, today, today + timedelta(days=1)).items():
+        dev = sens_dev.get(sid)
+        if dev in sites and s.get(today, 0) >= 90:
+            link_down[dev] = max(link_down.get(dev, 0), s[today])
+    dev_tot: dict = {}
+    dev_down: dict = {}
+    for code, status in db.execute(select(M.ZbxHost.code, M.ZbxHost.status)):
+        site = site_of(code)
+        if site:
+            if status in ("up", "down"):
+                dev_tot[site] = dev_tot.get(site, 0) + 1
+            if status == "down":
+                dev_down[site] = dev_down.get(site, 0) + 1
+    tk_today = {s: n for s, n in db.execute(select(M.Ticket.site, func.count()).where(M.Ticket.created_at >= _midnight(today)).group_by(M.Ticket.site))}
+    base = db.execute(select(M.Ticket.site, func.count()).where(M.Ticket.created_at >= _midnight(today - timedelta(days=28)), M.Ticket.created_at < _midnight(today)).group_by(M.Ticket.site)).all()
+    tk_avg = {s: n / 28 for s, n in base}
+    out = []
+    for name in sorted(sites):
+        sig = []
+        if name in link_down:
+            sig.append(f"link down {fmt(link_down[name])} min today")
+        if dev_tot.get(name, 0) >= 5 and dev_down.get(name, 0) / dev_tot[name] >= 0.2:
+            sig.append(f"{dev_down[name]} of {dev_tot[name]} devices down")
+        if tk_today.get(name, 0) >= 3 and tk_today[name] >= 2 * tk_avg.get(name, 0) + 1:
+            sig.append(f"{tk_today[name]} tickets today (usual {fmt(tk_avg.get(name, 0), 1)})")
+        if len(sig) >= 2:
+            out.append(_ins(f"site_multi:{name}:{today}", "correlation", "crit", f"Several systems are affected at {name}", "; ".join(sig).capitalize() + ". Signals from different sources at the same location point to one underlying cause.", "ringkasan", {"signals": len(sig)}, name))
+    return out[:4]
+
+
+def d_data_quality(db: Session, cfg: Config) -> list[dict]:
+    """Checks that the data behind the numbers is complete: SOC days, PRTG coverage, source failures, unmapped codes, empty tickets."""
+    out, today = [], cfg.now().date()
+    have = {d for (d,) in db.execute(text("SELECT DISTINCT day FROM soc_day WHERE day >= :a"), {"a": today - timedelta(days=8)})}
+    miss = [today - timedelta(days=k) for k in range(1, 8) if (today - timedelta(days=k)) not in have]
+    if have and miss:
+        out.append(_ins("dq_soc", "data", "warn", f"SOC data is missing for {len(miss)} of the last 7 days", "Missing: " + ", ".join(f"{d:%d/%m}" for d in sorted(miss)[:5]) + ". NDR totals for these days are incomplete. Check the Panorama sync or import the CSV.", "kelengkapan", {"missing_days": len(miss)}))
+    n_sensor = db.scalar(select(func.count()).select_from(M.PrtgSensor).where(M.PrtgSensor.active.is_(True))) or 0
+    y = today - timedelta(days=1)
+    got = db.scalar(select(func.count()).select_from(M.PrtgHourly).where(M.PrtgHourly.ts >= _midnight(y), M.PrtgHourly.ts < _midnight(today), M.PrtgHourly.seen.is_(True))) or 0
+    if n_sensor and got < 0.9 * n_sensor * 24:
+        out.append(_ins(f"dq_prtg:{y}", "data", "warn", "PRTG data for yesterday is incomplete", f"{got} of {n_sensor * 24} expected hourly readings ({fmt(got / (n_sensor * 24) * 100)}%). Link availability for that day may be misstated.", "kelengkapan", {"readings": got, "expected": n_sensor * 24}))
+    bad = [s.label for s in db.scalars(select(M.DataSource).where(M.DataSource.enabled.is_(True), M.DataSource.mode == "api", M.DataSource.last_error.is_not(None)))]
+    if bad:
+        out.append(_ins("dq_sources", "data", "crit", f"{len(bad)} data sources are failing", ", ".join(bad[:5]) + ". Numbers from these sources are no longer updating. See Admin > System > Source Status.", "kelengkapan", {"sources": len(bad)}))
+    unmapped = db.scalar(select(func.count()).select_from(M.ZbxLocMap).where(M.ZbxLocMap.site.is_(None)))
+    if unmapped:
+        out.append(_ins("dq_unmapped", "data", "info", f"{unmapped} Zabbix location codes are not mapped", "Devices with these codes are left out of per-location totals. Map them in Admin > Data Sources > Mapping.", "devices", {"codes": unmapped}))
+    tot = db.scalar(select(func.count()).select_from(M.Ticket).where(M.Ticket.created_at >= _midnight(today - timedelta(days=7)))) or 0
+    emp = db.scalar(select(func.count()).select_from(M.Ticket).where(M.Ticket.created_at >= _midnight(today - timedelta(days=7)), M.Ticket.desc_empty.is_(True))) or 0
+    if tot >= 20 and emp / tot >= 0.3:
+        out.append(_ins("dq_tickets", "data", "info", f"{fmt(emp / tot * 100)}% of recent tickets have no description", f"{emp} of {tot} tickets in the last 7 days. Empty descriptions make categories and reports less reliable.", "servicedesk", {"empty": emp, "total": tot}))
+    return out
+
+
+DETECTORS = [d_tickets, d_ticket_sites, d_ticket_trends, d_sla_risk, d_links, d_availability, d_capacity, d_ndr, d_ndr_traffic, d_xdr, d_xdr_tickets, d_ndr_mix, d_devices, d_flapping_devices, d_incidents, d_wifi, d_wifi_zones, d_kuma, d_milestone, d_site_multi, d_data_quality]
+
+
+# ---------------- rankings, health, summary (computed on request) ----------------
+def rankings(db: Session, cfg: Config) -> dict:
+    """Problem rankings for the last 30 days: links, repeat-offender devices, and location health (worst first)."""
+    today = cfg.now().date()
+    name = _sensor_names(db)
+    ser = _daily_down(db, today - timedelta(days=30), today + timedelta(days=1))
+    ev = {sid: n for sid, n in db.execute(select(M.PrtgEvent.sensor_id, func.count()).where(M.PrtgEvent.start_at >= _midnight(today - timedelta(days=30))).group_by(M.PrtgEvent.sensor_id))}
+    links = []
+    for sid, s in ser.items():
+        mins, n = sum(s.values()), ev.get(sid, 0)
+        if mins > 0 or n:
+            links.append({"name": name.get(sid, sid), "downMin": round(mins), "events": n, "avail": round(1 - mins * 60 / (30 * 86400), 5), "score": round(mins * (1 + 0.1 * n))})
+    links.sort(key=lambda r: -r["score"])
+    maint = {h for (h,) in db.execute(select(M.ZbxHost.hostid).where(M.ZbxHost.status == "maintenance"))}
+    now = cfg.now()
+    rows = db.execute(select(M.ZbxEvent.hostid, M.ZbxEvent.host_name, M.ZbxEvent.code, func.count(), func.sum(func.extract("epoch", func.coalesce(M.ZbxEvent.end_at, now) - M.ZbxEvent.start_at))).where(M.ZbxEvent.start_at >= _midnight(today - timedelta(days=30))).group_by(M.ZbxEvent.hostid, M.ZbxEvent.host_name, M.ZbxEvent.code).order_by(func.count().desc()).limit(40)).all()
+    site_of = _site_of(db)
+    hosts = [{"name": nm, "site": site_of(code) or code or "-", "events": n, "downH": round((secs or 0) / 3600, 1)} for hid, nm, code, n, secs in rows if hid not in maint][:8]
+    return {"links": links[:8], "hosts": hosts, "health": site_health(db, cfg)[:15]}
+
+
+def site_health(db: Session, cfg: Config) -> list[dict]:
+    """Health score 0 to 100 per location: link availability 45%, device availability 35%, ticket load 20% (open tickets past SLA). Worst first."""
+    today, now = cfg.now().date(), cfg.now()
+    site_of = _site_of(db)
+    sites = [s.name for s in db.scalars(select(M.Site).where(M.Site.active.is_(True)))]
+    dev = {s.id: s.device for s in db.scalars(select(M.PrtgSensor).where(M.PrtgSensor.active.is_(True)))}
+    nsens: dict = {}
+    for d in dev.values():
+        nsens[d] = nsens.get(d, 0) + 1
+    down: dict = {}
+    for sid, s in _daily_down(db, today - timedelta(days=7), today + timedelta(days=1)).items():
+        if sid in dev:
+            down[dev[sid]] = down.get(dev[sid], 0) + sum(s.values())
+    tot: dict = {}
+    dn: dict = {}
+    for code, status in db.execute(select(M.ZbxHost.code, M.ZbxHost.status)):
+        s = site_of(code)
+        if s and status in ("up", "down"):
+            tot[s] = tot.get(s, 0) + 1
+            dn[s] = dn.get(s, 0) + (1 if status == "down" else 0)
+    over: dict = {}
+    for site, sn, cre, hold in db.execute(select(M.Ticket.site, M.Ticket.sla_name, M.Ticket.created_at, M.Ticket.onhold_h).where(M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED + holding(cfg)))):
+        t = cfg.sla.get(sn)
+        if t and (now - cre).total_seconds() / 3600 - (hold or 0) > t:
+            over[site] = over.get(site, 0) + 1
+    clip = lambda v: max(0.0, min(100.0, v))
+    out = []
+    for s in sites:
+        if s not in nsens and s not in tot and s not in over:
+            continue
+        la = 1 - down.get(s, 0) * 60 / (nsens[s] * 7 * 86400) if s in nsens else None
+        da = 1 - dn.get(s, 0) / tot[s] if tot.get(s) else None
+        parts = [(clip((la - 0.95) / 0.05 * 100) if la is not None else None, 45), (clip((da - 0.7) / 0.3 * 100) if da is not None else None, 35), (clip(100 - over.get(s, 0) * 10), 20)]
+        w = sum(p[1] for p in parts if p[0] is not None)
+        score = sum(p[0] * p[1] for p in parts if p[0] is not None) / w
+        out.append({"site": s, "score": round(score), "link": None if la is None else round(la, 4), "devices": None if da is None else round(da, 3), "overdue": over.get(s, 0), "devDown": dn.get(s, 0), "devTotal": tot.get(s, 0)})
+    return sorted(out, key=lambda r: r["score"])
+
+
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+KINDS_NOC = {"links", "capacity", "devices", "wifi", "cctv", "correlation"}
+KINDS_SOC = {"security"}
+# Text of the shift summary: Indonesian, because it is pasted into WhatsApp where the team writes Indonesian.
+TXT = {
+    "id": {"title": "📢 *LAPORAN SHIFT ITOC*", "noc": "NOC", "soc": "SOC", "not_started": "Periode ini belum dimulai, belum ada data.", "data": "Data {a} – {b} · dibuat {n}", "live": " (periode masih berjalan)",
+           "shift": "Shift: {x}", "team": "Team: {x}", "date": "Tanggal: {x}", "period": "Periode: {x}",
+           "s_status": "📊 *STATUS SISTEM*", "st_ok": "{k} : NORMAL", "st_warn": "{k} : PERHATIAN ({n} temuan kritis)",
+           "tk_total": "Total Tiket : {n} (On Hold : {h} | Closed : {c} | Open : {o} | In progress : {p})", "tk_done": "Tiket selesai pada periode ini : {n}",
+           "s_tk": "🎫 *TIKET*", "tk_line": "#{id} {subject}\nStatus : {status} | Teknisi : {tech}", "tk_more": "… dan {n} tiket lain (lihat di TERA)", "tk_none": "Tidak ada tiket baru pada periode ini.",
+           "s_pend": "⚠️ *PENDING CASE (Handover)*", "ho_line": "- [{prio}] {title} ({site}){tk}", "ho_body": "  {x}", "ho_next": "  Tindak lanjut: {x}", "ho_none": "Tidak ada.",
+           "s_mon": "📈 *RINGKASAN MONITORING*", "net": "Jaringan: availability link {x}%.", "net_none": "Jaringan: belum ada data PRTG per jam untuk periode ini.", "down": "- {name}: down {m} menit",
+           "wifi": "WiFi: {o} dari {t} Access Point offline saat ini.", "dev": "Perangkat: {n} kejadian down baru", "dev_now": ", {d} perangkat down saat ini",
+           "ndr": "NDR (Palo Alto): {t} event, {c} critical/high ({a} hanya alert, tidak diblokir).", "ndr_days": " Data harian {f}–{t}.", "ndr_cat": "- kategori critical/high teratas: {x}", "ndr_none": "NDR (Palo Alto): belum ada data harian untuk periode ini (data NDR per hari).",
+           "xdr": "XDR (Trend Micro): {n} alert baru", "xdr_open": ", {o} critical/high masih open", "xdr_model": "- model deteksi teratas: {x}",
+           "al_noc": "Alert NOC : Kritis({c}) Peringatan({w}) Info({i})", "al_ndr": "Alert SOC (NDR) : C({c}) H({h}) M({m}) L({l}) N({n})", "al_xdr": "Alert SOC (XDR) : C({c}) H({h}) M({m}) L({l})",
+           "find": "🔎 *TEMUAN OTOMATIS*", "crit": "KRITIS", "warn": "PERINGATAN", "link": "Link Pendukung : {u}",
+           "eos": "EOS", "branch": "Cabang: {x}", "all_branches": "Semua cabang", "st_net": "Status Jaringan : {s}", "st_dev": "Status Perangkat : {s}", "ok": "OK", "warn_n": "PERHATIAN ({n} link down)", "dev_warn": "PERHATIAN ({n} perangkat down)",
+           "s_net": "🌐 *JARINGAN*", "s_dev": "🖥️ *PERANGKAT*", "dev_none": "Belum ada data perangkat dari Zabbix.", "dev_tot": "Perangkat: {t} unit, {d} down saat ini (ketersediaan {a}%).", "dev_ev": "Kejadian down {f}–{t}: {n} kejadian, total {h} jam.", "dev_line": "- {name} ({loc}): down {h} jam",
+           "d_duty": "Hari tugas {d} ({h}.00–{h}.00 esok hari)",
+           "d_full": "Hari penuh {d}", "d_h1": "Setengah hari pertama, {d} (00.00–12.00)", "d_h2": "Setengah hari kedua, {d} (12.00–24.00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "24 jam terakhir", "d_7": "7 hari terakhir", "d_30": "30 hari terakhir", "d_month": "Bulan {m} {y}"},
+}
+SUMMARY_KINDS = ("full", "noc", "soc", "eos")
+
+
+def _dt(d: datetime) -> str:
+    return f"{d.day} {MONTHS[d.month - 1]} {d:%H:%M}"
+
+
+def summary_windows(cfg: Config) -> list[dict]:
+    """Choices for the shift summary: last 24 hours, full day, two half days, one entry per shift, and longer periods."""
+    h0 = min(s["start"] for s in cfg.shifts)
+    out = [{"key": "duty", "label": f"Duty day ({h0:02d}:00 to {h0:02d}:00 the next day)"}, {"key": "24h", "label": "Last 24 hours"}, {"key": "day", "label": "Full day (00:00–24:00)"}, {"key": "half1", "label": "First half (00:00–12:00)"}, {"key": "half2", "label": "Second half (12:00–24:00)"}]
+    sh = sorted(cfg.shifts, key=lambda s: s["start"])
+    for i, s in enumerate(sh):
+        end = sh[(i + 1) % len(sh)]["start"]
+        out.append({"key": f"s{s['no']}", "label": f"Shift {s['name']} ({s['start']:02d}:00–{end:02d}:00)"})
+    return out + [{"key": "7d", "label": "Last 7 days"}, {"key": "30d", "label": "Last 30 days"}, {"key": "month", "label": "Whole month of the chosen date"}]
+
+
+def _window(cfg: Config, scope: str, day: date | None) -> tuple[datetime, datetime, str]:
+    now, t = cfg.now(), TXT["id"]
+    d = day or cfg.clock.duty_date(now)                         # the duty date: a night shift after midnight still reports on the day it started
+    mid = datetime(d.year, d.month, d.day)
+    dm = f"{d.day} {MONTHS[d.month - 1]}"
+    if scope == "duty":                                         # one working day from the first shift to the first shift of the next day: Pagi, Sore, and Malam of the date
+        h0 = min(s["start"] for s in cfg.shifts)
+        return mid + timedelta(hours=h0), mid + timedelta(days=1, hours=h0), t["d_duty"].format(d=dm, h=f"{h0:02d}")
+    if scope == "day":
+        return mid, mid + timedelta(days=1), t["d_full"].format(d=f"{dm} {d.year}")
+    if scope == "half1":
+        return mid, mid + timedelta(hours=12), t["d_h1"].format(d=dm)
+    if scope == "half2":
+        return mid + timedelta(hours=12), mid + timedelta(days=1), t["d_h2"].format(d=dm)
+    if scope == "month":
+        first = datetime(d.year, d.month, 1)
+        nxt = datetime(d.year + (d.month == 12), d.month % 12 + 1, 1)
+        return first, nxt, t["d_month"].format(m=MONTHS[d.month - 1], y=d.year)
+    if scope in ("7d", "30d"):
+        days = 7 if scope == "7d" else 30
+        return now - timedelta(days=days), now, t["d_" + scope[:-1]]
+    if scope.startswith("s") and scope[1:].isdigit():
+        sh = sorted(cfg.shifts, key=lambda s: s["start"])
+        for i, s in enumerate(sh):
+            if str(s["no"]) == scope[1:]:
+                end = sh[(i + 1) % len(sh)]["start"]
+                a = mid + timedelta(hours=s["start"])
+                b = mid + timedelta(hours=end) if end > s["start"] else mid + timedelta(days=1, hours=end)
+                return a, b, t["d_shift"].format(n=s["name"], d=dm, s=f"{s['start']:02d}.00", e=f"{end:02d}.00")
+    return now - timedelta(hours=24), now, t["d_24"]
+
+
+def _ndr_part(db: Session, a: datetime, end: datetime) -> dict | None:
+    """NDR figures from the daily Palo Alto batches that fall inside the window (the source has no finer resolution)."""
+    rows = db.execute(text("SELECT DISTINCT ON (day) day, threats FROM soc_day WHERE day >= :a AND day <= :b ORDER BY day, batch_id DESC"), {"a": a.date(), "b": end.date()}).all()
+    if not rows:
+        return None
+    total = ch = alert = 0
+    cats: dict = {}
+    sev: dict = {}
+    for _, th in rows:
+        for k, v in (th or {}).items():
+            p = k.split("|")
+            total += v
+            sev[p[0]] = sev.get(p[0], 0) + int(v)
+            if p[0] in ("critical", "high"):
+                ch += v
+                if len(p) > 3 and p[3] in ("alert", "allow"):
+                    alert += v
+                cats[p[2] if len(p) > 2 else "-"] = cats.get(p[2] if len(p) > 2 else "-", 0) + v
+    return {"from": rows[0][0], "to": rows[-1][0], "sev": sev, "total": int(total), "ch": int(ch), "alert": int(alert), "cats": sorted(((c, int(v)) for c, v in cats.items() if c not in ("-", "N/A")), key=lambda x: -x[1])[:3]}
+
+
+def _f(v, d: int = 0) -> str:
+    """Number in Indonesian style: 1.234,5."""
+    return f"{v:,.{d}f}".replace(",", "§").replace(".", ",").replace("§", ".")
+
+
+def _tstate(status: str, closed: set, hold: set) -> str:
+    s = (status or "").strip().lower()
+    return "Closed" if s in closed else "On Hold" if s in hold else "In progress" if "progress" in s else "Open"
+
+
+def _shifts_in(cfg: Config, a: datetime, end: datetime) -> list[tuple[str, str | None]]:
+    """(shift name, team code) for the shifts that start inside the window (a duty day gives Pagi, Sore, and Malam of that date); when none starts inside, the shifts that overlap it."""
+    sh = sorted(cfg.shifts, key=lambda s: s["start"])
+    out, over, d = [], [], a.date() - timedelta(days=1)
+    while d <= end.date():
+        for i, s in enumerate(sh):
+            nxt = sh[(i + 1) % len(sh)]["start"]
+            base = datetime(d.year, d.month, d.day)
+            st, en = base + timedelta(hours=s["start"]), base + (timedelta(hours=nxt) if nxt > s["start"] else timedelta(days=1, hours=nxt))
+            if st < end and en > a:
+                tm = cfg.clock.team_on(d, s["no"])
+                (out if a <= st else over).append((s["name"], tm["code"] if tm else None))
+        d += timedelta(days=1)
+    return out or over
+
+
+def _head_lines(cfg: Config, t: dict, head: str, a: datetime, b: datetime, end: datetime, now: datetime, label: str, live: bool, scope: str = "") -> list[str]:
+    L = [head]
+    if b - a <= timedelta(days=2):
+        sh = _shifts_in(cfg, a, end)
+        order = {s["name"]: s["no"] for s in cfg.shifts}
+        sh = sorted(sh, key=lambda x: order.get(x[0], 99))          # Pagi, Sore, Malam: the teams are listed in the same order as the shifts
+        teams = list(dict.fromkeys(c for _, c in sh if c))
+        L.append(t["shift"].format(x=", ".join(dict.fromkeys(n for n, _ in sh)) or "-"))
+        L.append(t["team"].format(x=", ".join(teams) or "-"))
+        last = (end - timedelta(seconds=1)).date()
+        L.append(t["date"].format(x=f"{a:%d/%m/%Y}" if scope == "duty" or (scope[1:].isdigit() and scope[:1] == "s") or a.date() == last else f"{a:%d/%m} – {last:%d/%m/%Y}"))       # a duty day starts at the first shift and ends the next morning: it is reported under its start date
+    else:
+        L.append(t["period"].format(x=label))
+    return L + [t["data"].format(a=_dt(a), b=_dt(end), n=_dt(now)) + (t["live"] if live else ""), ""]
+
+
+def _ticket_lines(db: Session, cfg: Config, t: dict, a: datetime, end: datetime, site: str = "", tk_max: int = 15) -> tuple[list[str], dict]:
+    """Ticket counts by state (tickets created in the window) and the ticket list, for the whole company or one branch."""
+    from . import views as VW
+    q = select(M.Ticket.id, M.Ticket.subject, M.Ticket.status, M.Ticket.technician).where(M.Ticket.created_at >= a, M.Ticket.created_at < end).order_by(M.Ticket.created_at)
+    done = select(func.count()).select_from(M.Ticket).where(M.Ticket.resolved_at >= a, M.Ticket.resolved_at < end)
+    if site:
+        q, done = q.where(VW._tsite(db, site)), done.where(VW._tsite(db, site))
+    tks = db.execute(q).all()
+    closed = {x.lower() for x in (cfg.p("sd.closed_statuses") or [])}
+    hold = {x.lower() for x in (cfg.p("sd.onhold_statuses", ["Onhold", "On Hold"]) or [])}
+    c = {"On Hold": 0, "Closed": 0, "Open": 0, "In progress": 0}
+    for _, _, st, _ in tks:
+        c[_tstate(st, closed, hold)] += 1
+    L = [t["tk_total"].format(n=len(tks), h=c["On Hold"], c=c["Closed"], o=c["Open"], p=c["In progress"]), t["tk_done"].format(n=db.scalar(done) or 0), "", t["s_tk"]]
+    for tid, subj, st, tech in tks[:tk_max]:
+        L.append(t["tk_line"].format(id=tid, subject=(subj or "-")[:110], status=st or "-", tech=tech or "-"))
+    if not tks:
+        L.append(t["tk_none"])
+    elif len(tks) > tk_max:
+        L.append(t["tk_more"].format(n=len(tks) - tk_max))
+    return L, c
+
+
+def _net_lines(db: Session, t: dict, a: datetime, end: datetime, site: str = "") -> tuple[list[str], int]:
+    """PRTG availability and the links with the most downtime in the window, for all links or the links of one branch. Returns the lines and how many links were down for 30 minutes or more."""
+    from .calc import network as NET
+    sids = None
+    if site:
+        sids = [r for (r,) in db.execute(select(M.PrtgSensor.id).where(M.PrtgSensor.active.is_(True), NET.site_cond(db, site)))]
+    by = (M.PrtgHourly.sensor_id.in_(sids),) if sids is not None else ()
+    link_rows = db.execute(select(M.PrtgHourly.sensor_id, func.sum(M.PrtgHourly.down_s)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end, *by).group_by(M.PrtgHourly.sensor_id)
+                           .having(func.sum(M.PrtgHourly.down_s) >= 1800).order_by(func.sum(M.PrtgHourly.down_s).desc()).limit(8 if site else 5)).all()
+    name = _sensor_names(db)
+    tot_n, down_s = db.execute(select(func.count(), func.coalesce(func.sum(M.PrtgHourly.down_s), 0)).where(M.PrtgHourly.ts >= a, M.PrtgHourly.ts < end, M.PrtgHourly.seen.is_(True), *by)).one()
+    avail = 1 - down_s / (tot_n * 3600) if tot_n else None
+    L = [t["net"].format(x=_f(avail * 100, 2)) if avail is not None else t["net_none"]]
+    L += [t["down"].format(name=name.get(sid, sid), m=_f(secs / 60)) for sid, secs in link_rows]
+    return L, len(link_rows)
+
+
+def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: str, tk_max: int = 15, f_max: int = 8) -> str:
+    """Summary for the EOS teams: tickets, network, and device status, for all branches or one branch. No security part."""
+    from .calc import devices as DEV
+    t = TXT["id"]
+    now = cfg.now()
+    a, b, label = _window(cfg, scope, day)
+    end = min(b, now)
+    head = t["title"] + " · EOS"
+    if a >= now:
+        return f"{head}\n{label}\n\n{t['not_started']}"
+    live = b > now
+    L = _head_lines(cfg, t, head, a, b, end, now, label, live, scope)
+    L.insert(1, t["branch"].format(x=site or t["all_branches"]))
+    net, n_down = _net_lines(db, t, a, end, site)
+    D = DEV.build(db, cfg, site, "", "", down_all=True)
+    H = DEV.history(db, cfg, a.date(), (end - timedelta(seconds=1)).date(), site)
+    A = D["all"]
+    L.append(t["s_status"])
+    L.append(t["st_net"].format(s=t["warn_n"].format(n=n_down) if n_down else t["ok"]))
+    L.append(t["st_dev"].format(s=t["dev_warn"].format(n=A["down"]) if A["down"] else t["ok"]))
+    tk, _ = _ticket_lines(db, cfg, t, a, end, site, tk_max)
+    L += tk + ["", t["s_net"]] + net + ["", t["s_dev"]]
+    if not A["total"]:
+        L.append(t["dev_none"])
+    else:
+        L.append(t["dev_tot"].format(t=_f(A["total"]), d=_f(A["down"]), a=_f((A["avail"] or 0) * 100, 1)))
+        L.append(t["dev_ev"].format(f=f"{a:%d/%m}", t=f"{(end - timedelta(seconds=1)):%d/%m}", n=_f(H["events"]), h=_f(H["hours"], 1)))
+        dev_max = min(10, max(3, tk_max))
+        for x in D["down"][:dev_max]:
+            L.append(t["dev_line"].format(name=x["name"], loc=x["loc"], h=_f(x["ageH"] or 0, 1)))
+        if len(D["down"]) > dev_max:
+            L.append(t["tk_more"].format(n=len(D["down"]) - dev_max).replace("tiket", "perangkat"))
+    rows = db.scalars(select(M.Insight).where(M.Insight.severity.in_(["crit", "warn"]), M.Insight.kind.in_(["tickets", "links", "capacity", "devices"]), M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
+                      .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(150)).all()
+    seen, pick = set(), []
+    for r in rows:
+        if r.title not in seen and (not site or r.site == site or site in r.title or site in (r.detail or "")):
+            seen.add(r.title)
+            pick.append(r)
+    if pick and f_max:
+        L += ["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in pick[:f_max]]
+    return "\n".join(L + _link_lines(cfg, t, scope, day, "eos", site, now))
+
+
+def _link_lines(cfg: Config, t: dict, scope: str, day: date | None, kind: str, site: str, now: datetime) -> list[str]:
+    base = (cfg.p("ui.public_url", "") or "").strip().rstrip("/")
+    if not base:
+        return []
+    d = day or cfg.clock.duty_date(now)
+    url = f"{base}/#insight?ins=summary&scope={scope}&kind={kind}" + (f"&day={d.isoformat()}" if scope not in ("24h", "7d", "30d") else "") + (f"&site={quote(site)}" if site else "")
+    return ["", t["link"].format(u=url)]
+
+
+LEVELS = [(15, 8), (10, 6), (6, 4), (3, 3), (0, 2), (0, 0)]       # (tickets listed, findings listed): what is dropped first when a message has to fit a limit
+
+
+def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope: str = "duty", day: date | None = None, kind: str = "full", site: str = "", max_chars: int = 0) -> str:
+    """The summary; with max_chars (a chat message limit) the ticket list and the findings are shortened step by step until it fits, never cut in the middle."""
+    for tk_max, f_max in LEVELS:
+        out = _summary(db, cfg, scope, day, kind, site, tk_max, f_max)
+        if not max_chars or len(out) <= max_chars:
+            return out
+    return out[: max_chars - 1] + "…"
+
+
+def _summary(db: Session, cfg: Config, scope: str, day: date | None, kind: str, site: str, tk_max: int, f_max: int) -> str:
+    """Plain-text summary for the shift handover (WhatsApp friendly, Indonesian), for everything, only the NOC side, only the SOC side, or the EOS view (tickets, network, devices; one branch or all). Every number comes from stored data.
+    Layout: header (shift, team, date), system status, tickets, pending cases from Handover, monitoring summary, automatic findings, and a link back to TERA."""
+    kind = kind if kind in SUMMARY_KINDS else "full"
+    if kind == "eos":
+        return _eos_summary(db, cfg, scope, day, site, tk_max, f_max)
+    t = TXT["id"]
+    now = cfg.now()
+    a, b, label = _window(cfg, scope, day)
+    end = min(b, now)
+    head = t["title"] + ("" if kind == "full" else " · " + t[kind])
+    if a >= now:
+        return f"{head}\n{label}\n\n{t['not_started']}"
+    live = b > now                                              # window still running: "open now" is meaningful
+    noc, soc = kind in ("full", "noc"), kind in ("full", "soc")
+    L = _head_lines(cfg, t, head, a, b, end, now, label, live, scope)
+
+    rows = db.scalars(select(M.Insight).where(M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
+                      .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(120)).all()
+    seen, pick = set(), []
+    for r in rows:                                              # the same title can appear for more than one key
+        if r.title not in seen:
+            seen.add(r.title)
+            pick.append(r)
+    sev = lambda grp, s: sum(1 for r in pick if r.kind in grp and r.severity == s)
+    L.append(t["s_status"])
+    for key, grp, on in (("noc", KINDS_NOC, noc), ("soc", KINDS_SOC, soc)):
+        if on:
+            n = sev(grp, "crit")
+            L.append(t["st_warn"].format(k=t[key], n=n) if n else t["st_ok"].format(k=t[key]))
+    if kind == "full":
+        tk, _ = _ticket_lines(db, cfg, t, a, end, "", tk_max)
+        L += tk
+        pend = db.scalars(select(M.Handover).where(M.Handover.is_open.is_(True)).order_by(M.Handover.created_at.desc()).limit(5)).all()
+        L += ["", t["s_pend"]]
+        for h in pend:
+            L.append(t["ho_line"].format(prio=h.priority, title=h.title[:90], site=h.site, tk=f" #{h.ticket_id}" if h.ticket_id else ""))
+            if h.body:
+                L.append(t["ho_body"].format(x=" ".join(h.body.split())[:180]))
+            if h.next_action:
+                L.append(t["ho_next"].format(x=" ".join(h.next_action.split())[:140]))
+        if not pend:
+            L.append(t["ho_none"])
+    L += ["", t["s_mon"]]
+    if noc:
+        net, _ = _net_lines(db, t, a, end)
+        L += net
+        if live:
+            ap_t = db.scalar(select(func.count()).select_from(M.WifiAp)) or 0
+            ap_o = db.scalar(select(func.count()).select_from(M.WifiAp).where(~func.lower(func.coalesce(M.WifiAp.status, "")).startswith("online"))) or 0
+            if ap_t:
+                L.append(t["wifi"].format(o=ap_o, t=ap_t))
+        dev_down = db.scalar(select(func.count()).select_from(M.ZbxHost).where(M.ZbxHost.status == "down")) or 0
+        dev_new = db.scalar(select(func.count()).select_from(M.ZbxEvent).where(M.ZbxEvent.start_at >= a, M.ZbxEvent.start_at < end)) or 0
+        L.append(t["dev"].format(n=dev_new) + (t["dev_now"].format(d=dev_down) if live else "") + ".")
+        L.append(t["al_noc"].format(c=sev(KINDS_NOC, "crit"), w=sev(KINDS_NOC, "warn"), i=sev(KINDS_NOC, "info")))
+    if soc:
+        nd = _ndr_part(db, a, end)
+        if nd:
+            L.append(t["ndr"].format(t=_f(nd["total"]), c=_f(nd["ch"]), a=_f(nd["alert"])) + t["ndr_days"].format(f=f"{nd['from']:%d/%m}", t=f"{nd['to']:%d/%m}"))
+            if nd["cats"]:
+                L.append(t["ndr_cat"].format(x=", ".join(f"{c} ({_f(v)})" for c, v in nd["cats"])))
+        else:
+            L.append(t["ndr_none"])
+        xs: dict = {}
+        for sv, n in db.execute(select(M.XdrAlert.severity, func.count()).where(M.XdrAlert.created_at >= a, M.XdrAlert.created_at < end).group_by(M.XdrAlert.severity)).all():
+            xs[(sv or "").lower()] = xs.get((sv or "").lower(), 0) + n
+        xdr_open = db.scalar(select(func.count()).select_from(M.XdrAlert).where(M.XdrAlert.severity.in_(["critical", "high"]), func.lower(func.coalesce(M.XdrAlert.status, "")) != "closed", func.lower(func.coalesce(M.XdrAlert.investigation_status, "")) != "closed")) or 0
+        L.append(t["xdr"].format(n=sum(xs.values())) + (t["xdr_open"].format(o=xdr_open) if live else "") + ".")
+        models = db.execute(select(M.XdrAlert.model, func.count()).where(M.XdrAlert.created_at >= a, M.XdrAlert.created_at < end).group_by(M.XdrAlert.model).order_by(func.count().desc()).limit(3)).all()
+        if models:
+            L.append(t["xdr_model"].format(x=", ".join(f"{m or '-'} ({n})" for m, n in models)))
+        ns = (nd or {}).get("sev", {})
+        L.append(t["al_ndr"].format(c=_f(ns.get("critical", 0)), h=_f(ns.get("high", 0)), m=_f(ns.get("medium", 0)), l=_f(ns.get("low", 0)), n=_f(ns.get("informational", 0))))
+        L.append(t["al_xdr"].format(c=xs.get("critical", 0), h=xs.get("high", 0), m=xs.get("medium", 0), l=xs.get("low", 0)))
+    want = None if kind == "full" else (KINDS_NOC if kind == "noc" else KINDS_SOC)
+    shown = [r for r in pick if r.severity in ("crit", "warn") and (want is None or r.kind in want)]
+    if shown and f_max:
+        L += ["", t["find"]] + [f"- [{t['crit'] if r.severity == 'crit' else t['warn']}] {r.title}" for r in shown[:f_max]]
+    return "\n".join(L + _link_lines(cfg, t, scope, day, kind, "", now))
+
+
+# ---------------- storage ----------------
+def run(db: Session, cfg: Config) -> dict:
+    """Run every detector, store new findings or refresh existing ones, close findings that no longer appear, and honour dismissals."""
+    now, found, errors = cfg.now(), {}, []
+    for fn in DETECTORS:
+        try:
+            for i in fn(db, cfg):
+                found[i["key"]] = i
+        except Exception as e:                       # one failing detector does not stop the others
+            errors.append(f"{fn.__name__}: {str(e)[:100]}")
+            db.rollback()
+    existing = {r.key: r for r in db.scalars(select(M.Insight).where(M.Insight.status != "resolved"))}
+    new = []
+    for k, i in found.items():
+        row = existing.get(k)
+        if row:
+            if row.status == "dismissed":
+                if row.suppress_until and row.suppress_until > now:
+                    continue                          # still dismissed: stay hidden
+                row.status, row.ack_by = "new", None
+            row.last_seen, row.kind, row.severity, row.title, row.detail, row.metric = now, i["kind"], i["severity"], i["title"], i["detail"], i["metric"]
+        else:
+            db.add(M.Insight(key=k, kind=i["kind"], severity=i["severity"], title=i["title"], detail=i["detail"], tab=i["tab"], metric=i["metric"], site=i["site"], first_seen=now, last_seen=now, status="new"))
+            new.append(i)
+    closed = 0
+    for k, row in existing.items():
+        if k in found or (row.status == "dismissed" and row.suppress_until and row.suppress_until > now):
+            continue
+        row.status, row.resolved_at, closed = "resolved", now, closed + 1
+    db.flush()
+    return {"found": len(found), "new": new, "closed": closed, "errors": errors}

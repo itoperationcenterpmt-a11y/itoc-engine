@@ -18,7 +18,7 @@ NAVY, BLUE, CYAN, GRAY, LINE, ZEBRA = "0B2F6B", "0B75BB", "25B7E5", "6B7280", "D
 BAND = {"servicedesk": NAVY, "noc": BLUE, "soc": CYAN}
 PAL = ["4F81BD", "9BBB59", "4BACC6", "2C4D75", "F79646", "8064A2", "C0504D", "7F7F7F"]
 CHART = {"bar": XL_CHART_TYPE.COLUMN_CLUSTERED, "stack": XL_CHART_TYPE.COLUMN_STACKED, "hbar": XL_CHART_TYPE.BAR_CLUSTERED,
-         "donut": XL_CHART_TYPE.DOUGHNUT, "line": XL_CHART_TYPE.LINE}
+         "donut": XL_CHART_TYPE.DOUGHNUT, "line": XL_CHART_TYPE.LINE, "prtg": XL_CHART_TYPE.LINE, "area": XL_CHART_TYPE.AREA}
 X0, W0, Y0, Y1 = 40, 1361, 101, 735  # area isi (pt): sama dengan tabel KPI di template
 
 
@@ -113,11 +113,13 @@ def _kpi_strip(slide, y, groups, ncols, band=True):
         for k in kpis:
             x = X0 + col * cw
             val = fmt(k["value"], k["kind"])
-            _tb(slide, x, top, cw, 28, k["label"].upper(), 13 if len(k["label"]) > 22 else 15, True, GRAY)
-            _tb(slide, x, top + 28, cw, 40, val, 26 if len(val) <= 11 else 18 if len(val) <= 20 else 13, True, NAVY, anchor=MSO_ANCHOR.MIDDLE)
-            _tb(slide, x + 6, top + 70, cw - 12, 34, k["sub"], 12, False, GRAY)
+            lab = 15 if cw > 200 else 12 if cw > 140 else 10.5                       # label and value shrink with the column so neighbouring figures never overlap
+            vs = max(12, min(26, int(cw / (max(len(val), 1) * 0.64))))
+            _tb(slide, x, top, cw, 40, k["label"].upper(), lab, True, GRAY, anchor=MSO_ANCHOR.BOTTOM)
+            _tb(slide, x, top + 42, cw, 40, val, vs, True, NAVY, anchor=MSO_ANCHOR.MIDDLE)
+            _tb(slide, x + 4, top + 86, cw - 8, 34, k["sub"], 11 if cw < 140 else 12, False, GRAY)
             col += 1
-    h = 110 + (70 if band else 0)
+    h = 124 + (70 if band else 0)
     ln = slide.shapes.add_connector(1, Pt(X0), Pt(y + h), Pt(X0 + W0), Pt(y + h))
     ln.line.color.rgb = rgb(LINE)
     return y + h + 8
@@ -156,12 +158,19 @@ def _chart(slide, ch, x, y, w, h, fs=11):
     if kind == "hbar":
         c.category_axis.reverse_order = True
     for j, se in enumerate(plot.series):
-        if kind == "line":
-            se.format.line.color.rgb = rgb(PAL[j % len(PAL)])
+        if kind in ("line", "prtg"):
+            se.format.line.color.rgb = rgb(ch["series"][j].get("color") or PAL[j % len(PAL)])
             se.smooth = False
         else:
             se.format.fill.solid()
-            se.format.fill.fore_color.rgb = rgb(PAL[j % len(PAL)])
+            se.format.fill.fore_color.rgb = rgb(ch["series"][j].get("color") or PAL[j % len(PAL)])
+            if kind == "area":                                          # see-through fill so the two directions can overlap, as in PRTG graphs
+                try:
+                    from pptx.oxml.ns import qn
+                    from lxml import etree
+                    etree.SubElement(se._element.find(".//" + qn("a:srgbClr")), qn("a:alpha")).set("val", "55000")
+                except Exception:
+                    pass
     return c
 
 
@@ -229,9 +238,11 @@ def build_from_template(m: dict) -> bytes:
 
     def tables_of(sec, pre):
         for t in sec["tables"]:
+            if t.get("bulk"):                                           # the full ticket list lives in the Excel and PDF files
+                continue
             for start in range(0, len(t["rows"]), 14):
                 part = t["rows"][start:start + 14]
-                ts = page(f"{pre} : {t['title']}" + (f" ({start // 14 + 1})" if len(t["rows"]) > 14 else ""))
+                ts = page(f"{pre} · {t['title']}" + (f" ({start // 14 + 1}/{-(-len(t['rows']) // 14)})" if len(t["rows"]) > 14 else ""))
                 _table(ts, t, part, 110)
 
     def chart_pages(sec, pre, skip):
@@ -239,13 +250,13 @@ def build_from_template(m: dict) -> bytes:
         rest = sec["charts"][skip:]
         gw, gh = W0 / 2 - 6, (Y1 - Y0) / 2 - 6
         for i in range(0, len(rest), 4):
-            s = page(f"{pre} : Grafik" + (f" ({i // 4 + 1})" if len(rest) > 4 else ""))
+            s = page(f"{pre} · Charts" + (f" ({i // 4 + 1}/{-(-len(rest) // 4)})" if len(rest) > 4 else ""))
             for j, ch in enumerate(rest[i:i + 4]):
                 _chart(s, ch, X0 + (j % 2) * (gw + 12), Y0 + (j // 2) * (gh + 12), gw, gh, fs=10)
 
     is_summary = m.get("kind") == "summary"
     if ov and ov["kpis"] and (is_summary or len(secs) > 1):
-        s = page("Management : Summary Overview")
+        s = page("Summary · Overview")
         groups, order = {}, []
         for k in ov["kpis"]:
             key = k.get("sec", "")
@@ -260,10 +271,10 @@ def build_from_template(m: dict) -> bytes:
             w = W0 / len(charts)
             _chart(s, ch, X0 + i * w, y, w - 8, Y1 - y)
         if ov["tables"]:
-            tables_of(ov, "Management")
+            tables_of(ov, "Summary")
     for sec in secs:
         pre = sec.get("prefix") or sec["title"]
-        s = page(f"{pre} : Overview")
+        s = page(f"{pre} · Overview")
         y = Y0
         for n in sec["notes"]:
             _tb(s, X0, y, W0, 30, n, 16, False, GRAY, PP_ALIGN.LEFT)

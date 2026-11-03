@@ -7,6 +7,8 @@
   clear-demo                 hapus data demo (tiket, sensor PRTG, batch SOC, serah terima, log); data nyata tidak disentuh
   seed-users [--reset]       buat satu akun per role (password123, tanpa wajib ganti password); --reset menimpa akun yang sudah ada. Hanya untuk uji/demo!
   sync SUMBER                jalankan sinkron sekali (manageengine | prtg)
+  security-check             periksa konfigurasi keamanan (password lemah, rahasia, TLS, dan lain-lain) tanpa menampilkan rahasia
+  rotate-key                 enkripsi ulang semua rahasia dengan ITOC_SECRET_KEY (kunci lama di ITOC_SECRET_KEY_OLD), lihat panduan keamanan
 """
 import os
 import json
@@ -80,7 +82,17 @@ def main(argv):
         print("Perintah ini hanya untuk uji/demo dan diblokir saat ITOC_ENV=production."); return
     if cmd == "migrate":
         from alembic.config import main as alembic
-        alembic(argv=["-c", str(Path(__file__).resolve().parent.parent / "alembic.ini"), "upgrade", "head"])
+        ini = str(Path(__file__).resolve().parent.parent / "alembic.ini")
+        from sqlalchemy import inspect
+        from .db import Base, engine
+        have = set(inspect(engine).get_table_names())
+        if "alembic_version" not in have and "app_parameter" not in have:      # an empty database: the migrations are a history of changes to an existing schema, so build the current one and mark it up to date
+            from . import models  # noqa: F401
+            Base.metadata.create_all(engine)
+            alembic(argv=["-c", ini, "stamp", "head"])
+            print("New database: the current schema was created and marked as up to date.")
+        else:
+            alembic(argv=["-c", ini, "upgrade", "head"])
     elif cmd == "seed-config":
         only = next((a.split("=", 1)[1].split(",") for a in args if a.startswith("--only=")), None)
         seed_config("--overwrite" in args, only)
@@ -100,6 +112,18 @@ def main(argv):
         from . import demo
         with session_scope() as db:
             print(f"{demo.seed_itcare(db)} personel dummy IT Care ditambahkan")
+    elif cmd == "security-check":
+        from .secaudit import findings
+        with session_scope() as db:
+            fs = findings(db)
+        for f in fs:
+            print(f"[{f['level'].upper():8}] {f['title']}" + (f" -- {f['detail']}" if f["detail"] else ""))
+        print(f"{sum(1 for f in fs if f['level'] in ('critical', 'high'))} temuan critical/high")
+    elif cmd == "rotate-key":
+        from . import vault
+        with session_scope() as db:
+            r = vault.rotate_all(db)
+        print(f"{r['rotated']} nilai dienkripsi ulang" + (f"; TIDAK TERBACA (kunci lama belum diisi di ITOC_SECRET_KEY_OLD?): {', '.join(r['unreadable'])}" if r["unreadable"] else ""))
     elif cmd == "sync":
         from .jobs import run_source
         print(run_source(args[0]))
