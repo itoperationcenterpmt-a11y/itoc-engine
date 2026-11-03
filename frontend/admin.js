@@ -169,3 +169,30 @@ document.addEventListener("submit", async e => {
   } catch (er) { BK.msg = {ok: false, t: er.message}; }
   BK.busy = false; render(false);
 });
+function vAdmin() {
+  admEnsure();
+  let body = "";
+  const eu = S.editUser ? (V.users || []).find(x => x.u === S.editUser) : null;
+  if (S.adm === "pengguna") body = `${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}<div class="toolbar"><button class="btn" data-adduser>+ Add User</button></div>
+    ${S.addUser || eu ? `<form id="uF" class="form formbox"><div class="fld"><label for="uU">Username *</label><input id="uU" type="text" value="${eu ? esc(eu.u) : ""}" ${eu ? "readonly" : ""}></div><div class="fld"><label for="uN">Name *</label><input id="uN" type="text" value="${eu ? esc(eu.name) : ""}"></div><div class="fld"><label for="uR">Role *</label><select id="uR" ${eu && eu.u === CFG.me.username ? "disabled" : ""}>${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${eu && eu.role === k ? "selected" : ""}>${v}</option>`).join("")}</select></div><div class="fld"><label for="uS">Branch (EOS only)</label><select id="uS"><option value="">–</option>${CFG.sites.map(x => `<option ${eu && eu.site === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div><div class="acts wide"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-adduser>Cancel</button>${eu ? "" : `<span class="sub">The initial password is random and must be changed at first login.</span>`}<span class="msg err" id="uMsg"></span></div></form>` : ""}
+    <div class="ucards">${V.users.map(u => `<article class="ucard ${u.active ? "" : "off"}"><span class="av">${esc((u.name || u.u).split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase())}</span><div class="ub"><b>${esc(u.name)}</b><span class="sub">@${esc(u.u)} · ${esc(ROLES[u.role] || u.role)}${u.site ? " · " + esc(u.site) : ""}</span><span class="sub" title="${esc(roleAccess(u.role))}">${u.active ? "Active" : "Inactive"} · last login ${esc(dtime(u.last))}</span></div><span class="acts"><button class="btn ghost" data-edit-user="${esc(u.u)}">Edit</button>${u.u === CFG.me.username ? "" : `<button class="btn ghost" data-toggle-user="${esc(u.u)}">${u.active ? "Disable" : "Enable"}</button><button class="btn ghost" data-reset-user="${esc(u.u)}">Reset</button>`}</span></article>`).join("")}</div>`;
+  if (S.adm === "integrasi") body = vIntegrations();
+  if (S.adm === "apikeys") body = vApiKeys();
+  if (S.adm === "sharelinks") body = vShareLinks();
+  if (S.adm === "smtp") body = vSmtp();
+  if (S.adm === "webhooks") body = vWebhooks();
+  if (S.adm === "roles") body = vRoles();
+  if (S.adm === "parameter") body = admTitle("Targets & Parameters", "Values used in calculations and display. Changes apply to every page immediately.") + paramForm() + `<h4 class="admsub">SLA Targets</h4>` + masterView("sla_target");
+  if (S.adm === "rumus") body = admTitle("Formulas", "Formula descriptions shown in the info tooltips.") + masterView("formula");
+  if (S.adm === "pemetaan") body = admTitle("Mapping", "Locations, Zabbix codes, PRTG sensors, and ISPs. New codes from the APIs are registered automatically and need a location or label here.") + masterView(null, ["site", "zbx_loc", "dev_code", "prtg_sensor", "isp"]);
+  if (S.adm === "personel") body = admTitle("Personnel", "People and contacts shown on the Personnel page and Overview.") + masterView("person");
+  if (S.adm === "tim") body = admTitle("Teams & Shifts", "The rotation pattern is set under Targets & Parameters.") + masterView(null, ["team", "shift"]);
+  if (S.adm === "menu") body = admTitle("Menus & Widgets", "Default menu and widget setup. Change with care: every user sees the result.") + masterView(null, ["module", "widget"]);
+  if (S.adm === "dilengkapi") body = vTodo();
+  if (S.adm === "status") body = vSourceStatus();
+  if (S.adm === "akses") body = vAccess();
+  if (S.adm === "audit") body = vAudit();
+  if (S.adm === "backup") body = vBackup();
+  return `<div class="grid"><section class="panel c12">${admNav()}${body}</section></div>`;
+}
+

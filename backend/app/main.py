@@ -52,8 +52,12 @@ async def security_headers(request, call_next):
     if request.url.path.startswith("/api/"):
         h["Cache-Control"] = "no-store"
         h["Pragma"] = "no-cache"
+    elif request.url.path.startswith(("/assets/fonts/", "/vendor/")):
+        h["Cache-Control"] = "public, max-age=604800"   # font dan pustaka pihak ketiga jarang berubah: 7 hari
+    elif request.url.path.startswith("/assets/"):
+        h["Cache-Control"] = "public, max-age=86400"    # logo, gambar, id-map.json: 1 hari, lalu divalidasi ulang
     else:
-        h["Cache-Control"] = "no-cache"      # file statis selalu divalidasi ulang (304 bila tidak berubah), supaya browser tidak memakai JS/CSS lama
+        h["Cache-Control"] = "no-cache"      # HTML, JS, CSS: selalu divalidasi ulang (304 bila tidak berubah), supaya browser tidak memakai kode lama setelah deploy
     return resp
 for r in (auth.router, dashboard.router, admin.router, integrations.router, ingest.router, report.router, wifi.router, insight.router, system.router, share.router, share.admin):
     app.include_router(r)

@@ -1,13 +1,59 @@
 /* TERA Dashboard — render, event, Admin (parameter & master data generik), login. */
 "use strict";
 try { if (localStorage.getItem("itoc.rail")) { document.addEventListener("DOMContentLoaded", () => { const a = document.getElementById("app"); if (a) a.classList.add("rail"); const b = document.getElementById("railBtn"); if (b) b.textContent = "›"; }); } } catch (_) {}
-const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, kuma: vKuma, soc: vSoc, devices: vDevices, devnet: vDevices, devcctv: vDevices, devops: vDevices, wifi: vWifi, xdr: vXdr, cctv: vCctv, internet: vInternet, insight: vInsight, network: vNetwork, cyber: vCyber, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
+/* ---------- lazy loading ----------
+   Only core.js, common.js, widgets.js, viz.js and this file load with the page. Each page's script is
+   fetched the first time the page opens (ensurePage). FILE_DEPS lists the shared pieces a file needs;
+   widget scripts (devices, wifi, xdr, cctv) are fetched when the page's data includes them, because the
+   widget catalog and Overview tiles call their functions. */
+const PAGE_FILE = {report: "page-report.js", ringkasan: "page-ringkasan.js", servicedesk: "page-servicedesk.js", noc: "page-noc.js", soc: "page-soc.js",
+  devices: "devices.js", devnet: "devices.js", devcctv: "devices.js", devops: "devices.js", wifi: "wifi.js", xdr: "xdr.js", cctv: "cctv.js",
+  internet: "internet.js", kuma: "kuma.js", insight: "insight.js", network: "groups.js", cyber: "groups.js",
+  jadwal: "page-jadwal.js", serahterima: "page-handover.js", kelengkapan: "page-data.js", admin: "admin.js"};
+const FILE_DEPS = {
+  "vendor/leaflet/leaflet.js": [], "devices.js": ["vendor/leaflet/leaflet.js", "insight.js"], "wifi.js": ["insight.js"], "xdr.js": ["insight.js"], "cctv.js": ["insight.js"],
+  "groups.js": ["wifi.js", "xdr.js", "insight.js"], "internet.js": ["page-soc.js"], "page-soc.js": ["insight.js"], "page-noc.js": ["insight.js"], "page-servicedesk.js": ["insight.js"],
+  "page-ringkasan.js": ["insight.js", "wifi.js", "xdr.js"], "page-jadwal.js": ["page-handover.js"], "admin.js": ["integrations.js"], "integrations.js": ["admin.js"]
+};
+const WIDGET_FILE = {dev: "devices.js", xdr: "xdr.js", cctv: "cctv.js", wifi: "wifi.js"};   // data key in V → script that renders its widgets
+const JS_LOADED = {};
+let BASEMAP_ASKED = false;
+function loadScript(src) {
+  if (!JS_LOADED[src]) JS_LOADED[src] = new Promise((ok, no) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = ok;
+    s.onerror = () => { delete JS_LOADED[src]; s.remove(); no(new Error("Could not load " + src)); };
+    document.head.appendChild(s);
+  });
+  return JS_LOADED[src];
+}
+/* Files a page needs, dependencies first, in load order. */
+function pageFiles(tab) {
+  const out = [], seen = new Set();
+  const add = f => { if (seen.has(f)) return; seen.add(f); (FILE_DEPS[f] || []).forEach(add); out.push(f); };
+  if (PAGE_FILE[tab]) add(PAGE_FILE[tab]);
+  Object.keys(WIDGET_FILE).forEach(k => { if (V && V[k]) add(WIDGET_FILE[k]); });
+  return out;
+}
+async function ensurePage(tab) {
+  for (const f of pageFiles(tab)) await loadScript(f);
+  if (!BASEMAP_ASKED && typeof loadBasemap === "function") {          // devices map background: loaded once, then the map pages are redrawn
+    BASEMAP_ASKED = true;
+    loadBasemap().then(() => { if (BASEMAP && (DEVTAB(S.tab) || S.tab === "ringkasan")) render(false); });
+  }
+}
+const devMaps = () => { if (typeof initDevMaps === "function") initDevMaps(); };
+const VIEWS = {report: () => vReport(), ringkasan: () => vRingkasan(), servicedesk: () => vSD(), noc: () => vNoc(), kuma: () => vKuma(), soc: () => vSoc(),
+  devices: () => vDevices(), devnet: () => vDevices(), devcctv: () => vDevices(), devops: () => vDevices(), wifi: () => vWifi(), xdr: () => vXdr(), cctv: () => vCctv(),
+  internet: () => vInternet(), insight: () => vInsight(), network: () => vNetwork(), cyber: () => vCyber(), jadwal: () => vJadwal(), serahterima: () => vHo(),
+  kelengkapan: () => vData(), admin: () => vAdmin()};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
 const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype", "rgrp", "rtech", "risp"];
 let seq = 0;
 async function render(reload) {
   writeHash(); renderShell();
+  const tab = S.tab;
   if (reload) {
     const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset, kind: S.kind, dstat: S.dstat, grp: S.grp, dtype: S.dtype, ...ticketQ()}), my = ++seq;
     $("view").classList.add("loading");
@@ -16,7 +62,11 @@ async function render(reload) {
     finally { if (my === seq) $("view").classList.remove("loading"); }
     renderShell();
   }
-  try { $("view").innerHTML = VIEWS[S.tab](); if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); initDevMaps(); } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Could not display the page: " + esc(e.message))}</section></div>`; }
+  try {
+    await ensurePage(tab);
+    if (S.tab !== tab) return;                                   // the user moved to another page while the script loaded
+    $("view").innerHTML = VIEWS[S.tab](); if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); devMaps();
+  } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Could not display the page: " + esc(e.message))}</section></div>`; }
 }
 /* Read-only Admin (role with admin_view but not is_admin): every edit control is hidden; the server still rejects changes. */
 function lockAdmin() {
@@ -110,7 +160,7 @@ function toggleCatalog() { const c = $("laycat"); if (!c) return; c.hidden = !c.
 function addWidget(key) {
   const w = widgetFind(key), grid = document.querySelector(".grid.lay"); if (!w || !grid || grid.querySelector(`[data-wkey="${CSS.escape("w-" + w.key)}"]`)) return;
   const {el} = widgetBlock(w); el.className = el.className.replace(SZ, "").trim() + " " + w.size; el.dataset.size = w.size; el.dataset.title = "";
-  grid.appendChild(el); addTools(el); initDevMaps(); $("laycat").innerHTML = catalogHtml(); el.scrollIntoView({behavior: "smooth", block: "center"});
+  grid.appendChild(el); addTools(el); devMaps(); $("laycat").innerHTML = catalogHtml(); el.scrollIntoView({behavior: "smooth", block: "center"});
 }
 function renderOff() {
   const t = $("layoff"); if (!t) return;
@@ -363,7 +413,7 @@ document.addEventListener("change", async e => {
   else if (t.dataset.wgroup !== undefined) {   // change the group filter on a map widget without adding a new widget
     const blk = t.closest(".wblock"), key = t.value ? "dev-map:" + encodeURIComponent(t.value) : "dev-map", w = widgetFind(key); if (!w) return;
     const {el} = widgetBlock(w), size = blk.dataset.size || w.size; el.className = el.className.replace(SZ, "").trim() + " " + size; el.dataset.size = size; el.dataset.title = blk.dataset.title || "";
-    blk.replaceWith(el); addTools(el); initDevMaps();
+    blk.replaceWith(el); addTools(el); devMaps();
   }
   else if (t.dataset.laySize !== undefined) { const blk = t.closest(".wblock"); blk.className = blk.className.replace(SZ, "").trim() + " " + t.value; blk.dataset.size = t.value; }
   else if (t.id === "dim") set({dim: t.value});
@@ -474,7 +524,6 @@ async function boot() {
   await loadPublic();
   try { if ((await fetch("/api/auth/me", {credentials: "same-origin"})).status === 401) return showLogin(); } catch (_) { return showLogin(); }
   try { await reloadConfig(); } catch (e) { return showLogin(e.message); }
-  loadBasemap().then(() => { if (BASEMAP && (DEVTAB(S.tab) || S.tab === "ringkasan")) render(false); });
   if (CFG.me.must_change_pw) return showLogin("", true);
   if (!TABS.length) return showLogin("Your role has no access to any page yet.");
   $("login").hidden = true; $("app").hidden = false;
