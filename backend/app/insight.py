@@ -642,7 +642,7 @@ TXT = {
            "al_noc": "Alert NOC : Kritis({c}) Peringatan({w}) Info({i})", "al_ndr": "Alert SOC (NDR) : C({c}) H({h}) M({m}) L({l}) N({n})", "al_xdr": "Alert SOC (XDR) : C({c}) H({h}) M({m}) L({l})",
            "find": "🔎 *TEMUAN OTOMATIS*", "crit": "KRITIS", "warn": "PERINGATAN", "link": "Link Pendukung : {u}",
            "eos": "EOS", "n_cctv": "CCTV", "n_wifi": "WiFi", "n_device": "Perangkat", "n_link": "Link / Web", "branch": "Cabang: {x}", "all_branches": "Semua cabang", "st_net": "Status Jaringan : {s}", "st_dev": "Status Perangkat : {s}", "ok": "OK", "warn_n": "PERHATIAN ({n} link down)", "dev_warn": "PERHATIAN ({n} perangkat down)",
-           "s_net": "🌐 *JARINGAN*", "s_dev": "🖥️ *PERANGKAT*", "dev_none": "Belum ada data perangkat dari Zabbix.", "dev_tot": "Perangkat: {t} unit, {d} down saat ini (ketersediaan {a}%).", "dev_ev": "Kejadian down {f}–{t}: {n} kejadian, total {h} jam.", "dev_line": "- {name} ({loc}): down {h} jam",
+           "s_net": "🌐 *JARINGAN*", "s_dev": "🖥️ *PERANGKAT*", "dev_none": "Belum ada data perangkat dari Zabbix.", "dev_tot": "Perangkat: {t} unit, {d} down saat ini (ketersediaan {a}%).", "dev_ev": "Kejadian down {f}–{t}: {n} kejadian, total {h} jam.", "dev_line": "- {name} ({loc}): down {h}",
            "d_duty": "Hari tugas {d} ({h}.00–{h}.00 esok hari)",
            "st_cctv": "Status CCTV : {s}", "st_device": "Status Perangkat : {s}", "st_wifi": "Status WiFi : {s}", "st_link": "Status Link / Web : {s}", "st_srv": "Status Server Milestone : {s}", "srv_warn": "PERHATIAN ({n} server tidak sinkron)",
            "ms_tot": "Milestone: {t} kamera ({r} merekam), server sinkron {s}/{n}", "ms_fail": ". Bermasalah: {x}", "ms_pa": "Public announcer: {t} unit, {d} down", "dev_loc": "Cabang dengan perangkat down terbanyak: {x}", "dev_kind": "Per kategori (down/total): {x}",
@@ -731,6 +731,11 @@ def _ndr_part(db: Session, a: datetime, end: datetime) -> dict | None:
                     alert += v
                 cats[p[2] if len(p) > 2 else "-"] = cats.get(p[2] if len(p) > 2 else "-", 0) + v
     return {"from": rows[0][0], "to": rows[-1][0], "sev": sev, "total": int(total), "ch": int(ch), "alert": int(alert), "cats": sorted(((c, int(v)) for c, v in cats.items() if c not in ("-", "N/A")), key=lambda x: -x[1])[:3]}
+
+
+def _dur(h: float) -> str:
+    """Hours for a short time, days for a long one: a camera down for 7.000 hours is clearer as 297 days."""
+    return f"{_f(h / 24)} hari" if h >= 72 else f"{_f(h, 1)} jam"
 
 
 def _f(v, d: int = 0) -> str:
@@ -844,7 +849,7 @@ def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: s
         L.append(t["dev_ev"].format(f=f"{a:%d/%m}", t=f"{(end - timedelta(seconds=1)):%d/%m}", n=_f(H["events"]), h=_f(H["hours"], 1)))
         dev_max = min(10, max(3, tk_max))
         for x in D["down"][:dev_max]:
-            L.append(t["dev_line"].format(name=x["name"], loc=x["loc"], h=_f(x["ageH"] or 0, 1)))
+            L.append(t["dev_line"].format(name=x["name"], loc=x["loc"], h=_dur(x["ageH"] or 0)))
         if len(D["down"]) > dev_max:
             L.append(t["tk_more"].format(n=len(D["down"]) - dev_max).replace("tiket", "perangkat"))
     rows = db.scalars(select(M.Insight).where(M.Insight.severity.in_(["crit", "warn"]), M.Insight.kind.in_(["tickets", "links", "capacity", "devices"]), M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
@@ -894,7 +899,7 @@ def _dev_lines(t: dict, D: dict, H: dict, d1: date, d2: date, site: str, n_down:
         if worst:
             L.append(t["dev_loc"].format(x=", ".join(f"{r['k'].replace('Branch ', '')} ({r['down']})" for r in worst)))
     for x in D["down"][:n_down]:
-        L.append(t["dev_line"].format(name=x["name"], loc=x["loc"], h=_f(x["ageH"] or 0, 1)))
+        L.append(t["dev_line"].format(name=x["name"], loc=x["loc"], h=_dur(x["ageH"] or 0)))
     if len(D["down"]) > n_down:
         L.append(t["tk_more"].format(n=len(D["down"]) - n_down).replace("tiket", "perangkat"))
     return L

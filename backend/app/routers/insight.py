@@ -102,7 +102,7 @@ def commands_list(db: Session = Depends(get_db), user: User = Depends(current_us
     if not can_see(user, "insight"):
         raise HTTPException(403, "This account has no access to Insights")
     from .. import commands
-    return {"commands": commands.catalog(load_config(db))}
+    return {"commands": commands.catalog(load_config(db), lambda m: can_see(user, m))}
 
 
 @router.get("/command", dependencies=[Depends(rate_limit("inscmd", 60, 60))])
@@ -111,7 +111,7 @@ def command(text: str = "/help", format: str = "text", db: Session = Depends(get
     if not can_see(user, "insight"):
         raise HTTPException(403, "This account has no access to Insights")
     from .. import commands
-    out = commands.run(db, load_config(db), text[:200], effective_site(user, db))
+    out = commands.run(db, load_config(db), text[:200], effective_site(user, db), lambda m: can_see(user, m))
     return Response(content=out, media_type="text/plain; charset=utf-8") if format == "text" else {"text": out}
 
 
@@ -125,6 +125,9 @@ def summary(scope: str = "duty", day: date | None = None, kind: str = "full", si
         raise HTTPException(422, "Unknown summary period")
     if kind not in SUMMARY_KINDS:
         raise HTTPException(422, "Unknown summary type")
+    from ..commands import kind_allowed
+    if not kind_allowed(kind, lambda m: can_see(user, m)):
+        raise HTTPException(403, "This account has no access to this summary type")
     site = effective_site(user, db) or site
     if site and site not in cfg.sites:
         raise HTTPException(422, "Unknown branch")

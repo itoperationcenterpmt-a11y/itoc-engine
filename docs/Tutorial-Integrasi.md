@@ -124,3 +124,13 @@ Uptime Kuma dibaca lewat halaman Prometheus-nya (`/metrics`), hanya baca.
 4. Klik **Test**, lalu nyalakan sumbernya. Sinkron berjalan tiap 5 menit; setiap sinkron menambah satu sampel per monitor, dan ketersediaan dihitung dari sampel itu (1 − sampel down ÷ semua sampel). Monitor yang sedang maintenance tidak dihitung.
 5. Menu **Network > Link / Web Availability** muncul untuk role yang punya akses PRTG (role lain diatur di **Admin > Access > Roles**). Report tersedia sebagai jenis **Link / Web Availability** dan ikut jenis **Network**.
 6. Lokasi monitor diambil dari nama atau host monitor yang cocok dengan nama atau alias lokasi (Admin > Data Sources > Mapping, kolom Aliases). Monitor yang tidak cocok tampil di bagian "Unmapped"; beri nama monitor awalan kode lokasi (contoh `BDJ - Website`) atau tambahkan alias lokasinya.
+
+## 8. Perintah chat dan WA Notifier (WhatsApp / Telegram)
+
+WA Notifier (aplikasi terpisah) mengirim laporan TERA ke WhatsApp atau Telegram dan menjawab perintah dari penerima yang **sudah terdaftar** di aplikasi itu.
+
+1. Di TERA buat API key (**Admin > Access > API Keys**, role **ITOC Shift** atau role lain yang boleh membuka Insights). Key hanya membaca.
+2. Di `.env` WA Notifier isi `COMMAND_URL` (`http://<alamat-TERA>/api/insights/command`) dan `COMMAND_API_KEY`. Kosongkan `COMMAND_URL` untuk mematikan perintah chat.
+3. Laporan terjadwal: di menu **Jadwal** WA Notifier, buka "Ambil data dari sistem lain", isi URL `.../api/insights/summary?scope=duty&kind=full&format=text`, header `X-API-Key: <key>`, dan pesan `{text}`. Parameter: `kind` (full, noc, soc, eos, cctv, wifi, device, link), `site` (cabang, untuk eos/cctv/wifi/device/link), `scope` (duty, day, half1, half2, s1, s2, s3, 24h, 7d, 30d, month, thismonth, lastmonth), `day` (YYYY-MM-DD).
+4. Daftar perintah (`/fullday`, `/cctv-parepare`, `/month-202610`, rentang `-20261025-20261031`, dan seterusnya) diatur di **Admin > Operations > Targets & Parameters > Reports > Chat commands**, tanpa deploy ulang. Mengetik `/` di chat membalas daftar perintah.
+5. Akun API key hanya bisa memakai bidang yang menunya boleh dibuka role-nya (mis. `/soc` butuh akses SOC). Isi laporan dibatasi 3000 karakter.

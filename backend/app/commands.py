@@ -38,6 +38,13 @@ SITE_KINDS = ("eos", "cctv", "wifi", "device", "link")           # these accept 
 FIXED = ("duty", "day", "half1", "half2", "24h", "7d", "30d", "thismonth", "lastmonth", "month")
 DATED = ("duty", "day", "half1", "half2")                         # scopes that follow a typed date (two dates on "duty" make a range)
 MAX_RANGE_DAYS = 62
+KIND_MODULES = {"noc": ("noc",), "soc": ("soc",), "eos": ("servicedesk", "noc"), "cctv": ("cctv", "devices"), "wifi": ("wifi",), "device": ("devices",), "link": ("noc", "kuma")}   # a summary needs one of these menus; "full" is open to everyone who may open Insights
+
+
+def kind_allowed(kind: str, can) -> bool:
+    """can(module) -> bool: whether the account may open that menu."""
+    need = KIND_MODULES.get(kind)
+    return not need or any(can(m) for m in need)
 HINT = "Ketik / untuk daftar perintah."                      # a wrong command gets a short pointer, not the whole list
 MAX_CHARS = 3000                                                  # a chat message limit: the summary shortens its lists to stay within it
 
@@ -58,9 +65,9 @@ def _config(cfg: Config) -> dict:
     return {"commands": cmds, "footer": raw.get("footer", DEFAULT["footer"]) if isinstance(raw.get("footer"), list) else DEFAULT["footer"]}
 
 
-def catalog(cfg: Config) -> list[dict]:
-    """The commands that /help lists, for a chat app that offers them while the user types a slash."""
-    return [{"name": x["name"], "aliases": [str(a) for a in x.get("aliases", [])], "help": x.get("help") or x["name"]} for x in _config(cfg)["commands"] if not x.get("hidden")]
+def catalog(cfg: Config, can=None) -> list[dict]:
+    """The commands that /help lists (only those this account may use), for a chat app that offers them while the user types a slash."""
+    return [{"name": x["name"], "aliases": [str(a) for a in x.get("aliases", [])], "help": x.get("help") or x["name"]} for x in _config(cfg)["commands"] if not x.get("hidden") and (can is None or kind_allowed(x["kind"], can))]
 
 
 def help_text(cfg: Config) -> str:
@@ -112,13 +119,13 @@ def _scope(cfg: Config, scope: str) -> str | None:
     return scope
 
 
-def run(db, cfg: Config, text: str, locked_site: str = "") -> str:
+def run(db, cfg: Config, text: str, locked_site: str = "", can=None) -> str:
     toks = [t for t in re.split(r"[\s\-_]+", (text or "").strip().lower().lstrip("/")) if t]
     help_ = help_text(cfg)
     if not toks or toks[0] in ("help", "bantuan", "start", "?"):
         return help_
     if toks == ["cabang"] or toks == ["branch"]:
-        return "*Cabang untuk /eos-<nama>*\n" + ", ".join(s.lower().replace("branch ", "") for s in cfg.sites if s.lower().startswith("branch ")) + "."
+        return "*Cabang untuk /eos-<nama>*\n" + ", ".join(s.lower().replace("branch ", "") for s in cfg.sites) + "."
     cmd, rest = toks[0], toks[1:]
     by_name = {}
     for c in _config(cfg)["commands"]:
@@ -168,6 +175,8 @@ def run(db, cfg: Config, text: str, locked_site: str = "") -> str:
             scope = f"range:{d1:%Y%m%d}:{d2:%Y%m%d}"
         else:
             return "Pakai satu tanggal, atau dua tanggal untuk rentang hari (hanya perintah harian).\n" + HINT
+    if can is not None and not kind_allowed(c["kind"], can):
+        return f"Akun yang dipakai untuk perintah ini tidak punya akses ke bidang itu.\n" + HINT
     site = ""
     if c["kind"] in SITE_KINDS:
         site, err = _site(cfg, [str(c["site"]).lower().replace("branch ", "")] if c.get("site") else (words if c.get("branch_arg") else []))
