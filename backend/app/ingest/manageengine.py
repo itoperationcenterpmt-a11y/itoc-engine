@@ -6,6 +6,7 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 import httpx
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from ..models import Ticket, DataSource, SyncLog
@@ -128,6 +129,34 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
             if not body.get("list_info", {}).get("has_more_rows"):
                 break
             start += size
+        # request yang dihapus di ServiceDesk Plus tidak muncul di daftar inkremental: bandingkan dengan daftar lengkap ID
+        live = _all_ids(cl, size)
     n = upsert(db, [x for x in rows if x["created_at"]], "api")
+    removed = _remove_missing(db, live)
     src.cursor = {**src.cursor, "last_updated_ms": newest}
-    return n, "Tickets new or changed since the previous sync"
+    return n, f"Tickets new or changed since the previous sync; {removed} deleted in ServiceDesk Plus removed"
+
+
+def _all_ids(cl: httpx.Client, size: int) -> set[str]:
+    ids, start = set(), 1
+    while True:
+        li = {"list_info": {"row_count": size, "start_index": start}}
+        r = cl.get("/api/v3/requests", params={"input_data": json.dumps(li)})
+        r.raise_for_status()
+        body = r.json()
+        ids.update(str(q["id"]) for q in body.get("requests", []))
+        if not body.get("list_info", {}).get("has_more_rows"):
+            return ids
+        start += size
+
+
+def _remove_missing(db: Session, live: set[str]) -> int:
+    """Hapus tiket dari API yang sudah tidak ada di ServiceDesk Plus. Data impor Excel tidak disentuh.
+    Jika daftar kosong, dianggap gagal dan tidak ada yang dihapus."""
+    if not live:
+        return 0
+    local = db.scalars(select(Ticket.id).where(Ticket.source == "api")).all()
+    gone = [i for i in local if i not in live]
+    for i in range(0, len(gone), 1000):
+        db.execute(delete(Ticket).where(Ticket.source == "api", Ticket.id.in_(gone[i:i + 1000])))
+    return len(gone)
