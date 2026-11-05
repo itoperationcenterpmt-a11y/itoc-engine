@@ -98,7 +98,14 @@ function renderDuty() {
     e.querySelector(".th").textContent = hh; e.querySelector(".tm").textContent = mm; e.querySelector(".ts").textContent = ss;
   });
   $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]} · ${hh}.${mm}`;
-}function renderShell() {
+}
+/* Skeleton placeholder shown in #view while a page's data loads (only when the page changed or the view is empty; a refresh of the same page keeps the old content dimmed). */
+function skeletonHtml() {
+  const card = (c, rows) => `<section class="panel ${c} skel" aria-hidden="true"><div class="sk sk-title"></div>${Array.from({length: rows}, (_, i) => `<div class="sk sk-line" style="width:${92 - i * 14}%"></div>`).join("")}</section>`;
+  return `<div class="grid skel-wrap" role="status" aria-label="Loading"><div class="kpis">${Array.from({length: 4}, () => `<div class="sk sk-kpi"></div>`).join("")}</div>${card("c8", 5)}${card("c4", 4)}${card("c6", 4)}${card("c6", 4)}</div>`;
+}
+function renderShell(loading) {
+  if (loading && (!$("view").innerHTML.trim() || $("view").dataset.tab !== S.tab)) $("view").innerHTML = skeletonHtml();
   const NAVT = TABS.filter(t => topOf(t[0]) === t[0]), curTop = topOf(S.tab);
   $("tabs").innerHTML = NAVT.map(([k, l, bd]) => `<a role="tab" href="#${k}" data-tab="${k}" title="${esc(l)}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></a>`).join("");
   $("sheetGrid").innerHTML = NAVT.map(([k, l, bd]) => `<a href="#${k}" data-tab="${k}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></a>`).join("");
