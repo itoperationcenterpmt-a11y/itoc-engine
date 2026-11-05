@@ -382,6 +382,12 @@ textarea{min-height:76px;resize:vertical}
 #tip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--bg);font-size:calc(12px*var(--fs));padding:6px 9px;border-radius:5px;max-width:280px;white-space:pre-line}
 a{color:var(--accent)}a:hover{color:var(--ink)}
 #view.loading{opacity:.55;transition:opacity .15s}
+.sk{border-radius:8px;background:linear-gradient(90deg,var(--line,#e4e7ec) 25%,rgba(128,128,128,.12) 50%,var(--line,#e4e7ec) 75%);background-size:200% 100%;animation:skel 1.2s ease-in-out infinite}
+.sk-title{height:14px;width:40%;margin-bottom:16px}.sk-line{height:10px;margin:10px 0}.sk-kpi{height:84px;flex:1;min-width:140px}
+.skel-wrap .kpis{display:flex;gap:12px;grid-column:1/-1}
+.skel{min-height:140px}
+@keyframes skel{from{background-position:200% 0}to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.sk{animation:none}}
 textarea.jsed{font:12px/1.45 var(--f-mono);min-height:120px;width:100%}
 #login{min-height:100vh;display:grid;place-items:center;padding:16px;background:radial-gradient(900px 500px at 15% 0%,rgba(42,139,214,.35),transparent 60%),radial-gradient(700px 500px at 100% 100%,rgba(28,92,171,.35),transparent 60%),#0b1830}
 .loginbox{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:30px 28px;width:min(400px,100%);display:flex;flex-direction:column;gap:14px;box-shadow:0 30px 60px -20px rgba(0,0,0,.6)}

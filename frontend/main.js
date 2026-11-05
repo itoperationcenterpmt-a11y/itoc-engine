@@ -52,7 +52,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet"
 const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype", "rgrp", "rtech", "risp"];
 let seq = 0;
 async function render(reload) {
-  writeHash(); renderShell();
+  writeHash(); renderShell(!!reload);
   const tab = S.tab;
   if (reload) {
     const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset, kind: S.kind, dstat: S.dstat, grp: S.grp, dtype: S.dtype, ...ticketQ()}), my = ++seq;
@@ -65,7 +65,7 @@ async function render(reload) {
   try {
     await ensurePage(tab);
     if (S.tab !== tab) return;                                   // the user moved to another page while the script loaded
-    $("view").innerHTML = VIEWS[S.tab](); if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); devMaps();
+    $("view").innerHTML = VIEWS[S.tab](); $("view").dataset.tab = S.tab; if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); devMaps();
   } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Could not display the page: " + esc(e.message))}</section></div>`; }
 }
 /* Read-only Admin (role with admin_view but not is_admin): every edit control is hidden; the server still rejects changes. */
