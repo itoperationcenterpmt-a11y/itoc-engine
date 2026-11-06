@@ -5,17 +5,20 @@ const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vN
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
 const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype", "rgrp", "rtech", "risp"];
-let seq = 0;
+let seq = 0, viewTab = "";
+const SKELETON = `<div class="grid sk" role="status" aria-label="Loading">${"<section class='panel c4'><i></i><i></i><i></i></section>".repeat(3)}<section class="panel c12"><i></i><i></i><i></i><i></i></section></div>`;
 async function render(reload) {
   writeHash(); renderShell();
   if (reload) {
     const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset, kind: S.kind, dstat: S.dstat, grp: S.grp, dtype: S.dtype, ...ticketQ()}), my = ++seq;
-    $("view").classList.add("loading");
+    if (S.tab !== viewTab) $("view").innerHTML = SKELETON;        // another page: do not leave the previous page's content on screen while this one loads
+    $("view").classList.add("loading"); $("view").setAttribute("aria-busy", "true");
     try { const v = await api(`/api/view/${S.tab}?${q}`); if (my !== seq) return; V = v; }
-    catch (e) { if (my === seq) $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty(esc(e.message))}</section></div>`; return; }
-    finally { if (my === seq) $("view").classList.remove("loading"); }
+    catch (e) { if (my === seq) { viewTab = ""; $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty(esc(e.message))}</section></div>`; } return; }
+    finally { if (my === seq) { $("view").classList.remove("loading"); $("view").removeAttribute("aria-busy"); } }
     renderShell();
   }
+  viewTab = S.tab;
   try { $("view").innerHTML = VIEWS[S.tab](); if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); initDevMaps(); } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Could not display the page: " + esc(e.message))}</section></div>`; }
 }
 /* Read-only Admin (role with admin_view but not is_admin): every edit control is hidden; the server still rejects changes. */
@@ -472,7 +475,7 @@ function showLogin(msg, change) {
       <button class="btn" type="submit">Sign in</button><span class="msg err" id="lMsg" role="alert">${esc(msg || "")}</span>
       <p class="lg-help">Forgot your password? ${LOGIN.support_phone ? `<a href="https://wa.me/${esc(String(LOGIN.support_phone).replace(/\D/g, ""))}?text=${encodeURIComponent("Hello IT Care, I forgot my TERA Dashboard password.")}" target="_blank" rel="noopener noreferrer">Contact us</a>` : "Contact us"}</p></form>`;
       $("login").innerHTML = `<div class="lg"><div class="lg-bg"></div><div class="lg-wrap">
-    <section class="lg-card lg-info"><button type="button" class="lg-theme" id="themeL" aria-label="Switch light or dark theme">◐</button>
+    <section class="lg-card lg-info"><button type="button" class="lg-theme" id="themeL" aria-label="Switch light or dark theme"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor"/></svg></button>
       <div class="lg-top">${LOGIN.eyebrow ? `<span class="lg-eyebrow">${esc(LOGIN.eyebrow)}</span>` : ""}${LOGIN.badge ? `<span class="lg-prod">${esc(LOGIN.badge)}</span>` : ""}</div>
       ${LOGIN.headline ? `<h2 class="lg-title">${esc(LOGIN.headline)}</h2>` : `<h2 class="brandName">${brandHtml()}</h2>`}${LOGIN.tagline ? `<p>${esc(LOGIN.tagline)}</p>` : ""}${LOGIN.acronym.length ? `<ul class="lg-acr" aria-label="What TERA stands for">${LOGIN.acronym.map(([l, w, d]) => `<li><b>${esc(l)}</b><span><strong>${esc(w)}</strong>${d ? ` ${esc(d)}` : ""}</span></li>`).join("")}</ul>` : ""}
       ${LOGIN.points.length && !LOGIN.acronym.length ? `<ul class="lg-pts">${LOGIN.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>
