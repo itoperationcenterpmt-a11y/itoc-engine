@@ -519,6 +519,18 @@ tbody tr:hover td{background:var(--wash)}
 :root[data-theme="light"] .lg-info h2 .e{color:#0067B4}@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .lg-info h2 .e{color:#0067B4}}
 .lg-prod{display:inline-block;align-self:flex-start;width:fit-content;margin:2px 0 14px;font-size:calc(11px*var(--fs));font-weight:700;letter-spacing:.16em;text-transform:uppercase;background:#0067B4;color:#fff;padding:5px 12px;border-radius:99px}
 @media (max-width:420px){.lg-logo{width:min(250px,88%)}}
+/* TERA wordmark (SVG with its own margin of about 4% of its width) beside the ITOC icon. The cap height of the wordmark is about 40% of the icon height, so neither one outweighs the other. */
+.wm{display:block;width:auto;max-width:100%}.wm-r{display:none}.brand-tera .wm-c{display:none}.brand-tera .wm-r{display:block}
+.brand-tera h1 .wm{height:calc(36px*var(--fs));margin:calc(-5px*var(--fs)) 0 calc(-4px*var(--fs))}
+.brand-tera .bprod{font-family:var(--f-body);font-size:calc(15px*var(--fs));font-weight:600;letter-spacing:.01em;text-transform:none;color:#5BB5E2;margin-top:calc(5px*var(--fs))}
+.mtop .brand-tera h1 .wm{height:calc(24px*var(--fs));margin:-3px 0 -3px}.mtop .brand-tera .bprod{font-size:calc(12.5px*var(--fs));margin-top:2px}
+.lg-info h2 .wm{height:calc(44px*var(--fs))}
+:root[data-theme="dark"] .lg-info .wm-c{display:none}:root[data-theme="dark"] .lg-info .wm-r{display:block}@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lg-info .wm-c{display:none}:root:not([data-theme="light"]) .lg-info .wm-r{display:block}}
+.lg-lock{display:flex;align-items:center;gap:calc(16px*var(--fs));width:min(calc(340px*var(--fs)),88%);margin:0 auto 30px}
+.lk-ic{width:34%;height:auto;flex:none}.lk-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:calc(5px*var(--fs))}.lk-wm{width:100%;height:auto;margin:-4% 0 -3%}
+.lk-tx b{font-size:calc(12px*var(--fs));font-weight:700;letter-spacing:.03em;line-height:1.25;color:#0067B4}.lk-tx span{font-size:calc(11.5px*var(--fs));line-height:1.25;color:var(--muted)}
+:root[data-theme="dark"] .lk-tx b{color:#5BB5E2}@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lk-tx b{color:#5BB5E2}}
+@media (max-width:420px){.lg-lock{width:min(250px,88%)}}
 .brand-g2{flex-direction:column;align-items:flex-start;gap:12px;padding:6px 8px 4px}.brand-g2 .g2{display:block;width:100%;max-width:200px;height:auto}
 .brand-g2 h1{font-size:calc(19px*var(--fs));font-weight:800;letter-spacing:-.01em}.brand-g2 h1 .b1{display:block}
 .mtop .brand-g2{flex-direction:row;align-items:center;gap:10px;padding:0}.mtop .g2chip{background:#fff;border-radius:10px;padding:4px 10px;display:grid;place-items:center}.mtop .brand-g2 .g2{width:auto;height:26px;max-width:none}.mtop .brand-g2 h1{font-size:calc(15px*var(--fs))}
@@ -627,7 +639,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
 </dialog>
 <div id="app" class="shell" hidden>
 <aside class="side">
-  <div class="brand brand-tera"><img class="g2" src="assets/tera-icon-rev.png" alt="TERA"><div class="bt"><h1 class="brandName"><span class="b1">TERA</span></h1><span class="bprod">Dashboard</span><span class="bby">by IT Operation Center</span></div><button class="railbtn" id="railBtn" type="button" aria-label="Menu">‹</button></div>
+  <div class="brand brand-tera"><img class="g2" src="assets/tera-icon-rev.png" alt=""><div class="bt"><h1 class="brandName"><span class="b1"><img class="wm wm-c" src="assets/tera-wordmark-col.svg" alt="TERA"><img class="wm wm-r" src="assets/tera-wordmark-rev.svg" alt="TERA"></span></h1><span class="bprod">Dashboard</span><span class="bby">by IT Operation Center</span></div><button class="railbtn" id="railBtn" type="button" aria-label="Menu">‹</button></div>
   <nav class="tabs" role="tablist" id="tabs" aria-label="Menu"></nav>
   <button class="more" id="moreBtn" type="button" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Menu</span></button>
   <div class="side-foot">
@@ -637,7 +649,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
 </aside>
 <div class="main">
   <div class="mtop">
-    <div class="brand brand-tera"><img class="g2" src="assets/tera-icon-rev.png" alt="TERA"><div class="bt"><h1 class="brandName"><span class="b1">TERA</span></h1><span class="bprod">Dashboard</span></div></div>
+    <div class="brand brand-tera"><img class="g2" src="assets/tera-icon-rev.png" alt=""><div class="bt"><h1 class="brandName"><span class="b1"><img class="wm wm-c" src="assets/tera-wordmark-col.svg" alt="TERA"><img class="wm wm-r" src="assets/tera-wordmark-rev.svg" alt="TERA"></span></h1><span class="bprod">Dashboard</span></div></div>
     <div class="mr"><span id="dutyM"></span></div>
   </div>
   <div class="wrap">
