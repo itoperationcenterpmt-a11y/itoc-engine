@@ -468,7 +468,7 @@ tbody tr:hover td{background:var(--wash)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lg-l{display:none}:root:not([data-theme="light"]) .lg-d{display:block}}
 .lg-info h2 .b1,.lg-info h2 .b2{display:block;white-space:nowrap}.lg-info h2{font-size:clamp(22px,3.3vw,44px)}
 /* KPI strips wrap by available width instead of squeezing six tiles into a narrow window */
-.kpis{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+.kpis{grid-template-columns:repeat(var(--kn,6),minmax(0,1fr))}@media (max-width:1280px){.kpis{grid-template-columns:repeat(var(--kc,3),minmax(0,1fr))}}@media (max-width:1000px){.kpis{grid-template-columns:repeat(var(--kb,2),minmax(0,1fr))}}@media (max-width:700px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .kpis .kpi{border:0!important;box-shadow:-1px 0 0 var(--line),0 -1px 0 var(--line);min-width:0}
 .kpi .v{overflow-wrap:anywhere}.nw{white-space:nowrap}#newver{position:fixed;top:0;left:0;right:0;z-index:50;background:#0067B4;color:#fff;padding:10px 16px;display:flex;gap:14px;align-items:center;justify-content:center;font-size:calc(14px*var(--fs))}#newver button{background:#fff;color:#0B2A4A;border:0;border-radius:8px;padding:6px 14px;font-weight:600;cursor:pointer}
 /* Visual widgets */
@@ -531,6 +531,22 @@ tbody tr:hover td{background:var(--wash)}
 .lk-tx b{font-size:calc(12px*var(--fs));font-weight:700;letter-spacing:.03em;line-height:1.25;color:#0067B4}.lk-tx span{font-size:calc(11.5px*var(--fs));line-height:1.25;color:var(--muted)}
 :root[data-theme="dark"] .lk-tx b{color:#5BB5E2}@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lk-tx b{color:#5BB5E2}}
 @media (max-width:420px){.lg-lock{width:min(250px,88%)}}
+/* Folded filters, folded groups of widgets, "Jump to" bar, sidebar sub-menu, short menu label */
+.fg.fx{display:none}
+.secx{display:none!important}
+.secjump{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px}.secjump>span{font-size:calc(12px*var(--fs));color:var(--muted);margin-right:2px}
+.secjump button{display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:6px 13px;font:600 calc(12.5px*var(--fs)) var(--f-body);color:var(--ink);cursor:pointer}.secjump button:hover{border-color:var(--accent)}.secjump button i{font-style:normal;font-weight:500;color:var(--muted)}
+.sechd{grid-column:1/-1;display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--rad);box-shadow:var(--shadow);padding:13px 18px;cursor:pointer;color:var(--ink);font:inherit}
+.sechd b{font-size:calc(15px*var(--fs))}.sechd .sub{margin-left:auto}.sechd .sechint{color:var(--accent);font-weight:600;font-size:calc(12.5px*var(--fs));min-width:34px;text-align:right}.sechd:hover{border-color:var(--accent)}
+.tabs a.subl{margin-left:20px;padding:5px 11px 5px 16px;border-radius:0 8px 8px 0;border-left:1px solid var(--side-line);font-size:calc(12.5px*var(--fs));box-shadow:none;background:none;opacity:.85}
+.tabs a.subl:hover{background:rgba(255,255,255,.06);opacity:1}
+.tabs a.subl[aria-selected="true"]{color:#fff;font-weight:700;opacity:1;background:rgba(255,255,255,.06);box-shadow:none;border-left-color:#6da7ec}
+.tabs .ls{display:none}
+.shell.rail .tabs .subl{display:none}
+@media (max-width:900px){.tabs .subl{display:none}.tabs .lf{display:none}.tabs .ls{display:inline}}
+.dqnote{margin:10px 2px 0}
+/* Status rows (Devices > Status by Category) were wider than a phone: the last column is as wide as its text */
+@media (max-width:520px){.panel .strow{grid-template-columns:minmax(64px,96px) minmax(24px,1fr) auto;gap:8px}.panel .strow .num{white-space:nowrap}}
 .brand-g2{flex-direction:column;align-items:flex-start;gap:12px;padding:6px 8px 4px}.brand-g2 .g2{display:block;width:100%;max-width:200px;height:auto}
 .brand-g2 h1{font-size:calc(19px*var(--fs));font-weight:800;letter-spacing:-.01em}.brand-g2 h1 .b1{display:block}
 .mtop .brand-g2{flex-direction:row;align-items:center;gap:10px;padding:0}.mtop .g2chip{background:#fff;border-radius:10px;padding:4px 10px;display:grid;place-items:center}.mtop .brand-g2 .g2{width:auto;height:26px;max-width:none}.mtop .brand-g2 h1{font-size:calc(15px*var(--fs))}
@@ -662,6 +678,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
         <div class="fg" id="gPeriode"><span class="k">Period</span><div class="seg" id="fPreset"></div><span class="dates"><input type="date" id="fFrom" aria-label="From date"> – <input type="date" id="fTo" aria-label="To date"></span></div>
         <div class="fg" id="gShift"><span class="k">Shift</span><div class="seg" id="fShift"></div></div>
         <div class="fg" id="gSite"><span class="k">Location</span><select id="fSite" aria-label="Location"></select></div>
+        <button class="btn ghost" id="fMore" type="button" aria-expanded="false" hidden>More filters</button>
         <div class="fg" id="gKind" hidden><span class="k">Category</span><div class="seg" id="fKind"></div></div>
         <div class="fg" id="gGrp" hidden><span class="k">Group</span><select id="fGrp" aria-label="Group"></select></div>
         <div class="fg" id="gTyp" hidden><span class="k">Type</span><select id="fTyp" aria-label="Device type"></select></div>

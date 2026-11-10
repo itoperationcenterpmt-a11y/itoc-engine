@@ -89,6 +89,8 @@ function subnav(parent) {
   return items.length < 2 ? "" : `<div class="subtabs">${items.map(([k, l]) => `<a href="#${k}" data-tab="${k}" aria-selected="${k === S.tab}">${esc(k === parent && SUBSUM[parent] ? SUBSUM[parent] : l)}</a>`).join("")}</div>`;
 }
 /* Running shift clock: called on render and every second so it never freezes. */
+/* A KPI strip must not leave one box alone on a second row: the columns follow the number of boxes (--kn), and on narrower screens a divisor of it (--kc, --kb) */
+function kpiCols() { $("view").querySelectorAll(".kpis").forEach(k => { const n = k.children.length; k.style.setProperty("--kn", n); k.style.setProperty("--kc", n < 6 ? n : n % 3 === 0 ? 3 : 2); k.style.setProperty("--kb", n % 3 === 0 ? 3 : 2); }); }
 function renderDuty() {
   const n = nowShift(), tm = teamOn(n.date, n.shift), d = new Date(nowMs()), hh = pad(d.getUTCHours()), mm = pad(d.getUTCMinutes()), ss = pad(d.getUTCSeconds());
   ["duty", "dutyH"].forEach(id => {
@@ -97,10 +99,12 @@ function renderDuty() {
     e.querySelector(".dtxt").textContent = `On duty: Team ${tm} · ${SN[n.shift]}`;
     e.querySelector(".th").textContent = hh; e.querySelector(".tm").textContent = mm; e.querySelector(".ts").textContent = ss;
   });
-  $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]} · ${hh}.${mm}`;
+  $("dutyM").textContent = `Team ${tm} · ${SN[n.shift]} · ${hh}:${mm}`;
 }function renderShell() {
   const NAVT = TABS.filter(t => topOf(t[0]) === t[0]), curTop = topOf(S.tab);
-  $("tabs").innerHTML = NAVT.map(([k, l, bd]) => `<a role="tab" href="#${k}" data-tab="${k}" title="${esc(l)}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></a>`).join("");
+  /* The pages under a menu item (ISP, WiFi, ...) are listed under it in the sidebar while it is open; on a phone they stay as tabs inside the page */
+  const subL = k => { const it = TABS.filter(t => !SUBHIDE.includes(t[0]) && (t[0] === k || (MODS[t[0]] || {}).parent === k)); return it.length < 2 ? "" : it.map(([sk, sl]) => `<a role="tab" class="subl" href="#${sk}" data-tab="${sk}" aria-selected="${sk === S.tab}">${esc(sk === k && SUBSUM[k] ? SUBSUM[k] : sl)}</a>`).join(""); }, SHORT = {cyber: "Cyber"};
+  $("tabs").innerHTML = NAVT.map(([k, l, bd]) => `<a role="tab" href="#${k}" data-tab="${k}" title="${esc(l)}" aria-selected="${k === curTop}">${icon(k)}<span>${SHORT[k] ? `<span class="lf">${esc(l)}</span><span class="ls">${SHORT[k]}</span>` : esc(l)}</span></a>${k === curTop ? subL(k) : ""}`).join("");
   $("sheetGrid").innerHTML = NAVT.map(([k, l, bd]) => `<a href="#${k}" data-tab="${k}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></a>`).join("");
   $("moreBtn").classList.toggle("on", NAVT.findIndex(t => t[0] === curTop) > 3);
   const cur = TABS.find(t => t[0] === S.tab), par = (MODS[S.tab] || {}).parent, grp = SUBSUM[S.tab] ? S.tab : (SUBSUM[par] ? par : "");
@@ -133,6 +137,10 @@ function renderDuty() {
   if (S.tab === "xdr") $("fKind").innerHTML = [["", "All"], ["critical", "Critical"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]].map(([k, l]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${S.kind === k}">${esc(l)}</button>`).join("");
   $("fStat").innerHTML = (S.tab === "cctv" ? [["", "All"], ["up", "Online"], ["down", "Offline"], ["nozbx", "No status"], ["rec", "Recording"], ["norec", "Not recording"], ["off", "Disabled"]] : SL).map(([k, l]) => `<button type="button" data-st="${k}" aria-pressed="${S.dstat === k}">${l}</button>`).join("");
   $("gKind").hidden = !ap.k; $("gStat").hidden = !ap.t; $("gGrp").hidden = !ap.g; $("gTyp").hidden = !ap.y;
+  /* Period and Location stay in view; the other filters fold behind "More filters" until one of them is in use */
+  const exIds = ["gKind", "gStat", "gGrp", "gTyp"], exN = exIds.filter(id => !$(id).hidden).length, exUse = !!(ap.k && S.kind || ap.t && S.dstat || ap.g && S.grp || ap.y && S.dtype), exOpen = S.fMore || exUse;
+  exIds.forEach(id => $(id).classList.toggle("fx", !exOpen));
+  $("fMore").hidden = !exN; $("fMore").disabled = exUse; $("fMore").textContent = exOpen ? "Fewer filters" : "More filters · " + exN; $("fMore").setAttribute("aria-expanded", exOpen);
   $("fwrap").hidden = !anyF;
   $("fbar").classList.toggle("off", !anyF);
   [["gPeriode", ap.p], ["gShift", ap.s], ["gSite", ap.l], ["gCmp", ap.p && ap.c]].forEach(([id, on]) => { const el = $(id); el.hidden = !on; el.classList.toggle("na", !on); el.querySelectorAll("button,select,input").forEach(x => x.disabled = !on); });
@@ -180,8 +188,8 @@ function vRingkasan() {
   if (N && (N.unmappedIsp || []).length) dq.push(["dq", `<b>${N.unmappedIsp.length} links do not match any ISP</b>: ${N.unmappedIsp.slice(0, 3).map(esc).join(", ")}`, "noc"]);
   if (hasD && (D.error || D.stale)) dq.push(["dq", `<b>Zabbix data ${D.error ? "failed to sync" : "is not up to date"}</b>. Check the connector in Admin.`, "devices"]);
   const bad = chk.filter(x => x.s === "bad" || x.s === "miss"); if (bad.length) dq.push(["dq", `<b>SOC data is incomplete</b>: ${bad.length} of ${chk.length} days unreadable or not uploaded.`, "kelengkapan"]);
-  const attBody = (att.length ? `<ul class="att">${att.map(attRow).join("")}</ul>` : `<div class="empty sm">Nothing needs follow-up.</div>`) + (dq.length ? `<div class="dhead">Data health</div><ul class="att dq">${dq.map(attRow).join("")}</ul>` : "");
-  const attP = panel(hasI ? "c6" : "c8", "Needs Attention", ctxTxt(), attBody);
+  const attBody = (att.length ? `<ul class="att">${att.map(attRow).join("")}</ul>` : `<div class="empty sm">Nothing needs follow-up.</div>`) + (dq.length ? (isExec() ? `<p class="sub dqnote">Some figures are still being validated by IT Operation.</p>` : `<div class="dhead">Data health</div><ul class="att dq">${dq.map(attRow).join("")}</ul>`) : "");
+  const attP = panel("c8", "Needs Attention", ctxTxt(), attBody);
 
   /* Right now (live state) and This period (follows the date filter) */
   const nowTiles = [
@@ -197,7 +205,7 @@ function vRingkasan() {
     hasU ? stile("internet", "Internet Usage", "good", fwB(Iu.total.bytes) + " in the period", (Iu.dayN ? fx(Iu.total.bytes * 8 / (Iu.dayN * 86400) / 1e6, 0) + " Mb/s average" : "") + (Iu.app[0] ? " · top: " + Iu.app[0].k : "")) : "",
     hasS || hasX ? stile("cyber", "Cyber Security", xCrit ? "crit" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "warn" : "good", xCrit ? xCrit + " critical XDR alerts" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "Needs follow-up" : "No issues", (R ? fmt(R.total) + " NDR events" : "") + (R && hasX ? " · " : "") + (hasX ? fmt(Xd.total) + " XDR alerts" : ""), {dl: R && R.ch && Rp && Rp.ch ? "Blocked " + pc(R.chBlkPct) + " " + delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : "", spark: R ? spark(R.daily.map(x => x.critical + x.high), "--serious") : "", tip: R ? "Critical/high blocked " + (R.ch ? pc(R.chBlkPct) : "–") + " · " + fmt(R.chAlert) + " alert-only · " + okDays + "/" + chk.length + " days validated" : ""}) : ""
   ].filter(Boolean);
-  const nowP = nowTiles.length ? panel(hasI ? "c8" : "c12", "Right Now", "Live status", `<div class="stiles">${nowTiles.join("")}</div>`) : "";
+  const nowP = nowTiles.length ? panel("c12", "Right Now", "Live status", `<div class="stiles">${nowTiles.join("")}</div>`) : "";
   const perP = periodTiles.length ? panel("c12", "This Period", ctxTxt(), `<div class="stiles">${periodTiles.join("")}</div>`) : "";
   const dutyP = panel("c4", "On Duty", dlong(now.date) + " · " + shiftHours(now.shift), onDuty(now));
 
@@ -207,16 +215,18 @@ function vRingkasan() {
   const lead = CFG.people.filter(p => p.unit === "ITOC" && !p.team_code), leadB = lead.length ? `<ul class="plist">${lead.map(p => `<li><span>${esc(p.name)}<span class="sub"> · ${esc((p.job || "").replace(/^ITOC /, ""))}</span></span><span class="num sub">${esc(p.phone || "")}</span></li>`).join("")}</ul>` : "";
   const contactP = leadB || careB ? panel("c6", "Contacts", "Escalation and hotline", (leadB ? fold("Escalation · Supervisor &amp; Lead", leadB) : "") + (careB ? fold(esc(cg.label) + " · " + esc(cg.start + "–" + cg.end), careB) : "")) : "";
 
+  /* Insights that say the same as a line in Needs Attention are left out of the Overview (the finding is still on the Insights page) */
+  const dupKeys = [hasX && Xd.backlogCH ? "xdr_backlog" : "", hasD && D.all.down && D.chronic ? "dev_chronic" : ""].filter(Boolean), dupInsight = r => dupKeys.some(k => (r.key || "").startsWith(k));
   const s1 = hasT ? [{name: "Tickets In", c: "--s1", v: T.daily.map(x => x.in)}, {name: "Tickets Closed", c: "--s2", v: T.daily.map(x => x.done)}] : [];
   return `<div class="grid">
   ${attP}
-  ${hasI ? insightPanel(In, 4, "c6") : dutyP}
+  ${dutyP}
   ${nowP}
-  ${hasI ? dutyP : ""}
+  ${hasI ? insightPanel(In, 3, "c12", null, "", dupInsight) : ""}
   ${perP}
   ${!hasT ? "" : panel("c8", "Tickets In and Closed per Day", ctxTxt(), legend(s1) + bars(dayB(T.daily), s1, {label: "Tickets per day"}))}
   ${N ? panel("c4", "Top 5 Links by Downtime", "", tbl(["Link", "Availability", "Hours"], N.rank.slice(0, 5).map(s => [s.link, pc(s.av, 2), fx(s.down / 3600, 1)]), {r: [1, 2], empty: "No data yet."})) : ""}
-  ${N ? panel("c8", "Link Downtime per Day", "", bars(dayB(N.daily), [{name: "Downtime (min)", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " min", label: "Daily downtime"})) : ""}
+  ${N ? panel("c8", "Link Downtime per Day", "Minutes per day", bars(dayB(N.daily), [{name: "Downtime (min)", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " min", label: "Daily downtime"})) : ""}
   ${hasW ? wifiPanels(Wf).apdown() + wifiPanels(Wf).trend() : ""}
   ${R && R.hasData ? panel("c8", "NDR · Critical and High per Day", "Palo Alto events", legend([{name: "Critical", c: "--crit"}, {name: "High", c: "--serious"}]) + bars(dayB(R.daily), [{name: "Critical", c: "--crit", v: R.daily.map(x => x.critical)}, {name: "High", c: "--serious", v: R.daily.map(x => x.high)}], {stack: true, label: "Critical and high"})) : ""}
   ${R && R.hasData ? panel("c4", "NDR · Severity", "", tbl(["Severity", "Events", "Blocked"], R.sev.map(x => [x.k, x.n, pc(x.blkPct, 0)]), {r: [1, 2]})) : ""}

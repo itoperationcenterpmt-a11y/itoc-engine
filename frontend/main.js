@@ -4,6 +4,41 @@ try { if (localStorage.getItem("itoc.rail")) { document.addEventListener("DOMCon
 const VIEWS = {report: vReport, ringkasan: vRingkasan, servicedesk: vSD, noc: vNoc, kuma: vKuma, soc: vSoc, devices: vDevices, devnet: vDevices, devcctv: vDevices, devops: vDevices, wifi: vWifi, xdr: vXdr, cctv: vCctv, internet: vInternet, insight: vInsight, network: vNetwork, cyber: vCyber, jadwal: vJadwal, serahterima: vHo, kelengkapan: vData, admin: vAdmin};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
+/* Long pages: the panels are grouped under a heading that folds, with a "Jump to" bar on top. To move a widget to another group, edit the lists below. The names are widget titles (a title only has to start with the name); the first group is open until the user opens another. */
+const SECTIONS = {
+  devices: [["Overview", ["Insights", "Site Map", "Status by Category"], true], ["Downtime analysis", ["Down Duration", "Down by Location", "Down History", "Down Incidents per Day", "Downtime per Day", "Downtime per Location", "Downtime per Device Type"]], ["Inventory", ["By Device Type", "Per Location", "Device List"]], ["Problem devices", ["Most Frequently Down", "Dominant Problems"]]],
+  servicedesk: [["Overview", ["Insights", "Daily Trend", "Resolution Duration Distribution"], true], ["Patterns", ["Tickets per Hour", "Per Weekday", "Breakdown by SLA level"]], ["Rankings", ["Group Ranking", "Technician Ranking", "Top Requesters"]], ["Ticket lists", ["Open Tickets", "25 Longest-Duration Tickets", "Data Quality Notes"]]]
+};
+SECTIONS.devnet = SECTIONS.devcctv = SECTIONS.devops = SECTIONS.devices;
+function groupSections() {
+  const cfg = SECTIONS[S.tab], grid = $("view").querySelector(":scope > .grid");
+  if (!cfg || !grid || S.layEdit) return;
+  const all = [...grid.querySelectorAll(":scope > .panel")], ttl = p => ((p.querySelector("h2") || {}).textContent || "").trim(), st = S.sec[S.tab] = S.sec[S.tab] || {};
+  const sets = cfg.map(([label, names, first], i) => ({i, label, first, ps: all.filter(p => names.some(n => ttl(p).startsWith(n)))})).filter(g => g.ps.length);
+  if (sets.length < 2) return;
+  const used = new Set(sets.flatMap(g => g.ps)), at = p => all.indexOf(p), ph = document.createComment("");
+  grid.insertBefore(ph, sets.map(g => g.ps[0]).sort((a, b) => at(a) - at(b))[0]);
+  const lastIx = Math.max(...sets.flatMap(g => g.ps.map(at)));
+  all.filter(p => !used.has(p) && at(p) < lastIx).forEach(p => grid.insertBefore(p, ph));                                  /* notes that sit between widgets stay on top */
+  const jump = document.createElement("nav"); jump.className = "secjump"; jump.setAttribute("aria-label", "Sections");
+  jump.innerHTML = "<span>Jump to</span>" + sets.map(g => `<button type="button" data-secjump="${g.i}">${esc(g.label)} <i>${g.ps.length}</i></button>`).join("");
+  grid.insertBefore(jump, ph);
+  sets.forEach(g => {
+    if (st[g.i] === undefined) st[g.i] = !!g.first;
+    const h = document.createElement("button"); h.type = "button"; h.className = "sechd"; h.dataset.sec = g.i; h.setAttribute("aria-expanded", st[g.i]);
+    h.innerHTML = `<b>${esc(g.label)}</b><span class="sub">${g.ps.length} widgets</span><span class="sechint">${st[g.i] ? "Hide" : "Show"}</span>`;
+    grid.insertBefore(h, ph);
+    g.ps.forEach(p => { p.dataset.secm = g.i; p.classList.toggle("secx", !st[g.i]); grid.insertBefore(p, ph); });
+  });
+  ph.remove();
+}
+function toggleSec(i, force) {
+  const st = S.sec[S.tab] || (S.sec[S.tab] = {}), on = force === undefined ? !st[i] : force;
+  st[i] = on;
+  $("view").querySelectorAll(`[data-secm="${i}"]`).forEach(p => p.classList.toggle("secx", !on));
+  const h = $("view").querySelector(`.sechd[data-sec="${i}"]`); if (h) { h.setAttribute("aria-expanded", on); h.querySelector(".sechint").textContent = on ? "Hide" : "Show"; }
+  window.dispatchEvent(new Event("resize"));                                                                                 /* maps and charts inside a folded group measure themselves again */
+}
 const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype", "rgrp", "rtech", "risp"];
 let seq = 0, viewTab = "";
 const SKELETON = `<div class="grid sk" role="status" aria-label="Loading">${"<section class='panel c4'><i></i><i></i><i></i></section>".repeat(3)}<section class="panel c12"><i></i><i></i><i></i><i></i></section></div>`;
@@ -19,7 +54,7 @@ async function render(reload) {
     renderShell();
   }
   viewTab = S.tab;
-  try { $("view").innerHTML = VIEWS[S.tab](); if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); initDevMaps(); } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Could not display the page: " + esc(e.message))}</section></div>`; }
+  try { $("view").innerHTML = VIEWS[S.tab](); if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); kpiCols(); groupSections(); initDevMaps(); } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Could not display the page: " + esc(e.message))}</section></div>`; }
 }
 /* Read-only Admin (role with admin_view but not is_admin): every edit control is hidden; the server still rejects changes. */
 function lockAdmin() {
@@ -340,6 +375,9 @@ document.addEventListener("click", async e => {
     else if (d.mdel !== undefined) { if (!confirm("Delete this row?")) return; await api(`/api/admin/master/${S.mkey}/${encodeURIComponent(pkOf(S.medit))}`, {method: "DELETE"}).catch(err => { $("mMsg").textContent = err.message; throw null; }); await reloadConfig(); S.mdata = null; refresh({medit: null}); }
     else if (d.sync) { b.disabled = true; b.textContent = "Menyinkron…"; const r = await send("/api/ingest/sync/" + d.sync, {}).catch(err => { alert(err.message); return null; }); if (r && r.started) alert(r.msg); refresh(); }
     else if (b.id === "fReset") { S.kind = ""; S.dstat = ""; S.grp = ""; S.dtype = ""; S.sf = 0; S.site = CFG.me.site || ""; S.cmp = false; setPreset(CFG.params["ui.default_preset"]); render(true); }
+    else if (b.id === "fMore") { S.fMore = !S.fMore; renderShell(); }
+    else if (d.sec !== undefined) toggleSec(+d.sec);
+    else if (d.secjump !== undefined) { toggleSec(+d.secjump, true); const h = $("view").querySelector(`.sechd[data-sec="${d.secjump}"]`); if (h) h.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth", block: "start"}); }
     else if (b.id === "fToggle") { const w = $("fwrap").classList.toggle("open"); b.setAttribute("aria-expanded", w); }
     else if (b.id === "railBtn") { const on = $("app").classList.toggle("rail"); b.textContent = on ? "›" : "‹"; try { localStorage.setItem("itoc.rail", on ? "1" : ""); } catch (_) {} }
     else if (b.id === "logout" || b.id === "logoutM" || b.id === "logoutS") logout();

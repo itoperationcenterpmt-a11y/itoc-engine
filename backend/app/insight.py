@@ -99,6 +99,11 @@ def d_tickets(db: Session, cfg: Config) -> list[dict]:
     return []
 
 
+def _times(v: float) -> str:
+    """A ratio for a title. A figure like 2,623.6x usually means a very small normal value and reads like an error, so it is shown as "more than 50x"."""
+    return "more than 50x" if v >= 50 else f"{fmt(v, 1)}x"
+
+
 def d_ticket_sites(db: Session, cfg: Config) -> list[dict]:
     """Tickets per location on the last full day against the same weekday over the previous 8 weeks."""
     today = cfg.now().date()
@@ -113,7 +118,7 @@ def d_ticket_sites(db: Session, cfg: Config) -> list[dict]:
         r = robust(base, x)
         if r and r[2] >= ZCUT and x >= 3 and x >= 2 * r[0] + 2:
             out.append((x, s, r))
-    return [_ins(f"ticket_site:{s}:{last}", "tickets", "warn", f"Tickets at {s} are {fmt(x / max(r[0], 0.5), 1)}x the usual", f"{x} tickets on {last:%d/%m}, normally about {fmt(r[0], 1)} on a {WD[last.weekday()]}.",
+    return [_ins(f"ticket_site:{s}:{last}", "tickets", "warn", f"Tickets at {s} are {_times(x / max(r[0], 0.5))} the usual", f"{x} tickets on {last:%d/%m}, normally about {fmt(r[0], 1)} on a {WD[last.weekday()]}.",
                   "servicedesk", {"value": x, "normal": round(r[0], 1), "z": round(r[2], 1)}, s) for x, s, r in sorted(out, key=lambda t: -t[0])[:3]]
 
 
@@ -308,7 +313,7 @@ def d_ndr_traffic(db: Session, cfg: Config) -> list[dict]:
         name, med = smap.get(fw) or fw, r[0]
         if r[2] >= ZCUT and cur >= 2 * med and cur - med >= 50e9:
             top = sorted((days[day][1] or {}).items(), key=lambda kv: -kv[1])[:3]
-            out.append(_ins(f"ndr_traffic:{fw}:{day:%Y%m%d}", "security", "warn", f"NDR (Palo Alto): traffic through {short(name)} firewall was {fmt(cur / med, 1)}x higher than usual on {day:%d/%m}",
+            out.append(_ins(f"ndr_traffic:{fw}:{day:%Y%m%d}", "security", "warn", f"NDR (Palo Alto): traffic through {short(name)} firewall was {_times(cur / med)} higher than usual on {day:%d/%m}",
                             f"{fmt(cur / 1e9)} GB, normally about {fmt(med / 1e9)} GB per day. A large transfer can be a backup or an update, or data leaving the network." + (" Top sources: " + ", ".join(f"{ip} ({fmt(b / 1e9)} GB)" for ip, b in top) + "." if top else ""), "soc",
                             {"gb": round(cur / 1e9, 1), "normal_gb": round(med / 1e9, 1), "z": round(r[2], 1)}, name))
         elif r[2] <= -ZCUT and med >= 20e9 and cur <= 0.3 * med:
