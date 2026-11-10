@@ -136,3 +136,10 @@ def run_dynamic(cl: httpx.Client, base: str, key: str, typ: str, aggs: list[str]
         time.sleep(2)
     rep = y.find(".//report")
     return [{c.tag: (c.text or "").strip() for c in e} for e in (rep if rep is not None else []) if e.tag == "entry"]
+
+
+def real_bytes(v) -> int:
+    """Panorama sometimes reports a byte count with 2^48 (281.5 TB) added: one source network per day, always DNS, a counter overflow. No link carries that, so the whole multiples are removed.
+    shortcut: only whole multiples of 2^48 are removed; another kind of corruption would still show up as a traffic insight."""
+    n = int(float(v or 0))
+    return n % 2 ** 48 if n >= 2 ** 48 else n
