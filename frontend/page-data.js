@@ -1,5 +1,5 @@
 /* ---------- Data (completeness + RAW upload) ---------- */
-function vData() { return subnav("report") + vDataBody(); }
+function vData() { return vDataBody(); }
 function vDataBody() {
   const days = []; for (let d = S.from; d <= S.to && days.length < 62; d = addDays(d, 1)) days.push(d);
   const rows = (V.coverage || []).map(r => [esc(r.label), d => r.cells[d] || ["wait", "–"]]);

@@ -198,7 +198,12 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
                          for x in db.scalars(select(M.SyncLog).order_by(M.SyncLog.at.desc()).limit(30))]
     if tab == "report":
         from . import report
-        V["report"] = report.build(db, cfg, user, f, "full", getattr(f, "preset", "standar"))
+        preset = getattr(f, "preset", "standar")
+        rp = report.build(db, cfg, user, f, "full", preset)
+        if any(k["key"] == "performance" for k in rp.get("kinds", [])) and not any(s["key"] == "performance" for s in rp.get("sections", [])):
+            pf = report.build(db, cfg, user, f, "performance", preset)
+            rp["sections"] = rp.get("sections", []) + [s for s in pf.get("sections", []) if s["key"] == "performance"]
+        V["report"] = rp
     if tab == "admin" and (user.role.is_admin or user.role.admin_view):
         V["users"] = [] if not user.role.is_admin and "pengguna" in locked_pages(db) else [{"u": u.username, "name": u.full_name, "role": u.role_key, "last": ms(u.last_login), "active": u.active, "site": u.site}
                       for u in db.scalars(select(M.User).order_by(M.User.id))]

@@ -49,7 +49,7 @@ async function insSum() {
 const insBar = v => `<span class="hbar"><i style="width:${Math.max(2, v)}%;background:var(${v >= 80 ? "--good" : v >= 60 ? "--warn" : "--crit"})"></i></span>`;
 function vInsight() {
   const I = V.insight, grid = h => `<div class="grid">${h}</div>`;
-  if (!I) return subnav("report") + grid(`<section class="panel c12">${empty()}</section>`);
+  if (!I) return grid(`<section class="panel c12">${empty()}</section>`);
   if (S.sumPending && (S.insTab || "") === "summary") { S.sumPending = false; setTimeout(insSum, 0); }
   const c = I.counts, tab = S.insTab || "findings", tabs = [["findings", "Findings (" + I.open.filter(insShown).length + ")"], ["rankings", "Rankings"], ["health", "Location Health"], ["summary", "Shift Summary"], ["history", "History"]];
   const kp = `<div class="kpis k6">${kpi("Critical", fmt(c.crit), "", {cls: c.crit ? "warnv" : ""})}${kpi("Warning", fmt(c.warn), "", {cls: c.warn ? "warnv" : ""})}${kpi("Info", fmt(c.info), "")}${kpi("New", fmt(I.new), "")}${kpi("Dismissed", fmt((I.dismissed || []).length), "")}${kpi("Last analysis", I.updated ? hm(I.updated) : "-", (I.updated ? dtime(I.updated).replace(/, \d\d:\d\d$/, "") + " · " : "") + "runs every 30 min")}</div>`;
@@ -85,7 +85,7 @@ function vInsight() {
       ${panel("c5", "Tuning", "", tbl(["Type", "Findings", "Dismissed", "Rate"], st.map(([k, v]) => [INS_KIND[k] || k, v.total, v.dismissed, pc(v.dismissed / v.total, 0)]), {r: [1, 2, 3], empty: "No data yet."}))}</div>`;
   }
   const how = `<details class="panel c12 how"><summary>How it works</summary><p class="sub">The analysis runs every 30 minutes on stored data, with no external service. The latest value is compared with what is normal (median and deviation of the previous 4 to 8 weeks, same weekday when there is a weekly pattern). A finding appears only when the difference is large and the absolute change is meaningful. Trends use the slope of the last 21 days to forecast when a target is crossed. Devices in maintenance are excluded. A finding that stops appearing is closed automatically.${CFG.me.is_admin ? `</p><button type="button" class="btn ghost sm" data-ins-run>Run analysis now</button>` : "</p>"}</details>`;
-  return subnav("report") + (S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : "") + kp + grid(`<section class="panel c12"><div class="insbar">${nav}</div>${body}</section>` + how);
+  return (S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : "") + kp + grid(`<section class="panel c12"><div class="insbar">${nav}</div>${body}</section>` + how);
 }
 document.addEventListener("click", async e => {
   const q = a => e.target.closest(a), $a = q("[data-ins-ack]"), $d = q("[data-ins-dis]"), $ok = q("[data-ins-dis-ok]"), $x = q("[data-ins-dis-x]"), $h = q("[data-ins-ho]"), $re = q("[data-ins-reopen]"), $run = q("[data-ins-run]"), $t = q("[data-ins-tab]"), $s = q("[data-ins-sev]"), $k = q("[data-ins-kind]"), $sr = q("[data-ins-src]"), $c = q("[data-ins-copy]"), $rf = q("[data-ins-refresh]");

@@ -90,7 +90,7 @@ function subnav(parent) {
 }
 /* Running shift clock: called on render and every second so it never freezes. */
 /* A KPI strip must not leave one box alone on a second row: the columns follow the number of boxes (--kn), and on narrower screens a divisor of it (--kc, --kb) */
-function kpiCols() { $("view").querySelectorAll(".kpis").forEach(k => { const n = k.children.length; k.style.setProperty("--kn", n); k.style.setProperty("--kc", n < 6 ? n : n % 3 === 0 ? 3 : 2); k.style.setProperty("--kb", n % 3 === 0 ? 3 : 2); }); }
+function kpiCols() { $("view").querySelectorAll(".kpis").forEach(k => { const n = k.children.length, c = n <= 6 ? n : Math.ceil(n / 2); k.style.setProperty("--kn", c); k.style.setProperty("--kc", c < 6 ? Math.min(c, 4) : c % 3 === 0 ? 3 : 2); k.style.setProperty("--kb", c % 3 === 0 ? 3 : 2); }); }
 function renderDuty() {
   const n = nowShift(), tm = teamOn(n.date, n.shift), d = new Date(nowMs()), hh = pad(d.getUTCHours()), mm = pad(d.getUTCMinutes()), ss = pad(d.getUTCSeconds());
   ["duty", "dutyH"].forEach(id => {
@@ -116,7 +116,7 @@ function renderShell(loading) {
   $("moreBtn").classList.toggle("on", NAVT.findIndex(t => t[0] === curTop) > 3);
   const cur = TABS.find(t => t[0] === S.tab), par = (MODS[S.tab] || {}).parent, grp = SUBSUM[S.tab] ? S.tab : (SUBSUM[par] ? par : "");
   $("ptitle").textContent = !cur ? "" : grp ? MODS[grp].label + " · " + (S.tab === grp ? SUBSUM[grp] : cur[1]) : cur[1];
-  $("subnav").innerHTML = grp ? subnav(grp) : "";
+  $("subnav").innerHTML = subnav(curTop);
   $("psub").textContent = APPLY[S.tab] && APPLY[S.tab].p ? rangeTxt() : "";
   $("fPreset").innerHTML = PRESETS.map(([k, l]) => `<button type="button" data-p="${k}" aria-pressed="${S.preset === k}">${l}</button>`).join("");
   $("fShift").innerHTML = SN.map((l, i) => `<button type="button" data-s="${i}" aria-pressed="${S.sf === i}" ${i ? `title="${shiftHours(i)}"` : ""}>${l}</button>`).join("");
