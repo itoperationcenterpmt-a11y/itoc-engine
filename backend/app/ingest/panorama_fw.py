@@ -19,7 +19,7 @@ def src_rows(cl: httpx.Client, base: str, key: str, d: date, end: datetime | Non
         try:
             for r in PA.run_dynamic(cl, base, key, typ, ["device_name", "src"], vals, "", query, 10000, rng=rng):
                 x = out.setdefault(r.get("device_name") or "-", {"src": {}, "webu": {}})[field]
-                x[r.get("src") or "-"] = x.get(r.get("src") or "-", 0) + int(float(r.get(vals[0]) or 0))
+                x[r.get("src") or "-"] = x.get(r.get("src") or "-", 0) + PA.real_bytes(r.get(vals[0]))
         except (RuntimeError, httpx.HTTPError) as e:
             if field == "src":
                 raise
@@ -38,7 +38,7 @@ def extra_rows(cl: httpx.Client, base: str, key: str, d: date, end: datetime | N
             for r in PA.run_dynamic(cl, base, key, typ, aggs, vals, "", "", 10000, rng=rng):
                 x = out.setdefault(r.get("device_name") or "-", {"acat": {}, "urlc": {}})[field]
                 k = r.get(dim) or "-"
-                x[k] = x.get(k, 0) + int(float(r.get(vals[0]) or 0))
+                x[k] = x.get(k, 0) + PA.real_bytes(r.get(vals[0]))
         except (RuntimeError, httpx.HTTPError) as e:
             if notes is not None:
                 notes.append(f"{field} {d.isoformat()}: {str(e)[:80]}")
@@ -59,7 +59,7 @@ def day_rows(cl: httpx.Client, base: str, key: str, d: date, end: datetime | Non
             x[k][v] = x[k].get(v, 0) + n
     for r in tr:
         x = by.setdefault(r.get("device_name") or "-", new())
-        b = int(float(r.get("bytes") or 0))
+        b = PA.real_bytes(r.get("bytes"))
         x["b"] += b
         x["s"] += int(float(r.get("sessions") or 0))
         a = r.get("app") or "-"

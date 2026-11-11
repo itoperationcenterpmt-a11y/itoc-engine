@@ -24,7 +24,7 @@ def _at_site(r, names: list[str]) -> bool:
 
 
 def _j(r) -> dict:
-    return {"id": r.id, "kind": r.kind, "sev": r.severity, "title": r.title, "detail": r.detail, "tab": r.tab, "site": r.site, "metric": r.metric or {}, "status": r.status,
+    return {"id": r.id, "kind": r.kind, "sev": r.severity, "title": r.title, "detail": r.detail, "key": r.key, "tab": r.tab, "site": r.site, "metric": r.metric or {}, "status": r.status,
             "first": ms(r.first_seen), "last": ms(r.last_seen), "resolved": ms(r.resolved_at) if r.resolved_at else None, "ackBy": r.ack_by, "reason": r.reason,
             "until": ms(r.suppress_until) if r.suppress_until else None, "handover": r.handover_id}
 

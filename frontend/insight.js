@@ -21,9 +21,13 @@ function insCard(r, o = {}) {
     <span class="sub">${r.site ? esc(r.site) + " · " : ""}${esc(insKindLabel(r))} · first seen ${esc(dtime(r.first))} · last ${esc(dtime(r.last))}${r.ackBy ? " · by " + esc(r.ackBy) : ""}${r.reason ? " · reason: " + esc(r.reason) : ""}${r.until && r.status === "dismissed" ? " · hidden until " + esc(dtime(r.until)) : ""}</span>
     ${dis ? `<div class="insdis"><select id="insDays" aria-label="Hide for"><option value="7">Hide for 7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="90">90 days</option></select><input id="insWhy" type="text" placeholder="Reason (optional)" maxlength="200"><button type="button" class="btn sm" data-ins-dis-ok="${r.id}">Confirm</button><button type="button" class="btn ghost sm" data-ins-dis-x>Cancel</button></div>` : `<div class="acts">${acts}</div>`}</article>`;
 }
-function insightPanel(I, n = 5, size = "c12", kinds = null, only = "") {
-  const all = kinds ? I.open.filter(r => kinds.includes(r.kind) && (!only || r.tab === only)) : I.open, rows = all.slice(0, n);
-  return panel(size, "Insights", all.length + " active findings · calculated automatically from stored data", rows.length ? `<ul class="att">${rows.map(r => `<li class="${r.sev === "crit" ? "crit" : r.sev === "warn" ? "warn" : ""}"><span><b>${esc(r.title)}</b> ${esc(r.detail)}</span>${go("insight", "View")}</li>`).join("")}</ul>${all.length > n ? go("insight", "All insights") : ""}` : `<div class="empty sm">No active findings.</div>`);
+/* Management view: roles listed in the parameter ui.executive_roles do not see data-quality or integration notes or Info findings, and read one sentence of detail. They are for IT Operation, not for a board overview. */
+const isExec = () => (CFG.params["ui.executive_roles"] || []).includes(CFG.me.role);
+const insFirst = t => ((t || "").match(/^.*?[.!?](?=\s|$)/) || [t || ""])[0];
+const insShown = r => !isExec() || (r.sev !== "info" && r.kind !== "data" && !["kelengkapan", "integrations"].includes(r.tab));
+function insightPanel(I, n = 5, size = "c12", kinds = null, only = "", skip = null) {
+  const all = (kinds ? I.open.filter(r => kinds.includes(r.kind) && (!only || r.tab === only)) : I.open).filter(r => insShown(r) && !(skip && skip(r))), rows = all.slice(0, n), ex = isExec();
+  return panel(size, "Insights", (all.length > n ? "Top " + n + " of " + all.length : all.length + " active findings") + " · calculated from stored data", rows.length ? `<ul class="att">${rows.map(r => `<li class="${r.sev === "crit" ? "crit" : r.sev === "warn" ? "warn" : ""}"><span><b>${esc(r.title)}</b> ${esc(ex ? insFirst(r.detail) : r.detail)}</span>${go("insight", "View")}</li>`).join("")}</ul>${all.length > n ? go("insight", "All insights") : ""}` : `<div class="empty sm">No active findings.</div>`);
 }
 /* Insights for one area, shown on its own page (Ticketing, Network, Cyber Security, Devices, ...). Hidden when the area has no active findings. */
 const INS_AREA = {servicedesk: ["tickets"], network: ["links", "capacity", "wifi", "correlation"], noc: ["links", "capacity", "correlation"], wifi: ["wifi"], cyber: ["security"], soc: ["security"], xdr: ["security"], cctv: ["cctv"],
@@ -32,7 +36,7 @@ const INS_ONLY = {soc: "soc", xdr: "xdr"};                                  /* N
 const INS_ALWAYS = ["xdr", "soc", "wifi", "cctv", "servicedesk", "network", "cyber", "devices"];                      /* pages where the panel stays visible even with no findings */
 function insArea(tab = S.tab) {
   const I = V.insight, kinds = INS_AREA[tab];
-  if (!(I && kinds && (INS_ALWAYS.includes(tab) || I.open.some(r => kinds.includes(r.kind) && (!INS_ONLY[tab] || r.tab === INS_ONLY[tab]))))) return "";
+  if (!(I && kinds && (INS_ALWAYS.includes(tab) || I.open.some(r => insShown(r) && kinds.includes(r.kind) && (!INS_ONLY[tab] || r.tab === INS_ONLY[tab]))))) return "";
   const h = I.siteHealth, head = I.site ? `<div class="kpis k6">${kpi("Location", esc(I.site), "")}${kpi("Health score", h ? fmt(h.score) : "–", "")}${kpi("Link availability", h && h.link != null ? pc(h.link, 2) : "–", "")}${kpi("Devices down", h && h.devTotal ? fmt(h.devDown) + " / " + fmt(h.devTotal) : "–", "")}${kpi("Tickets past SLA", fmt(h ? h.overdue : 0), "", {cls: h && h.overdue ? "warnv" : ""})}</div>` : "";
   return `${head}<div class="grid">${insightPanel(I, 4, "c12", kinds, INS_ONLY[tab])}</div>`;
 }
@@ -47,12 +51,12 @@ function vInsight() {
   const I = V.insight, grid = h => `<div class="grid">${h}</div>`;
   if (!I) return subnav("report") + grid(`<section class="panel c12">${empty()}</section>`);
   if (S.sumPending && (S.insTab || "") === "summary") { S.sumPending = false; setTimeout(insSum, 0); }
-  const c = I.counts, tab = S.insTab || "findings", tabs = [["findings", "Findings (" + I.open.length + ")"], ["rankings", "Rankings"], ["health", "Location Health"], ["summary", "Shift Summary"], ["history", "History"]];
+  const c = I.counts, tab = S.insTab || "findings", tabs = [["findings", "Findings (" + I.open.filter(insShown).length + ")"], ["rankings", "Rankings"], ["health", "Location Health"], ["summary", "Shift Summary"], ["history", "History"]];
   const kp = `<div class="kpis k6">${kpi("Critical", fmt(c.crit), "", {cls: c.crit ? "warnv" : ""})}${kpi("Warning", fmt(c.warn), "", {cls: c.warn ? "warnv" : ""})}${kpi("Info", fmt(c.info), "")}${kpi("New", fmt(I.new), "")}${kpi("Dismissed", fmt((I.dismissed || []).length), "")}${kpi("Last analysis", I.updated ? hm(I.updated) : "-", (I.updated ? dtime(I.updated).replace(/, \d\d:\d\d$/, "") + " · " : "") + "runs every 30 min")}</div>`;
   const nav = `<div class="seg insnav">${tabs.map(([k, l]) => `<button type="button" data-ins-tab="${k}" aria-pressed="${k === tab}">${esc(l)}</button>`).join("")}</div>`;
   let body = "";
   if (tab === "findings") {
-    const sev = S.insSev || "", area = S.insKind || "", src = area === "SOC" ? S.insSrc || "" : "", rows = I.open.filter(r => (!sev || r.sev === sev) && (!area || INS_GROUP[r.kind] === area) && (!src || r.tab === src)), areas = [...new Set(I.open.map(r => INS_GROUP[r.kind] || "Other"))];
+    const sev = S.insSev || "", area = S.insKind || "", src = area === "SOC" ? S.insSrc || "" : "", rows = I.open.filter(insShown).filter(r => (!sev || r.sev === sev) && (!area || INS_GROUP[r.kind] === area) && (!src || r.tab === src)), areas = [...new Set(I.open.map(r => INS_GROUP[r.kind] || "Other"))];
     const chips = `<div class="chips sm">${[["", "All"], ["crit", "Critical"], ["warn", "Warning"], ["info", "Info"]].map(([k, l]) => `<button type="button" class="chip" data-ins-sev="${k}" aria-pressed="${k === sev}">${l}</button>`).join("")}</div>` +
       (areas.length > 1 ? `<div class="chips sm"><button type="button" class="chip" data-ins-kind="" aria-pressed="${!area}">All areas</button>${areas.map(k => `<button type="button" class="chip" data-ins-kind="${esc(k)}" aria-pressed="${k === area}">${esc(k)}</button>`).join("")}</div>` : "") +
       (area === "SOC" ? `<div class="chips sm"><button type="button" class="chip" data-ins-src="" aria-pressed="${!src}">NDR and XDR</button>${Object.entries(INS_SRC).map(([k, l]) => `<button type="button" class="chip" data-ins-src="${k}" aria-pressed="${k === src}">${esc(l)}</button>`).join("")}</div>` : "");

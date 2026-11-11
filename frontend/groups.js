@@ -21,7 +21,7 @@ function vNetwork() {
   const locP = panel("c12", "Summary per Location", "", tbl(["Location", "Links", "Lowest availability", "Downtime (min)", "AP online / total", "WiFi clients", "Status"],
     loc.map(r => [r.k, r.n == null ? "-" : r.n, r.av == null ? "-" : pc(r.av, 3), r.down == null ? "-" : r.down, r.ap == null ? "-" : r.apOn + " / " + r.ap, r.cl == null ? "-" : r.cl, {h: st(r)}]), {tall: true, r: [1, 2, 3, 5], empty: "No location data yet."}));
   return grid(panel("c12", "Attention", ctxTxt(APPLY.network), attList(att))) + insArea("network") + nk + nw + grid(
-    (N ? panel("c8", "Link Downtime per Day", "", bars(dayB(N.daily), [{name: "Downtime (min)", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " min", label: "Daily downtime"})) : "") +
+    (N ? panel("c8", "Link Downtime per Day", "Minutes per day", bars(dayB(N.daily), [{name: "Downtime (min)", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " min", label: "Daily downtime"})) : "") +
     (N ? panel("c4", "Top 5 Links by Downtime", "", tbl(["Link", "Availability", "Downtime (h)"], N.rank.slice(0, 5).map(s => [s.link, pc(s.av, 3), fx(s.down / 3600, 1)]), {r: [1, 2], empty: "No data yet."})) : "") +
     (hasW ? WP.trend() + WP.apdown() : "") + locP + (hasW ? WP.ssid() + WP.usage() + WP.loc() : ""));
 }

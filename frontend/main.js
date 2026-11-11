@@ -49,6 +49,41 @@ const VIEWS = {report: () => vReport(), ringkasan: () => vRingkasan(), servicede
   kelengkapan: () => vData(), admin: () => vAdmin()};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
+/* Long pages: the panels are grouped under a heading that folds, with a "Jump to" bar on top. To move a widget to another group, edit the lists below. The names are widget titles (a title only has to start with the name); the first group is open until the user opens another. */
+const SECTIONS = {
+  devices: [["Overview", ["Insights", "Site Map", "Status by Category"], true], ["Downtime analysis", ["Down Duration", "Down by Location", "Down History", "Down Incidents per Day", "Downtime per Day", "Downtime per Location", "Downtime per Device Type"]], ["Inventory", ["By Device Type", "Per Location", "Device List"]], ["Problem devices", ["Most Frequently Down", "Dominant Problems"]]],
+  servicedesk: [["Overview", ["Insights", "Daily Trend", "Resolution Duration Distribution"], true], ["Patterns", ["Tickets per Hour", "Per Weekday", "Breakdown by SLA level"]], ["Rankings", ["Group Ranking", "Technician Ranking", "Top Requesters"]], ["Ticket lists", ["Open Tickets", "25 Longest-Duration Tickets", "Data Quality Notes"]]]
+};
+SECTIONS.devnet = SECTIONS.devcctv = SECTIONS.devops = SECTIONS.devices;
+function groupSections() {
+  const cfg = SECTIONS[S.tab], grid = $("view").querySelector(":scope > .grid");
+  if (!cfg || !grid || S.layEdit) return;
+  const all = [...grid.querySelectorAll(":scope > .panel")], ttl = p => ((p.querySelector("h2") || {}).textContent || "").trim(), st = S.sec[S.tab] = S.sec[S.tab] || {};
+  const sets = cfg.map(([label, names, first], i) => ({i, label, first, ps: all.filter(p => names.some(n => ttl(p).startsWith(n)))})).filter(g => g.ps.length);
+  if (sets.length < 2) return;
+  const used = new Set(sets.flatMap(g => g.ps)), at = p => all.indexOf(p), ph = document.createComment("");
+  grid.insertBefore(ph, sets.map(g => g.ps[0]).sort((a, b) => at(a) - at(b))[0]);
+  const lastIx = Math.max(...sets.flatMap(g => g.ps.map(at)));
+  all.filter(p => !used.has(p) && at(p) < lastIx).forEach(p => grid.insertBefore(p, ph));                                  /* notes that sit between widgets stay on top */
+  const jump = document.createElement("nav"); jump.className = "secjump"; jump.setAttribute("aria-label", "Sections");
+  jump.innerHTML = "<span>Jump to</span>" + sets.map(g => `<button type="button" data-secjump="${g.i}">${esc(g.label)} <i>${g.ps.length}</i></button>`).join("");
+  grid.insertBefore(jump, ph);
+  sets.forEach(g => {
+    if (st[g.i] === undefined) st[g.i] = !!g.first;
+    const h = document.createElement("button"); h.type = "button"; h.className = "sechd"; h.dataset.sec = g.i; h.setAttribute("aria-expanded", st[g.i]);
+    h.innerHTML = `<b>${esc(g.label)}</b><span class="sub">${g.ps.length} widgets</span><span class="sechint">${st[g.i] ? "Hide" : "Show"}</span>`;
+    grid.insertBefore(h, ph);
+    g.ps.forEach(p => { p.dataset.secm = g.i; p.classList.toggle("secx", !st[g.i]); grid.insertBefore(p, ph); });
+  });
+  ph.remove();
+}
+function toggleSec(i, force) {
+  const st = S.sec[S.tab] || (S.sec[S.tab] = {}), on = force === undefined ? !st[i] : force;
+  st[i] = on;
+  $("view").querySelectorAll(`[data-secm="${i}"]`).forEach(p => p.classList.toggle("secx", !on));
+  const h = $("view").querySelector(`.sechd[data-sec="${i}"]`); if (h) { h.setAttribute("aria-expanded", on); h.querySelector(".sechint").textContent = on ? "Hide" : "Show"; }
+  window.dispatchEvent(new Event("resize"));                                                                                 /* maps and charts inside a folded group measure themselves again */
+}
 const RELOAD = ["tab", "preset", "from", "to", "sf", "site", "cmp", "sensor", "rpreset", "kind", "dstat", "grp", "dtype", "rgrp", "rtech", "risp"];
 let seq = 0;
 async function render(reload) {
@@ -56,16 +91,16 @@ async function render(reload) {
   const tab = S.tab;
   if (reload) {
     const q = new URLSearchParams({from: S.from, to: S.to, shift: S.sf, site: S.site, cmp: S.cmp, sensor: S.sensor, preset: S.rpreset, kind: S.kind, dstat: S.dstat, grp: S.grp, dtype: S.dtype, ...ticketQ()}), my = ++seq;
-    $("view").classList.add("loading");
+    $("view").classList.add("loading"); $("view").setAttribute("aria-busy", "true");
     try { const v = await api(`/api/view/${S.tab}?${q}`); if (my !== seq) return; V = v; }
-    catch (e) { if (my === seq) $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty(esc(e.message))}</section></div>`; return; }
-    finally { if (my === seq) $("view").classList.remove("loading"); }
+    catch (e) { if (my === seq) { $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty(esc(e.message))}</section></div>`; } return; }
+    finally { if (my === seq) { $("view").classList.remove("loading"); $("view").removeAttribute("aria-busy"); } }
     renderShell();
   }
   try {
     await ensurePage(tab);
     if (S.tab !== tab) return;                                   // the user moved to another page while the script loaded
-    $("view").innerHTML = VIEWS[S.tab](); $("view").dataset.tab = S.tab; if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); devMaps();
+    $("view").innerHTML = VIEWS[S.tab](); $("view").dataset.tab = S.tab; if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); kpiCols(); groupSections(); devMaps();
   } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Could not display the page: " + esc(e.message))}</section></div>`; }
 }
 /* Read-only Admin (role with admin_view but not is_admin): every edit control is hidden; the server still rejects changes. */
@@ -387,6 +422,9 @@ document.addEventListener("click", async e => {
     else if (d.mdel !== undefined) { if (!confirm("Delete this row?")) return; await api(`/api/admin/master/${S.mkey}/${encodeURIComponent(pkOf(S.medit))}`, {method: "DELETE"}).catch(err => { $("mMsg").textContent = err.message; throw null; }); await reloadConfig(); S.mdata = null; refresh({medit: null}); }
     else if (d.sync) { b.disabled = true; b.textContent = "Menyinkron…"; const r = await send("/api/ingest/sync/" + d.sync, {}).catch(err => { alert(err.message); return null; }); if (r && r.started) alert(r.msg); refresh(); }
     else if (b.id === "fReset") { S.kind = ""; S.dstat = ""; S.grp = ""; S.dtype = ""; S.sf = 0; S.site = CFG.me.site || ""; S.cmp = false; setPreset(CFG.params["ui.default_preset"]); render(true); }
+    else if (b.id === "fMore") { S.fMore = !S.fMore; renderShell(); }
+    else if (d.sec !== undefined) toggleSec(+d.sec);
+    else if (d.secjump !== undefined) { toggleSec(+d.secjump, true); const h = $("view").querySelector(`.sechd[data-sec="${d.secjump}"]`); if (h) h.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth", block: "start"}); }
     else if (b.id === "fToggle") { const w = $("fwrap").classList.toggle("open"); b.setAttribute("aria-expanded", w); }
     else if (b.id === "railBtn") { const on = $("app").classList.toggle("rail"); b.textContent = on ? "›" : "‹"; try { localStorage.setItem("itoc.rail", on ? "1" : ""); } catch (_) {} }
     else if (b.id === "logout" || b.id === "logoutM" || b.id === "logoutS") logout();
@@ -522,17 +560,17 @@ function showLogin(msg, change) {
       <button class="btn" type="submit">Sign in</button><span class="msg err" id="lMsg" role="alert">${esc(msg || "")}</span>
       <p class="lg-help">Forgot your password? ${LOGIN.support_phone ? `<a href="https://wa.me/${esc(String(LOGIN.support_phone).replace(/\D/g, ""))}?text=${encodeURIComponent("Hello IT Care, I forgot my TERA Dashboard password.")}" target="_blank" rel="noopener noreferrer">Contact us</a>` : "Contact us"}</p></form>`;
       $("login").innerHTML = `<div class="lg"><div class="lg-bg"></div><div class="lg-wrap">
-    <section class="lg-card lg-info"><button type="button" class="lg-theme" id="themeL" aria-label="Switch light or dark theme">◐</button>
+    <section class="lg-card lg-info"><button type="button" class="lg-theme" id="themeL" aria-label="Switch light or dark theme"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor"/></svg></button>
       <div class="lg-top">${LOGIN.eyebrow ? `<span class="lg-eyebrow">${esc(LOGIN.eyebrow)}</span>` : ""}${LOGIN.badge ? `<span class="lg-prod">${esc(LOGIN.badge)}</span>` : ""}</div>
       ${LOGIN.headline ? `<h2 class="lg-title">${esc(LOGIN.headline)}</h2>` : `<h2 class="brandName">${brandHtml()}</h2>`}${LOGIN.tagline ? `<p>${esc(LOGIN.tagline)}</p>` : ""}${LOGIN.acronym.length ? `<ul class="lg-acr" aria-label="What TERA stands for">${LOGIN.acronym.map(([l, w, d]) => `<li><b>${esc(l)}</b><span><strong>${esc(w)}</strong>${d ? ` ${esc(d)}` : ""}</span></li>`).join("")}</ul>` : ""}
       ${LOGIN.points.length && !LOGIN.acronym.length ? `<ul class="lg-pts">${LOGIN.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>
-    <section class="lg-card lg-form"><img class="lg-logo lg-l" src="assets/tera-lockup-col.png" alt="TERA, Divisi Teknologi Informasi, Pelindo Multi Terminal"><img class="lg-logo lg-d" src="assets/tera-lockup-rev.png" alt="">${form}<div class="loginfoot">${esc(footText().replace(/ · build .*$/, "").split(" · ").slice(0, 2).join(" · "))}</div></section></div></div>`;
+    <section class="lg-card lg-form"><div class="lg-lock"><img class="lk-ic lg-l" src="assets/tera-icon-col.png" alt=""><img class="lk-ic lg-d" src="assets/tera-icon-rev.png" alt=""><div class="lk-tx"><img class="lk-wm lg-l" src="assets/tera-wordmark-col.svg" alt="TERA"><img class="lk-wm lg-d" src="assets/tera-wordmark-rev.svg" alt="TERA"><b>Divisi Teknologi Informasi</b><span>Pelindo Multi Terminal</span></div></div>${form}<div class="loginfoot">${esc(footText().replace(/ · build .*$/, "").split(" · ").slice(0, 2).join(" · "))}</div></section></div></div>`;
   const first = $("login").querySelector("input"); if (first) first.focus();
 }function logout(msg) { fetch("/api/auth/logout", {method: "POST", credentials: "same-origin", headers: {"X-Requested-With": "itoc"}}).catch(() => {}); CFG = null; showLogin(typeof msg === "string" ? msg : ""); }
 const footText = () => FOOT.replace("{year}", new Date().getFullYear()) + (CFG && CFG.build ? " · build " + CFG.build : "");
 /* First line is the main name (not truncated), the last word ("Dashboard") goes on the second line */
 /* The name shown in the sidebar and login page is the first BSPLIT words ("Dashboard IT"); the full name is used in the tab title, reports, and email. */
-const brandHtml = () => { const w = BRAND.trim().split(/\s+/), n = Math.max(1, Math.min(typeof BSPLIT === "number" ? BSPLIT : 2, w.length)), t = w.slice(0, n).join(" "); return `<span class="b1">${/^tera$/i.test(t) ? `T<span class="e">E</span>RA` : esc(t)}</span>`; };
+const brandHtml = () => { const w = BRAND.trim().split(/\s+/), n = Math.max(1, Math.min(typeof BSPLIT === "number" ? BSPLIT : 2, w.length)), t = w.slice(0, n).join(" "); return `<span class="b1">${/^tera$/i.test(t) ? `<img class="wm wm-c" src="assets/tera-wordmark-col.svg" alt="TERA"><img class="wm wm-r" src="assets/tera-wordmark-rev.svg" alt="TERA">` : esc(t)}</span>`; };
 function applyBrand() { document.title = BRAND; document.querySelectorAll(".brandName").forEach(e => e.innerHTML = brandHtml()); }
 let LOGIN = {tagline: "", points: [], place: "", eyebrow: "", acronym: [], headline: "", badge: "", support_phone: "", turnstile: ""};
 async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || "", acronym: r.acronym || [], headline: r.headline || "", badge: r.badge || "", support_phone: r.support_phone || "", turnstile: r.turnstile || ""}; } catch (_) {} applyBrand(); }

@@ -70,7 +70,7 @@ function devHist(H) {
   const tb = (a, nm) => tbl([nm, "Incidents", "Downtime (h)", "Availability"], a.map(r => [r.k, r.events, fx(r.hours, 1), r.avail != null ? {h: `<span class="${availTone(r.avail)}">${pc(r.avail, 1)}</span>`} : "-"]), {r: [1, 2, 3], empty: "No down history in this period."});
   return panel("c12", "Down History", dmon(H.from) + " – " + dmon(H.to) + (H.since ? " · data since " + dmon(H.since.slice(0, 10)) : ""), kp) +
     panel("c6", "Down Incidents per Day", "", bars(days, [{name: "Incidents", c: "--crit", v: H.daily.map(x => x.events)}], {label: "Down incidents per day"})) +
-    panel("c6", "Downtime per Day", "", bars(days, [{name: "Downtime (h)", c: "--warn", v: H.daily.map(x => x.hours)}], {dec: 0, unit: " h", label: "Downtime per day"})) +
+    panel("c6", "Downtime per Day", "Hours per day", bars(days, [{name: "Downtime (h)", c: "--warn", v: H.daily.map(x => x.hours)}], {dec: 0, unit: " h", label: "Downtime per day"})) +
     panel("c6", "Downtime per Location", "top 10", tb(H.byLoc, "Location")) +
     panel("c6", "Downtime per Device Type", "top 10", tb(H.byType, "Type")) +
     panel("c6", "Most Frequently Down Devices", "by total downtime", tbl(["Device", "Incidents", "Downtime (h)"], H.byHost.map(r => [r.k, r.events, fx(r.hours, 1)]), {r: [1, 2], empty: "No down history in this period."})) +

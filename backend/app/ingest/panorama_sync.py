@@ -51,6 +51,8 @@ def _numeric(key: str, rows: list[list]) -> list[list]:
         for i in idx:
             if i < len(r):
                 r[i] = panorama.num(r[i])
+                if i < len(head) and "bytes" in head[i]:
+                    r[i] = float(PA.real_bytes(r[i]))
     return rows
 
 
