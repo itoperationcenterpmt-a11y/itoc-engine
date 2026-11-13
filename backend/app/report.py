@@ -700,7 +700,60 @@ def _xdr(db, cfg, f, preset="standar"):
     i = X["impact"]
     if X["backlogCH"]:
         s["attention"].append(f"{X['backlogCH']} critical/high alerts still open")
+    if preset == "lengkap":
+        s["extra"], s["cards"] = _xdr_full(db, f)
     return s
+
+def _xdr_full(db, f):
+    """Size Full: every alert of the period with all it carries, as flat tables (alert, case and incident ids, linked ServiceDesk tickets, scope, entities, every matched rule/filter/event).
+    Added after the size limits like the ticket list; the long text stays complete (no cutting in the PDF)."""
+    from datetime import datetime as _dt, time as _tm, timedelta as _td
+    from .calc import xdr_tickets
+    t0, t1 = _dt.combine(f.d_from, _tm.min), _dt.combine(f.d_to + _td(days=1), _tm.min)
+    rows = db.query(VW.M.XdrAlert).filter(VW.M.XdrAlert.created_at >= t0, VW.M.XdrAlert.created_at < t1).order_by(VW.M.XdrAlert.created_at.desc()).all()
+    if not rows:
+        return [], []
+    tk = xdr_tickets.refs(db, rows)
+    ts = lambda d: d.strftime("%d/%m/%Y %H.%M") if d else "-"
+    main, scope, ents, rules, cards = [], [], [], [], []
+    for r in rows:
+        a = r.raw or {}
+        c_ents, c_rules = [], []
+        main.append([r.id, r.case_id or "-", r.incident_id or "-", ts(r.created_at), ts(r.updated_at), r.severity or "-", r.score, r.status or "-", r.investigation_status or "-", r.investigation_result or "-", r.provider or "-", r.model or "-",
+                     "; ".join(f"{x['id']} ({x.get('status') or '-'}) {x.get('subject') or ''}".strip() for x in tk.get(r.id, [])) or "-"])
+        imp = a.get("impactScope") or r.impact or {}
+        scope.append([r.id, r.model_id or "-", r.model_type or "-", r.schema_version or "-", ", ".join(a.get("ownerIds") or r.owners or []) or "-",
+                      ", ".join(f"{k[:-5]}: {v}" for k, v in imp.items() if k.endswith("Count") and v) or "-", r.description or "-", r.link or "-"])
+        for e in imp.get("entities") or []:
+            v = e.get("entityValue")
+            h = isinstance(v, dict)
+            ents.append([r.id, e.get("entityType") or "-", (v.get("name") if h else v) or "-", ", ".join(v.get("ips") or []) if h else "-", e.get("entityId") or (v.get("guid") if h else "") or "-", ", ".join(e.get("provenance") or []) or "-"])
+            c_ents.append(ents[-1][1:])
+        for ru in a.get("matchedRules") or []:
+            for fl in ru.get("matchedFilters") or []:
+                evs = fl.get("matchedEvents") or [{}]
+                for ev in evs:
+                    rules.append([r.id, ru.get("name") or ru.get("id") or "-", fl.get("name") or "-", str(fl.get("matchedDateTime") or "-").replace("T", " ").replace(".000Z", " UTC").replace("Z", " UTC"), ", ".join(fl.get("mitreTechniqueIds") or []) or "-",
+                                  ev.get("type") or "-", ev.get("uuid") or "-"])
+                    c_rules.append(rules[-1][1:])
+        sev = (r.severity or "").lower()
+        cards.append({"title": r.id, "sub": r.model or "-", "badge": f"{(r.severity or '-').upper()} · score {r.score if r.score is not None else '-'}", "tone": {"critical": "B71C1C", "high": "E65100", "medium": "B7791F"}.get(sev, "5B6B7A"),
+                      "facts": [["Case ID", main[-1][1]], ["Incident ID", main[-1][2]], ["Created", main[-1][3]], ["Updated", main[-1][4]], ["Status", main[-1][7]], ["Investigation", main[-1][8]], ["Result", main[-1][9]], ["Provider", main[-1][10]],
+                                ["Model ID", scope[-1][1]], ["Model type", scope[-1][2]], ["Schema version", scope[-1][3]], ["Impact", scope[-1][5]]],
+                      "wide": [["Description", scope[-1][6]], ["Owner IDs", scope[-1][4]], ["Linked ServiceDesk tickets", main[-1][12]], ["Workbench link", scope[-1][7]]],
+                      "tables": [["Affected entities", ["Type", "Name", "IPs", "Entity ID", "Provenance"], c_ents, [.8, 2, 1.8, 3.2, 1.4]],
+                                 ["Matched rules, filters and events", ["Rule", "Filter", "Matched at", "MITRE", "Event type", "Event UUID"], c_rules, [2.3, 2.3, 1.6, 1.5, 2, 3]]]})
+
+    def mk(title, heads, kinds, data, widths):
+        t = _table(title, heads, kinds, data)
+        t["bulk"], t["nocut"], t["pdf"], t["widths"] = True, True, False, widths      # Excel only: the PDF shows the same content as one card per alert
+        return t
+    return [mk("XDR alerts: tickets and incidents", ["Alert ID", "Case ID", "Incident ID", "Created", "Updated", "Severity", "Score", "Status", "Investigation", "Result", "Provider", "Model", "Linked ServiceDesk tickets"],
+               ["t"] * 6 + ["n"] + ["t"] * 6, main, [2.1, 2.3, 2.2, 1.5, 1.5, 1, .7, 1, 1.1, 1.2, .9, 3, 3]),
+            mk("XDR alerts: model, scope and description", ["Alert ID", "Model ID", "Model type", "Schema", "Owner IDs", "Impact", "Description", "Workbench link"], ["t"] * 8, scope, [2.1, 2.5, .9, .7, 2.5, 1.5, 5, 4]),
+            mk("XDR affected entities", ["Alert ID", "Type", "Name", "IPs", "Entity ID", "Provenance"], ["t"] * 6, ents, [2.1, .9, 2.5, 2, 3, 1.5]),
+            mk("XDR matched rules, filters and events", ["Alert ID", "Rule", "Filter", "Matched at", "MITRE", "Event type", "Event UUID"], ["t"] * 7, rules, [2.1, 3, 3, 1.8, 1.8, 1.5, 3])], cards
+
 
 def _internet(db, cfg, f, preset="standar"):
     """Internet usage from Palo Alto (Panorama): traffic, applications, web categories, and top users per location, taken from the per-firewall daily data."""
