@@ -344,6 +344,35 @@ def _pdf_chart(ch, w, h):
     return d
 
 
+def _pdf_cards(cards, P, W):
+    """One card per XDR alert: severity-coloured header, facts grid, full-width text fields, then entity / indicator / rule tables."""
+    from reportlab.lib import colors
+    from reportlab.platypus import CondPageBreak, KeepTogether, Spacer, Table, TableStyle
+    hx = lambda c: colors.HexColor("#" + c)
+    grid = [("BOX", (0, 0), (-1, -1), .5, hx(LINE)), ("INNERGRID", (0, 0), (-1, -1), .25, hx(LINE)), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]
+    out = []
+    for c in cards:
+        tone = hx(c["tone"])
+        head = Table([[P(c["title"], "ct"), P(c["sub"], "cs"), P(c["badge"], "badge")]], colWidths=[W * .26, W * .54, W * .20])
+        head.setStyle(TableStyle([("BACKGROUND", (0, 0), (1, 0), hx("EEF3FA")), ("BACKGROUND", (2, 0), (2, 0), tone), ("LINEBEFORE", (0, 0), (0, 0), 4, tone), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                  ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("LEFTPADDING", (0, 0), (0, 0), 9)]))
+        cells = [[[P(l, "k"), P(v, "v")] for l, v in c["facts"][i:i + 4]] for i in range(0, len(c["facts"]), 4)]
+        facts = Table(cells, colWidths=[W / 4] * 4)
+        facts.setStyle(TableStyle(grid + [("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FAFBFC"))]))
+        wide = Table([[P(l, "k"), P(v, "d")] for l, v in c["wide"]], colWidths=[W * .14, W * .86])
+        wide.setStyle(TableStyle(grid))
+        out += [CondPageBreak(120), KeepTogether([head, facts, wide])]
+        for title, heads, rows, widths in c["tables"]:
+            if not rows:
+                continue
+            tb = Table([[P(h, "ch") for h in heads]] + [[P(v, "cb") for v in r] for r in rows], colWidths=[W * w / sum(widths) for w in widths], repeatRows=1)
+            tb.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), tone), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F6F8FA")]), ("LINEBELOW", (0, 0), (-1, -1), .25, hx(LINE)),
+                                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("TOPPADDING", (0, 0), (-1, -1), 1.6), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.6)]))
+            out += [Spacer(1, 3), P(f"{title} ({len(rows)})", "h4"), tb]
+        out.append(Spacer(1, 14))
+    return out
+
+
 def to_pdf(m: dict) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
@@ -361,6 +390,13 @@ def to_pdf(m: dict) -> bytes:
           "c": ParagraphStyle("c", fontName="Helvetica", fontSize=7.5, leading=9),
           "cb": ParagraphStyle("cb", fontName="Helvetica", fontSize=6.5, leading=7.6),
           "ch": ParagraphStyle("ch", fontName="Helvetica-Bold", fontSize=7.5, leading=9, textColor=colors.white),
+          "ct": ParagraphStyle("ct", fontName="Helvetica-Bold", fontSize=9.5, leading=12, textColor=hx(NAVY)),
+          "cs": ParagraphStyle("cs", fontName="Helvetica", fontSize=9, leading=11, textColor=hx(MUTED)),
+          "badge": ParagraphStyle("badge", fontName="Helvetica-Bold", fontSize=8.5, leading=11, textColor=colors.white, alignment=1),
+          "k": ParagraphStyle("k", fontName="Helvetica", fontSize=6.6, leading=8, textColor=hx(MUTED)),
+          "v": ParagraphStyle("v", fontName="Helvetica-Bold", fontSize=8, leading=10),
+          "d": ParagraphStyle("d", fontName="Helvetica", fontSize=8, leading=10),
+          "h4": ParagraphStyle("h4", fontName="Helvetica-Bold", fontSize=8.5, leading=11, textColor=hx(BLUE), keepWithNext=1),
           "note": ParagraphStyle("note", fontName="Helvetica-Oblique", fontSize=9, leading=12, textColor=hx(MUTED))}
     P = lambda t, s: Paragraph(escape(str(t)), st[s])
     head = [P(m["title"], "h1"), Spacer(1, 3), P(f"{m['subtitle']} · {m['period']}", "h2"), P(" · ".join(m["filters"]), "sub"), P(f"Generated {m['generated']} by {m['by']}", "sub")]
@@ -409,9 +445,11 @@ def to_pdf(m: dict) -> bytes:
             gt.setStyle(TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
             flow.append(gt)
         for t in s["tables"]:
+            if t.get("pdf") is False:
+                continue
             ttl = P(t["title"], "h3")
             bulk = bool(t.get("bulk"))
-            data = [[P(h, "ch") for h in t["heads"]]] + [[P((fmt(v, t["kinds"][c]) if not bulk or c != 3 else str(v or "")[:110]), "cb" if bulk else "c") for c, v in enumerate(row)] for row in t["rows"]]
+            data = [[P(h, "ch") for h in t["heads"]]] + [[P((fmt(v, t["kinds"][c]) if not bulk or c != 3 or t.get("nocut") else str(v or "")[:110]), "cb" if bulk else "c") for c, v in enumerate(row)] for row in t["rows"]]
             wts = t.get("widths") or [3.4 if k == "t" else 1.2 for k in t["kinds"]]
             if not t.get("widths"):
                 wts[0] = max(wts[0], 2.6)
@@ -421,6 +459,8 @@ def to_pdf(m: dict) -> bytes:
             flow.append(KeepTogether([ttl, tb]) if len(t["rows"]) <= 14 else [ttl, tb][0])
             if len(t["rows"]) > 14:
                 flow.append(tb)
+        if s.get("cards"):
+            flow += [PageBreak(), P(s["title"] + ": every alert in detail", "h2")] + _pdf_cards(s["cards"], P, W)
 
     def deco(canvas, doc):
         canvas.saveState()
