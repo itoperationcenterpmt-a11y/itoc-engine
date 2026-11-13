@@ -49,14 +49,15 @@ const VIEWS = {report: () => vReport(), ringkasan: () => vRingkasan(), servicede
   kelengkapan: () => vData(), admin: () => vAdmin()};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
-/* Long pages: the panels are grouped under a heading that folds, with a "Jump to" bar on top. To move a widget to another group, edit the lists below. The names are widget titles (a title only has to start with the name); the first group is open until the user opens another. */
+/* Long pages: the panels are grouped under a heading that folds, with a "Jump to" bar on top. To move a widget to another group, edit the lists below. The names are widget titles (a title only has to start with the name); the first group is open until the user opens another. Pages in FLAT_SECTIONS keep the headings and the Jump to bar but never fold. */
 const SECTIONS = {
-  devices: [["Overview", ["Insights", "Site Map", "Status by Category"], true], ["Downtime analysis", ["Down Duration", "Down by Location", "Down History", "Down Incidents per Day", "Downtime per Day", "Downtime per Location", "Downtime per Device Type"]], ["Inventory", ["By Device Type", "Per Location", "Device List"]], ["Problem devices", ["Most Frequently Down", "Dominant Problems"]]],
+  devices: [["Overview", ["Site Map", "Status by Category"], true], ["Downtime analysis", ["Down Duration", "Down by Location", "Down History", "Down Incidents per Day", "Downtime per Day", "Downtime per Location", "Downtime per Device Type"]], ["Inventory", ["By Device Type", "Per Location", "Device List"]], ["Problem devices", ["Most Frequently Down", "Dominant Problems"]]],
   servicedesk: [["Overview", ["Insights", "Daily Trend", "Resolution Duration Distribution"], true], ["Patterns", ["Tickets per Hour", "Per Weekday", "Breakdown by SLA level"]], ["Rankings", ["Group Ranking", "Technician Ranking", "Top Requesters"]], ["Ticket lists", ["Open Tickets", "25 Longest-Duration Tickets", "Data Quality Notes"]]]
 };
 SECTIONS.devnet = SECTIONS.devcctv = SECTIONS.devops = SECTIONS.devices;
+const FLAT_SECTIONS = ["devices", "devnet", "devcctv", "devops"];            /* these pages keep the headings and the Jump to bar, but every group is always open */
 function groupSections() {
-  const cfg = SECTIONS[S.tab], grid = $("view").querySelector(":scope > .grid");
+  const flat = FLAT_SECTIONS.includes(S.tab), cfg = SECTIONS[S.tab], grid = $("view").querySelector(":scope > .grid");
   if (!cfg || !grid || S.layEdit) return;
   const all = [...grid.querySelectorAll(":scope > .panel")], ttl = p => ((p.querySelector("h2") || {}).textContent || "").trim(), st = S.sec[S.tab] = S.sec[S.tab] || {};
   const sets = cfg.map(([label, names, first], i) => ({i, label, first, ps: all.filter(p => names.some(n => ttl(p).startsWith(n)))})).filter(g => g.ps.length);
@@ -68,16 +69,18 @@ function groupSections() {
   const jump = document.createElement("nav"); jump.className = "secjump"; jump.setAttribute("aria-label", "Sections");
   jump.innerHTML = "<span>Jump to</span>" + sets.map(g => `<button type="button" data-secjump="${g.i}">${esc(g.label)} <i>${g.ps.length}</i></button>`).join("");
   grid.insertBefore(jump, ph);
+  const kp = grid.querySelector(":scope > [data-wkey=\"kpis\"]"); if (kp) grid.insertBefore(kp, jump);                  /* the KPI strip stays above the group headings */
   sets.forEach(g => {
-    if (st[g.i] === undefined) st[g.i] = !!g.first;
-    const h = document.createElement("button"); h.type = "button"; h.className = "sechd"; h.dataset.sec = g.i; h.setAttribute("aria-expanded", st[g.i]);
-    h.innerHTML = `<b>${esc(g.label)}</b><span class="sub">${g.ps.length} widgets</span><span class="sechint">${st[g.i] ? "Hide" : "Show"}</span>`;
+    if (flat) st[g.i] = true; else if (st[g.i] === undefined) st[g.i] = !!g.first;
+    const h = document.createElement(flat ? "div" : "button"); if (!flat) h.type = "button"; h.className = "sechd" + (flat ? " flat" : ""); h.dataset.sec = g.i; if (!flat) h.setAttribute("aria-expanded", st[g.i]);
+    h.innerHTML = `<b>${esc(g.label)}</b><span class="sub">${g.ps.length} widget${g.ps.length > 1 ? "s" : ""}</span>${flat ? "" : `<span class="sechint">${st[g.i] ? "Hide" : "Show"}</span>`}`;
     grid.insertBefore(h, ph);
     g.ps.forEach(p => { p.dataset.secm = g.i; p.classList.toggle("secx", !st[g.i]); grid.insertBefore(p, ph); });
   });
   ph.remove();
 }
 function toggleSec(i, force) {
+  if (FLAT_SECTIONS.includes(S.tab)) return;
   const st = S.sec[S.tab] || (S.sec[S.tab] = {}), on = force === undefined ? !st[i] : force;
   st[i] = on;
   $("view").querySelectorAll(`[data-secm="${i}"]`).forEach(p => p.classList.toggle("secx", !on));
