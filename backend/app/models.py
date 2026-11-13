@@ -578,6 +578,10 @@ class XdrAlert(Base):
     entities: Mapped[list | None] = mapped_column(JSONB)          # host/akun terdampak: [{type, name, ips}]
     techniques: Mapped[list | None] = mapped_column(JSONB)        # ID teknik MITRE ATT&CK
     rules: Mapped[list | None] = mapped_column(JSONB)             # nama aturan deteksi yang cocok
+    case_id: Mapped[str | None] = mapped_column(String(80), index=True)
+    model_id: Mapped[str | None] = mapped_column(String(80))
+    schema_version: Mapped[str | None] = mapped_column(String(20))
+    raw: Mapped[dict | None] = mapped_column(JSONB)               # the complete alert exactly as Vision One returned it (ticket/incident ids, all indicators, matched rules and events, entity ids)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

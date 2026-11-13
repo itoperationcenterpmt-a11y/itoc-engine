@@ -5,6 +5,30 @@ const XTONE = s => s === "critical" ? "crit" : s === "high" ? "warn" : "idle";
 const xLink = u => /^https:\/\//i.test(u || "") ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Open</a>` : "-";
 const xTk = (t, ids) => (t && t.length ? t.map(x => `<span class="tag" title="${esc((x.subject || "") + " · " + (x.status || ""))}">${esc(x.id)}</span>`).join(" ") : ids && ids.length ? ids.map(i => `<span class="tag">${esc(i)}</span>`).join(" ") : `<span class="sub">none</span>`);
 const xSev = s => s ? pill(XTONE(s), (XSEV[s] || [s])[0]) : "-";
+/* Alert List details: everything Vision One returned for the alert (stored in xdr_alert.raw), loaded when the row is opened. */
+const xT = t => t ? esc(String(t).replace("T", " ").replace(/\.000Z$|Z$/, "") + " UTC") : "-";
+const xKV = rows => `<dl class="xkv">${rows.filter(r => r[1] != null && r[1] !== "").map(r => `<dt>${esc(r[0])}</dt><dd>${r[2] ? r[1] : esc(r[1])}</dd>`).join("")}</dl>`;
+function xDetail(a) {
+  const imp = Object.entries(a.impactScope || {}).filter(([k, v]) => k !== "entities" && v).map(([k, v]) => k.replace(/Count$/, "") + ": " + v).join(", ");
+  const ents = (a.impactScope && a.impactScope.entities || []).map(e => { const v = e.entityValue, h = v && typeof v === "object"; return [e.entityType, h ? v.name : v, h ? (v.ips || []).join(", ") : "", e.entityId || (h ? v.guid : ""), (e.provenance || []).join(", ")]; });
+  const inds = (a.indicators || []).map(i => [i.id, i.type, i.field || "-", {h: `<span class="xval">${esc(i.value === "" || i.value == null ? "-" : typeof i.value === "object" ? JSON.stringify(i.value) : i.value)}</span>`}, (i.provenance || []).join(", ")]);
+  const rules = (a.matchedRules || []).map(r => `<li><b>${esc(r.name || r.id)}</b><ul>${(r.matchedFilters || []).map(f => `<li>${esc(f.name || f.id)} <span class="sub">${xT(f.matchedDateTime)}${(f.mitreTechniqueIds || []).length ? " · " + esc(f.mitreTechniqueIds.join(", ")) : ""}${(f.matchedEvents || []).length ? " · " + f.matchedEvents.map(v => esc(v.type || "event") + " " + esc(v.uuid || "")).join(", ") : ""}</span></li>`).join("")}</ul></li>`).join("");
+  return xKV([["Alert ID", a.id], ["Case ID", a.caseId], ["Incident ID", a.incidentId], ["Model", a.model], ["Model ID", a.modelId], ["Model type", a.modelType], ["Provider", a.alertProvider], ["Schema version", a.schemaVersion],
+    ["Severity / score", (a.severity || "-") + " / " + (a.score == null ? "-" : a.score)], ["Status", a.status], ["Investigation", [a.investigationStatus, a.investigationResult].filter(Boolean).join(" · ")],
+    ["Created", xT(a.createdDateTime), 1], ["Updated", xT(a.updatedDateTime), 1], ["Owner IDs", (a.ownerIds || []).join(", ")], ["Impact", imp], ["Description", a.description]])
+    + (ents.length ? `<h4>Affected entities</h4>${tbl(["Type", "Name", "IPs", "ID", "Provenance"], ents, {tall: false, max: 99})}` : "")
+    + (inds.length ? `<h4>Indicators (${inds.length})</h4>${tbl(["#", "Type", "Field", "Value", "Provenance"], inds, {tall: false, max: 99})}` : "")
+    + (rules ? `<h4>Matched rules and filters</h4><ul class="xrules">${rules}</ul>` : "");
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-xdet]"); if (!b) return;
+  const tr = b.closest("tr"), open = tr.nextElementSibling && tr.nextElementSibling.classList.contains("xdd");
+  if (open) { tr.nextElementSibling.remove(); b.textContent = "Details"; return; }
+  const row = document.createElement("tr"); row.className = "xdd"; row.innerHTML = `<td colspan="${tr.children.length}"><div class="empty sm">Loading…</div></td>`;
+  tr.after(row); b.textContent = "Hide";
+  try { row.firstChild.innerHTML = `<div class="xdetail">${xDetail(await api("/api/xdr/alert/" + encodeURIComponent(b.dataset.xdet)))}</div>`; }
+  catch (er) { row.firstChild.innerHTML = `<div class="empty sm">${esc(er.message)}</div>`; }
+});
 function xdrPanels(X) {
   const sv = Object.fromEntries(X.bySev.map(x => [x.k, x.n])), days = X.daily.map(x => ({label: dmon(x.date), full: dlong(x.date)})), SV = ["critical", "high", "medium", "low"];
   const hb = a => hbars(a.map(x => [x.k, x.n, 0, fmt(x.n)]));
@@ -34,8 +58,8 @@ function vXdr() {
   const sv = Object.fromEntries(X.bySev.map(x => [x.k, x.n]));
   const kp = `<div class="kpis k6">${kpi("Alerts", fmt(X.total), "in the period")}${kpi("Still Open", fmt(X.open), "", {cls: X.open ? "warnv" : ""})}${kpi("Critical + High", fmt((sv.critical || 0) + (sv.high || 0)), fmt(sv.critical || 0) + " critical", {cls: sv.critical ? "warnv" : ""})}${kpi("Average Score", X.avgScore != null ? fx(X.avgScore, 1) : "-", "0 to 100")}${kpi("Hosts Affected", fmt(X.nHosts), fmt(X.nAccounts) + " distinct accounts")}${kpi("Incidents", fmt(X.nIncidents), "")}</div>`;
   const P = xdrPanels(X);
-  const rows = X.list.map(x => [x.created ? dtime(x.created) : "-", {h: xSev(x.severity)}, {h: `<b>${esc(x.model || "-")}</b>${x.description ? `<span class="sub">${esc(x.description)}</span>` : ""}${(x.techniques || []).length ? `<span class="sub">${esc(x.techniques.join(", "))}</span>` : ""}`}, (x.entities || []).map(e => e.n).filter(Boolean).join(", ") || "-", {h: xTk(x.tickets)}, x.score == null ? "-" : x.score, {h: `${esc(x.status || "-")}${x.result ? `<span class="sub">${esc(x.result)}</span>` : ""}`}, x.incident || "-", {h: xLink(x.link)}]);
+  const rows = X.list.map(x => [x.created ? dtime(x.created) : "-", {h: xSev(x.severity)}, {h: `<b>${esc(x.model || "-")}</b>${x.description ? `<span class="sub">${esc(x.description)}</span>` : ""}${(x.techniques || []).length ? `<span class="sub">${esc(x.techniques.join(", "))}</span>` : ""}`}, (x.entities || []).map(e => e.n).filter(Boolean).join(", ") || "-", {h: xTk(x.tickets)}, x.score == null ? "-" : x.score, {h: `${esc(x.status || "-")}${x.result ? `<span class="sub">${esc(x.result)}</span>` : ""}`}, x.incident || "-", {h: xLink(x.link)}, {h: `<button type="button" class="btn sm" data-xdet="${esc(x.id)}">Details</button>`}]);
   return insArea("xdr") + (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
     P.daily() + P.sev() + P.hosts() + P.accounts() + P.techniques() + P.models() + P.incidents() + P.aging() + P.impact() + P.cover() +
-    panel("c12", "Alert List", X.listN + " alerts" + (X.listN > X.list.length ? ", showing " + X.list.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Search model, host, account, technique, ticket, or incident" aria-label="Search alerts"><span class="sub">Severity and period are set in the top filter bar</span></div><div id="dlist">${tbl(["Created", "Severity", "Alert", "Host / Account", "Tickets", "Score", "Status", "Incident", "Workbench"], rows, {tall: true, empty: "No alerts for this filter."})}</div>`));
+    panel("c12", "Alert List", X.listN + " alerts" + (X.listN > X.list.length ? ", showing " + X.list.length : ""), `<div class="dtool"><input type="search" id="dq" class="msearch" placeholder="Search model, host, account, technique, ticket, or incident" aria-label="Search alerts"><span class="sub">Severity and period are set in the top filter bar</span></div><div id="dlist">${tbl(["Created", "Severity", "Alert", "Host / Account", "Tickets", "Score", "Status", "Incident", "Workbench", "Details"], rows, {tall: true, empty: "No alerts for this filter."})}</div>`));
 }
