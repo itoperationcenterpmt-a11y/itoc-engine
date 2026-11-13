@@ -87,7 +87,19 @@ def to_row(a: dict, tz: float) -> dict | None:
             "id": str(a["id"])[:80], "incident_id": a.get("incidentId"), "model": (a.get("model") or "")[:300], "model_type": a.get("modelType"), "severity": (a.get("severity") or "").lower(),
             "score": a.get("score"), "status": a.get("status"), "investigation_status": a.get("investigationStatus"), "provider": a.get("alertProvider"),
             "created_at": pdt(a.get("createdDateTime"), tz), "updated_at": pdt(a.get("updatedDateTime"), tz), "owners": a.get("ownerIds") or [], "impact": a.get("impactScope") or {},
-            "indicators": ind, "link": (a.get("workbenchLink") or "")[:600]}
+            "indicators": ind, "link": (a.get("workbenchLink") or "")[:600],
+            "case_id": (a.get("caseId") or None) and str(a["caseId"])[:80], "model_id": (a.get("modelId") or None) and str(a["modelId"])[:80], "schema_version": (a.get("schemaVersion") or None) and str(a["schemaVersion"])[:20], "raw": a}
+
+
+def _no_nul(v):
+    """Postgres cannot store \\u0000 in text or JSON; some alerts carry raw binary (e.g. an indicator's rawDataStr)."""
+    if isinstance(v, str):
+        return v.replace("\x00", "")
+    if isinstance(v, dict):
+        return {k: _no_nul(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_no_nul(x) for x in v]
+    return v
 
 
 def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
@@ -100,7 +112,7 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     since = datetime.fromisoformat(cur["last_update"]) if cur.get("last_update") else now - timedelta(days=min(int(c.get("backfill_days", 30)), 365))
     with httpx.Client(timeout=c.get("timeout_s", 60), verify=c.get("verify_tls", True), follow_redirects=False) as cl:
         items = fetch_alerts(cl, c["base_url"], token, since, now, int(c.get("page_size", 100)))
-    rows = [r for r in (to_row(a, tz) for a in items) if r]
+    rows = [_no_nul(r) for r in (to_row(a, tz) for a in items) if r]
     for i in range(0, len(rows), 500):
         ins = insert(XdrAlert).values(rows[i:i + 500])
         db.execute(ins.on_conflict_do_update(index_elements=["id"], set_={k: getattr(ins.excluded, k) for k in rows[0] if k != "id"} | {"fetched_at": datetime.utcnow()}))

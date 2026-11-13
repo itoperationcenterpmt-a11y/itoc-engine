@@ -75,11 +75,14 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     last = src.cursor.get("last_hour")
     a = datetime.fromisoformat(last) - timedelta(hours=int(c.get("overlap_hours", 2))) if last else now - timedelta(days=int(c.get("backfill_days", 30)))
     fmt = lambda t: t.strftime("%Y-%m-%d-%H-%M-%S")
-    n = 0
+    n, gone = 0, []
     with httpx.Client(base_url=c["base_url"], timeout=c.get("timeout_s", 60), verify=c.get("verify_tls", True)) as cl:
         discover(cl, db, c, auth)
         for sen in db.scalars(select(PrtgSensor).where(PrtgSensor.active.is_(True))):
             r = cl.get("/api/historicdata.json", params={"id": sen.id, "avg": 3600, "sdate": fmt(a), "edate": fmt(now), "usecaption": 1, **auth})
+            if r.status_code in (400, 404):                  # PRTG: "The selected object cannot be used here or it does not exist": one stale sensor must not stop the others
+                gone.append(sen.id)
+                continue
             r.raise_for_status()
             vals = []
             for h in r.json().get("histdata", []):
@@ -98,4 +101,5 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
                 rebuild_events(db, sen.id, a, now, float(c.get("event_min_down_s", 60)))
                 n += 1
     src.cursor = {**src.cursor, "last_hour": now.isoformat()}
-    return n, "historicdata.json per sensor, 60-minute average"
+    note = f"; {len(gone)} sensors skipped because PRTG no longer has them ({', '.join(gone[:8])}{', ...' if len(gone) > 8 else ''})" if gone else ""
+    return n, "historicdata.json per sensor, 60-minute average" + note

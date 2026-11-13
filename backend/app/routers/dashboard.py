@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from ..db import get_db
-from ..models import User, Handover, MASTER, LayoutProfile
-from ..security import current_user, can_see, require_write, effective_site, ADMIN_MASTER_PAGE, locked_pages
+from ..models import User, Handover, MASTER, LayoutProfile, XdrAlert
+from ..security import current_user, can_see, require_module, require_write, effective_site, ADMIN_MASTER_PAGE, locked_pages
 from ..store import load_config, audit, bump_data
 from .. import views
 from ..calc import wifi as wifi_calc
@@ -92,6 +92,17 @@ class HoIn(BaseModel):
 
 class HoClose(BaseModel):
     note: str
+
+
+@router.get("/xdr/alert/{alert_id}", dependencies=[Depends(require_module("xdr"))])
+def xdr_alert(alert_id: str, db: Session = Depends(get_db)):
+    """Everything Vision One returned for one Workbench alert (stored by the sync), for the XDR Alert List details."""
+    r = db.get(XdrAlert, alert_id)
+    if not r:
+        raise HTTPException(404, "Alert not found")
+    if not r.raw:
+        raise HTTPException(404, "The full detail of this alert is not stored yet; it is filled in on the next Trend Micro sync")
+    return r.raw
 
 
 @router.post("/handover")
