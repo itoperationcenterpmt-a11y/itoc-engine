@@ -94,6 +94,22 @@ def _epoch_local(v, tz):
     return (datetime.fromtimestamp(int(v) / 1000, tz=timezone.utc) + timedelta(hours=tz)).replace(tzinfo=None)
 
 
+def _detail_row(cl: httpx.Client, rid, q: dict | None, fm: dict, na, tz, cfg: Config) -> tuple[dict, int]:
+    """Detail satu request -> baris tiket + last_updated_time-nya (0 jika kosong)."""
+    # daftar tidak memuat kategori, subkategori, urgensi, dampak, mode, dan SLA: ambil detail per request
+    d = cl.get(f"/api/v3/requests/{rid}")
+    d.raise_for_status()
+    q = d.json().get("request", q or {"id": rid})
+    g = lambda f: _get(q, fm[f]) if f in fm else None
+    row = {"id": str(q["id"]), "mode": s(g("mode")) or na, "requester": s(g("requester")), "site": s(g("site")) or na,
+           "category": s(g("category")) or na, "subcategory": s(g("subcategory")) or na, "subject": s(g("subject"))[:200],
+           "technician": s(g("technician")) or na, "sla_name": s(g("sla_name")) or na, "impact": s(g("impact")) or na,
+           "priority": s(g("priority")) or na, "urgency": s(g("urgency")) or na, "created_at": _epoch_local(g("created_at"), tz),
+           "resolved_at": _epoch_local(g("resolved_at"), tz), "onhold_h": num(g("onhold_ms")) / 36e5 if "onhold_ms" in fm else 0,
+           "status": s(g("status")), "desc_empty": desc_empty(g("description"), cfg.p("sd.description_template"))}
+    return row, int(_get(q, "last_updated_time.value") or 0)
+
+
 def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
     c = src.config
     from .. import vault
@@ -114,23 +130,21 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
             r.raise_for_status()
             body = r.json()
             for q in body.get("requests", []):
-                # daftar tidak memuat kategori, subkategori, urgensi, dampak, mode, dan SLA: ambil detail per request
-                d = cl.get(f"/api/v3/requests/{q['id']}")
-                d.raise_for_status()
-                q = d.json().get("request", q)
-                g = lambda f: _get(q, fm[f]) if f in fm else None
-                rows.append({"id": str(q["id"]), "mode": s(g("mode")) or na, "requester": s(g("requester")), "site": s(g("site")) or na,
-                             "category": s(g("category")) or na, "subcategory": s(g("subcategory")) or na, "subject": s(g("subject"))[:200],
-                             "technician": s(g("technician")) or na, "sla_name": s(g("sla_name")) or na, "impact": s(g("impact")) or na,
-                             "priority": s(g("priority")) or na, "urgency": s(g("urgency")) or na, "created_at": _epoch_local(g("created_at"), tz),
-                             "resolved_at": _epoch_local(g("resolved_at"), tz), "onhold_h": num(g("onhold_ms")) / 36e5 if "onhold_ms" in fm else 0,
-                             "status": s(g("status")), "desc_empty": desc_empty(g("description"), cfg.p("sd.description_template"))})
-                newest = max(newest, int(_get(q, "last_updated_time.value") or 0))
+                row, upd = _detail_row(cl, q["id"], q, fm, na, tz, cfg)
+                rows.append(row)
+                newest = max(newest, upd)
             if not body.get("list_info", {}).get("has_more_rows"):
                 break
             start += size
         # request yang dihapus di ServiceDesk Plus tidak muncul di daftar inkremental: bandingkan dengan daftar lengkap ID
         live = _all_ids(cl, size)
+        # Tiket yang dibuat langsung berstatus Closed tidak punya last_updated_time di ServiceDesk Plus, jadi kriteria inkremental
+        # tidak pernah menjangkaunya. Ambil semua ID yang ada di ServiceDesk Plus tetapi belum tersimpan di sini.
+        have = {x["id"] for x in rows} | set(db.scalars(select(Ticket.id)).all())
+        # Per sinkron dibatasi (terbaru dulu) supaya catch-up awal tidak menahan satu putaran terlalu lama; sisanya menyusul di putaran berikut.
+        for tid in sorted(live - have, key=lambda v: int(v) if v.isdigit() else 0, reverse=True)[:int(c.get("catchup_max", 300))]:
+            row, _ = _detail_row(cl, tid, None, fm, na, tz, cfg)
+            rows.append(row)
     n = upsert(db, [x for x in rows if x["created_at"]], "api")
     removed = _remove_missing(db, live)
     src.cursor = {**src.cursor, "last_updated_ms": newest}
