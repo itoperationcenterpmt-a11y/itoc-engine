@@ -55,7 +55,7 @@ const SECTIONS = {
   servicedesk: [["Overview", ["Insights", "Daily Trend", "Resolution Duration Distribution"], true], ["Patterns", ["Tickets per Hour", "Per Weekday", "Breakdown by SLA level"]], ["Rankings", ["Group Ranking", "Technician Ranking", "Top Requesters"]], ["Ticket lists", ["Open Tickets", "25 Longest-Duration Tickets", "Data Quality Notes"]]]
 };
 SECTIONS.devnet = SECTIONS.devcctv = SECTIONS.devops = SECTIONS.devices;
-const FLAT_SECTIONS = ["devices", "devnet", "devcctv", "devops"];            /* these pages keep the headings and the Jump to bar, but every group is always open */
+const FLAT_SECTIONS = ["devices", "devnet", "devcctv", "devops", "servicedesk"];            /* these pages keep the headings and the Jump to bar, but every group is always open */
 function groupSections() {
   const flat = FLAT_SECTIONS.includes(S.tab), cfg = SECTIONS[S.tab], grid = $("view").querySelector(":scope > .grid");
   if (!cfg || !grid || S.layEdit) return;
