@@ -21,14 +21,20 @@ def _num(v):
 
 
 def _dt(v: str) -> datetime | None:
-    # "10/14/2026 9:00:00 AM - 10:00:00 AM" → awal jam
-    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4}) (\d{1,2}):(\d{2}):\d{2}\s*([AP]M)?", v or "")
+    # US:  "10/14/2026 9:00:00 AM - 10:00:00 AM"  (mm/dd/yyyy, colons, AM/PM)
+    # EU:  "18/11/2026 12.00.00 - 13.00.00"      (dd/mm/yyyy, dots, 24h): PRTG follows its server/user locale
+    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4}) (\d{1,2})[:.](\d{2})[:.]\d{2}\s*([AP]M)?", v or "")
     if not m:
         return None
     h = int(m[4])
     if m[6]:
         h = h % 12 + (12 if m[6] == "PM" else 0)
-    return datetime(int(m[3]), int(m[1]), int(m[2]), h, int(m[5]))
+    a, b = int(m[1]), int(m[2])
+    us = bool(m[6]) or ":" in v.split(" ", 1)[1][:8]      # AM/PM or colon time = US locale
+    mo, d = (a, b) if us else (b, a)
+    if mo > 12:                                           # unambiguous: the other order
+        mo, d = d, mo
+    return datetime(int(m[3]), mo, d, h, int(m[5]))
 
 
 def discover(cl: httpx.Client, db: Session, c: dict, auth: dict) -> int:
