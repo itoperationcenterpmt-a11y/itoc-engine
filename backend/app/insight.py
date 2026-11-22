@@ -566,7 +566,32 @@ def d_data_quality(db: Session, cfg: Config) -> list[dict]:
     return out
 
 
-DETECTORS = [d_tickets, d_ticket_sites, d_ticket_trends, d_sla_risk, d_links, d_availability, d_capacity, d_ndr, d_ndr_traffic, d_xdr, d_xdr_tickets, d_ndr_mix, d_devices, d_flapping_devices, d_incidents, d_wifi, d_wifi_zones, d_kuma, d_milestone, d_site_multi, d_data_quality]
+def d_zbx_isp(db: Session, cfg: Config) -> list[dict]:
+    """Zabbix ISP-* monitoring: detects branches with all ISP links down, dual-link branches on single-link risk, and flapping ISP links over the last 7 days."""
+    from .calc import zbx_isp as ZBXISP
+    today = cfg.now().date()
+    Z = ZBXISP.build(db, cfg, today - timedelta(days=6), today)
+    if not Z["all"]["total"]:
+        return []
+    out = []
+    for r in Z["byLoc"]:
+        if r["rtone"] == "crit":
+            provs = ", ".join(x["provider"] for x in r["links"] if not x["reachable"])
+            out.append(_ins(f"zbxisp_site_down:{r['k']}", "network", "crit", f"All ISP links down at {r['k']} (Zabbix)",
+                            f"{r['down']} of {r['total']} ISP links unreachable ({provs}). Site internet connectivity is down.", "noc", {"down": r["down"], "total": r["total"]}, site=r["k"]))
+        elif r["rtone"] == "warn":
+            down_p = ", ".join(x["provider"] for x in r["links"] if not x["reachable"])
+            up_p = ", ".join(x["provider"] for x in r["links"] if x["reachable"])
+            out.append(_ins(f"zbxisp_single:{r['k']}", "network", "warn", f"Dual-link redundancy lost at {r['k']} (Zabbix ISP)",
+                            f"{down_p} is down; branch is running on a single link ({up_p}).", "noc", {"down": r["down"], "online": r["online"]}, site=r["k"]))
+    for h in (Z.get("hist") or {}).get("byHost") or []:
+        if h["events"] >= 4:
+            out.append(_ins(f"zbxisp_flap:{h['k']}", "network", "warn", f"Flapping ISP link: {h['k']}",
+                            f"Went down {h['events']} times in the last 7 days ({fmt(h['hours'], 1)} hours total downtime) in Zabbix.", "noc", {"events": h["events"], "hours": h["hours"]}))
+    return out
+
+
+DETECTORS = [d_tickets, d_ticket_sites, d_ticket_trends, d_sla_risk, d_links, d_zbx_isp, d_availability, d_capacity, d_ndr, d_ndr_traffic, d_xdr, d_xdr_tickets, d_ndr_mix, d_devices, d_flapping_devices, d_incidents, d_wifi, d_wifi_zones, d_kuma, d_milestone, d_site_multi, d_data_quality]
 
 
 # ---------------- rankings, health, summary (computed on request) ----------------
@@ -962,10 +987,18 @@ def _area_summary(db: Session, cfg: Config, scope: str, day: date | None, kind: 
                 body.append(t["tk_more"].format(n=len(W["apDown"]) - n_dev).replace("tiket", "AP"))
     else:
         net, n_links = _net_lines(db, t, a, end, site)
+        from .calc import zbx_isp as ZBXISP
+        Zi = ZBXISP.build(db, cfg, d1, d2, site)
+        n_zisp = Zi["all"]["down"] if Zi["all"]["total"] else 0
         K = KUMA.build(db, cfg, d1, d2, site)
         n_web = K["down"] if K["configured"] and K["total"] else 0
-        status.append(t["st_link"].format(s=t["link_warn"].format(n=n_links, w=n_web) if (n_links or n_web) else t["ok"]))
+        status.append(t["st_link"].format(s=t["link_warn"].format(n=n_links + n_zisp, w=n_web) if (n_links or n_zisp or n_web) else t["ok"]))
         body += net
+        if Zi["all"]["total"]:
+            Za, Zh = Zi["all"], Zi["hist"]
+            body.append(f"- ISP Zabbix (ISP-*): {_f(Za['online'])}/{_f(Za['total'])} aktif" + (f", {_f(Za['down'])} down" if Za["down"] else "") + (f", {_f(Za['singleRisk'])} cabang tanpa redundansi" if Za["singleRisk"] else "") + f" · {_f(Zh['events'])} gangguan ({_f(Zh['hours'], 1)} jam).")
+            for x in Zi["down"][:n_dev]:
+                body.append(f"  · {x['name']} ({x['loc']}) down {_dur(x['ageH'] or 0)}")
         if K["configured"] and K["total"]:
             body.append(t["kuma"].format(t=K["total"], d=K["down"], a=_f((K["avail"] or 0) * 100, 2) if K["avail"] is not None else "-"))
             for m in [m for m in K["mons"] if m["status"] == 0][:n_dev]:
@@ -1037,6 +1070,11 @@ def _summary(db: Session, cfg: Config, scope: str, day: date | None, kind: str, 
     if noc:
         net, _ = _net_lines(db, t, a, end)
         L += net
+        from .calc import zbx_isp as ZBXISP
+        Zi = ZBXISP.build(db, cfg, a.date(), (end - timedelta(seconds=1)).date())
+        if Zi["all"]["total"]:
+            Za, Zh = Zi["all"], Zi["hist"]
+            L.append(f"- ISP Zabbix (ISP-*): {_f(Za['online'])}/{_f(Za['total'])} aktif" + (f", {_f(Za['down'])} down" if Za["down"] else "") + (f", {_f(Za['singleRisk'])} cabang single-link" if Za["singleRisk"] else "") + f" · {_f(Zh['events'])} gangguan ({_f(Zh['hours'], 1)} jam).")
         if live:
             ap_t = db.scalar(select(func.count()).select_from(M.WifiAp)) or 0
             ap_o = db.scalar(select(func.count()).select_from(M.WifiAp).where(~func.lower(func.coalesce(M.WifiAp.status, "")).startswith("online"))) or 0

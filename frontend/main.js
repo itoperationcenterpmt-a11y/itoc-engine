@@ -12,10 +12,10 @@ const PAGE_FILE = {report: "page-report.js", ringkasan: "page-ringkasan.js", ser
   jadwal: "page-jadwal.js", serahterima: "page-handover.js", kelengkapan: "page-data.js", admin: "admin.js"};
 const FILE_DEPS = {
   "vendor/leaflet/leaflet.js": [], "devices.js": ["vendor/leaflet/leaflet.js", "insight.js"], "wifi.js": ["insight.js"], "xdr.js": ["insight.js"], "cctv.js": ["insight.js"],
-  "groups.js": ["wifi.js", "xdr.js", "insight.js"], "internet.js": ["page-soc.js"], "page-soc.js": ["insight.js"], "page-noc.js": ["insight.js"], "page-servicedesk.js": ["insight.js"],
-  "page-ringkasan.js": ["insight.js", "wifi.js", "xdr.js"], "page-jadwal.js": ["page-handover.js"], "admin.js": ["integrations.js"], "integrations.js": ["admin.js"]
+  "page-zbxisp.js": ["insight.js"], "groups.js": ["wifi.js", "xdr.js", "page-zbxisp.js", "insight.js"], "internet.js": ["page-soc.js"], "page-soc.js": ["insight.js"], "page-noc.js": ["insight.js", "page-zbxisp.js"], "page-servicedesk.js": ["insight.js"],
+  "page-ringkasan.js": ["insight.js", "wifi.js", "xdr.js", "page-zbxisp.js"], "page-jadwal.js": ["page-handover.js"], "admin.js": ["integrations.js"], "integrations.js": ["admin.js"]
 };
-const WIDGET_FILE = {dev: "devices.js", xdr: "xdr.js", cctv: "cctv.js", wifi: "wifi.js"};   // data key in V → script that renders its widgets
+const WIDGET_FILE = {dev: "devices.js", xdr: "xdr.js", cctv: "cctv.js", wifi: "wifi.js", zbx_isp: "page-zbxisp.js"};   // data key in V → script that renders its widgets
 const JS_LOADED = {};
 let BASEMAP_ASKED = false;
 function loadScript(src) {
@@ -518,6 +518,9 @@ document.addEventListener("change", async e => {
     try { const r = await send("/api/ingest/tickets", fd); refresh({msg: ""}); setTimeout(() => { const m = $("upmsg2"); if (m) m.innerHTML = `<div class="msg ok">${esc(r.file)}: ${fmt(r.rows)} tickets saved or updated${r.skipped ? ", " + fmt(r.skipped) + " skipped (created date unreadable)" : ""}.</div>`; }, 400); }
     catch (err) { $("upmsg2").innerHTML = `<div class="msg err">${esc(err.message)}</div>`; }
   }
+});
+document.addEventListener("input", e => {
+  if (e.target.id === "zq" && typeof applyZispFilter === "function") applyZispFilter();
 });
 document.addEventListener("submit", async e => {
   e.preventDefault(); const f = e.target, v = id => ($(id) ? $(id).value.trim() : "");

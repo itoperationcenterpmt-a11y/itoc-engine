@@ -91,7 +91,7 @@ function widgetFind(key) {
   if (i > 0 && key.slice(0, i) === "dev-map") return mapWidget(decodeURIComponent(key.slice(i + 1)));
   return widgetList().find(x => x.key === key);
 }
-const widgetOk = w => !!V[w.need] && (w.need !== "dev" || V.dev.all.total > 0) && (CFG.me.role === "superadmin" || (CFG.modules || []).some(m => m.key === w.mod));
+const widgetOk = w => !!V[w.need] && (w.need !== "dev" || V.dev.all.total > 0) && (w.need !== "zbx_isp" || (V.zbx_isp.all && V.zbx_isp.all.total > 0)) && (CFG.me.role === "superadmin" || (CFG.modules || []).some(m => m.key === w.mod));
 const widgetEl = w => { const t = document.createElement("div"); t.innerHTML = w.html(); return t.firstElementChild; };
 function widgetBlock(w) {
   const el = widgetEl(w), h2 = el.querySelector(":scope > header h2");

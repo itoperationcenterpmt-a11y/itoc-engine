@@ -3,14 +3,17 @@
 const attList = att => att.length ? `<ul class="att">${att.map(a => `<li class="${a[0]}"><span>${a[1]}</span>${go(a[2], "View")}</li>`).join("")}</ul>` : `<div class="empty sm">Nothing needs follow-up.</div>`;
 const rowLbl = t => `<div class="rowlbl">${t}</div>`;
 function vNetwork() {
-  const N = V.net ? netR() : null, Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)), grid = h => `<div class="grid">${h}</div>`;
-  if (!N && !hasW) return grid(`<section class="panel c12">${empty("No network data for this filter.")}</section>`);
-  const att = [], P = N ? N.P : null, WP = hasW ? wifiPanels(Wf) : null, bad = N ? N.rank.filter(s => s.status === NST.bad) : [];
+  const N = V.net ? netR() : null, Wf = V.wifi, hasW = !!(Wf && (Wf.total || Wf.apTotal)), Z = V.zbx_isp, hasZ = !!(Z && Z.all && Z.all.total), grid = h => `<div class="grid">${h}</div>`;
+  if (!N && !hasW && !hasZ) return grid(`<section class="panel c12">${empty("No network data for this filter.")}</section>`);
+  const att = [], P = N ? N.P : null, WP = hasW ? wifiPanels(Wf) : null, ZP = hasZ ? zbxIspPanels(Z) : null, bad = N ? N.rank.filter(s => s.status === NST.bad) : [];
+  if (hasZ && Z.all.down) att.push(["crit", `<b>${pl(Z.all.down, "ISP link")} down in Zabbix</b>: ${Z.down.slice(0, 3).map(x => esc(x.loc + " · " + x.provider)).join(", ")}${Z.down.length > 3 ? ", …" : ""}.`, "noc"]);
+  if (hasZ && Z.all.singleRisk) att.push(["warn", `<b>${pl(Z.all.singleRisk, "dual-link branch")} on single-link risk</b> (1 ISP down in Zabbix).`, "noc"]);
   if (bad.length) att.push(["crit", `<b>${bad.length} links below target ${pc(P.target, 1)}</b>: ${bad.slice(0, 3).map(s => esc(s.link) + " (" + pc(s.av, 2) + ")").join(", ")}${bad.length > 3 ? ", …" : ""}.`, "noc"]);
   if (N && N.nodata) att.push(["warn", `<b>${N.nodata} links with insufficient data</b> (monitoring coverage &lt; ${pc(P.minCov, 0)}), not rated for SLA.`, "noc"]);
   if (hasW && Wf.apTotal - Wf.apOnline > 0) att.push(["warn", `<b>${Wf.apTotal - Wf.apOnline} WiFi Access Points not online</b> of ${Wf.apTotal}.`, "wifi"]);
   if (hasW && Wf.weak) att.push(["warn", `<b>${Wf.weak} WiFi clients with weak signal</b> (below ${Wf.weakAt} dBm).`, "wifi"]);
   if (hasW && (Wf.error || Wf.stale)) att.push(["warn", `<b>Ruckus data ${Wf.error ? "failed to sync" : "not updated"}</b>, check the connector in Admin.`, "wifi"]);
+  const nz = hasZ ? `${rowLbl("ISP Live Monitor · Zabbix (ISP-*)")}<div class="kpis k6">${kpi("ISP Links", fmt(Z.all.total), fmt(Z.all.providers) + " providers · " + fmt(Z.all.locations) + " locations")}${kpi("Reachable Now", fmt(Z.all.online), Z.all.avail != null ? pc(Z.all.avail, 2) + " live" : "")}${kpi("Down Now", fmt(Z.all.down), Z.all.down ? "ICMP unreachable" : "all reachable", {cls: Z.all.down ? "warnv" : ""})}${kpi("Dual-Link Branches", fmt(Z.all.dualSites), Z.all.singleRisk ? fmt(Z.all.singleRisk) + " single-link risk" : "full redundancy", {cls: Z.all.singleRisk ? "warnv" : ""})}${kpi("Period Outages", fmt(Z.hist ? Z.hist.events : 0), Z.hist ? fx(Z.hist.hours, 1) + " h downtime" : "")}${kpi("Period Availability", Z.hist && Z.hist.avail != null ? pc(Z.hist.avail, 2) : "-", Z.hist && Z.hist.mttr != null ? "MTTR " + fx(Z.hist.mttr, 1) + " h" : "")}</div>` : "";
   const nk = N ? `${rowLbl("Link · PRTG")}<div class="kpis k6">${kpi("Availability", pc(N.avail, 2), "target " + pc(P.target, 1), {tip: RUMUS.av, cls: N.avail < P.target ? "warnv" : ""})}${kpi("Links Meeting SLA", N.ok + " of " + (N.ok + N.bad), N.bad + " not, " + N.nodata + " insufficient data", {tip: RUMUS.link})}${kpi("Total Downtime", fx(N.downH, 1) + " h", N.events + " incidents · " + N.noDown + " links without down", {tip: RUMUS.down})}${kpi("Data Coverage", pc(N.cov), "")}${kpi("Volume", fx(N.volTB, 1) + " TB", fx(N.mbps, 0) + " Mbit/s average")}${kpi("High Peak Utilization", fmt(N.utilHigh), "link ≥ " + pc(P.utilPeak, 0) + " of capacity", {tip: RUMUS.util})}</div>` : "";
   const nw = hasW ? `${rowLbl("WiFi · Ruckus")}<div class="kpis k6">${kpi("Active Clients", fmt(Wf.total), "connected now")}${kpi("Access Point", Wf.apTotal ? fmt(Wf.apOnline) + " / " + fmt(Wf.apTotal) : "-", "online", {cls: Wf.apTotal && Wf.apOnline < Wf.apTotal ? "warnv" : ""})}${kpi("Weak Signal", fmt(Wf.weak), "below " + Wf.weakAt + " dBm", {cls: Wf.weak ? "warnv" : ""})}${kpi("Portal Login", fmt(Wf.portalLogin), "of " + fmt(Wf.portal.length) + " portal SSID clients")}${kpi("Download", wBytes(Wf.tx), "")}${kpi("Upload", wBytes(Wf.rx), "")}</div>` : "";
   const key = s => String(s || "").toLowerCase().replace(/^branch\s+/, "").trim(), rows = {};
@@ -20,7 +23,8 @@ function vNetwork() {
   const st = r => (r.bad ? pill("crit", "Link problem") : (r.ap || 0) - (r.apOn || 0) > 0 ? pill("warn", "AP offline") : pill("good", "Normal"));
   const locP = panel("c12", "Summary per Location", "", tbl(["Location", "Links", "Lowest availability", "Downtime (min)", "AP online / total", "WiFi clients", "Status"],
     loc.map(r => [r.k, r.n == null ? "-" : r.n, r.av == null ? "-" : pc(r.av, 3), r.down == null ? "-" : r.down, r.ap == null ? "-" : r.apOn + " / " + r.ap, r.cl == null ? "-" : r.cl, {h: st(r)}]), {tall: true, r: [1, 2, 3, 5], empty: "No location data yet."}));
-  return grid(panel("c12", "Attention", ctxTxt(APPLY.network), attList(att))) + insArea("network") + nk + nw + grid(
+  return grid(panel("c12", "Attention", ctxTxt(APPLY.network), attList(att))) + insArea("network") + nz + nk + nw + grid(
+    (hasZ ? ZP.providers() + ZP.down().replace("panel c6", "panel c7") + ZP.matrix() : "") +
     (N ? panel("c8", "Link Downtime per Day", "Minutes per day", bars(dayB(N.daily), [{name: "Downtime (min)", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " min", label: "Daily downtime"})) : "") +
     (N ? panel("c4", "Top 5 Links by Downtime", "", tbl(["Link", "Availability", "Downtime (h)"], N.rank.slice(0, 5).map(s => [s.link, pc(s.av, 3), fx(s.down / 3600, 1)]), {r: [1, 2], empty: "No data yet."})) : "") +
     (hasW ? WP.trend() + WP.apdown() : "") + locP + (hasW ? WP.ssid() + WP.usage() + WP.loc() : ""));
