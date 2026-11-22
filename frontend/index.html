@@ -108,7 +108,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sheet-f{display:flex;gap:10px;margin-top:14px}.sheet-f .iconbtn{flex:1;padding:10px}
 .mtop{display:none}
 .wrap{max-width:calc(1320px*var(--fs));margin:0 auto;padding:22px 24px 56px}
-.pagehead{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:6px 16px;margin-bottom:14px}
+.pagehead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-bottom:14px}
 .pagehead h2{font-size:calc(24px*var(--fs));font-weight:800;letter-spacing:-.01em}
 .pagehead .sub{font-size:calc(13px*var(--fs))}
 @media (max-width:900px){
@@ -611,32 +611,43 @@ footer{margin-top:28px;color:var(--muted);font-size:calc(12px*var(--fs));display
 .zisp-loc{cursor:pointer;font-weight:600;color:var(--ink)}.zisp-loc:hover{color:var(--accent);text-decoration:underline}
 .scroll{position:relative;-webkit-overflow-scrolling:touch}
 /* TV / Wall Mode (Command Center Slideshow): edge-to-edge full screen, auto-chunked slides, optional multi-menu rotation, live status strip + auto-refresh */
-.ph-right{display:inline-flex;align-items:center;gap:10px;margin-left:auto}
-.wallbar{display:none;position:relative;overflow:hidden;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px 13px;margin-bottom:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--rad);box-shadow:var(--shadow)}
-.wallbar .wbrand{display:inline-flex;align-items:center;gap:10px;font:800 calc(16px*var(--fs)) var(--f-display)}
+.ph-right{display:inline-flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:nowrap}
+.wallbtn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:7px 15px;font-size:calc(13.5px*var(--fs));font-weight:600;line-height:1.3;background:var(--surface);color:var(--accent);border:1px solid var(--line);cursor:pointer;white-space:nowrap;box-shadow:var(--shadow);transition:background .15s,border-color .15s}
+.wallbtn:hover{background:var(--wash);border-color:var(--accent)}
+.wallbtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wallbar{display:none;position:relative;overflow:hidden;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 18px 13px;margin-bottom:14px;background:var(--side-bg);color:#f2f5f8;border:1px solid rgba(255,255,255,.1);border-radius:var(--rad);box-shadow:0 8px 24px -10px rgba(0,0,0,.45)}
+.wallbar .wbrand{display:inline-flex;align-items:center;gap:10px;font:800 calc(16px*var(--fs)) var(--f-display);color:#fff}
 .wallbar .wbrand img{height:28px;width:auto}
-.wallbar .wmeta{font-size:calc(12.5px*var(--fs));color:var(--muted)}
+.wallbar .wmeta{font-size:calc(12.5px*var(--fs));color:#b9c7d8}
+.wallbar .dutychip{background:rgba(12,163,12,.18);border-color:rgba(63,194,63,.45);color:#fff;padding:5px 13px;font-size:calc(13.5px*var(--fs))}
+.wallbar .dutychip small{font-size:calc(13px*var(--fs))}
 .wallbar .wacts{margin-left:auto;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
-.wallbar .wctrl{display:inline-flex;align-items:center;gap:4px;background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:2px 6px}
-.wallbar .wctrl button{background:none;border:0;color:var(--ink);cursor:pointer;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:calc(14px*var(--fs))}
-.wallbar .wctrl button:hover{background:var(--wash);color:var(--accent)}
-.wallbar .wsl{font-family:var(--f-mono);font-size:calc(12px*var(--fs));font-weight:600;padding:0 6px;color:var(--ink2);white-space:nowrap}
+.wallbar .wctrl{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:99px;padding:2px 8px}
+.wallbar .wctrl button{background:none;border:0;color:#fff;cursor:pointer;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:calc(14px*var(--fs))}
+.wallbar .wctrl button:hover{background:rgba(109,167,236,.25);color:#8dbcf4}
+.wallbar .wsl{font-family:var(--f-mono);font-size:calc(12px*var(--fs));font-weight:600;padding:0 6px;color:#dbe6f3;white-space:nowrap}
 .wallbar .wdots{display:inline-flex;align-items:center;gap:5px;padding:0 4px}
-.wallbar .wdots button{width:8px;height:8px;padding:0;border-radius:99px;border:0;background:var(--axis);cursor:pointer;transition:width .2s,background .2s}
-.wallbar .wdots button.on{width:20px;background:var(--accent)}
-.wallbar .wsec{width:auto;padding:4px 8px;border-radius:99px;font-size:calc(12px*var(--fs));background:var(--sunken);border:1px solid var(--line);color:var(--ink);font-family:var(--f-mono)}
-.wallbar .wcd{font-family:var(--f-mono);font-size:calc(11.5px*var(--fs));color:var(--accent);background:var(--wash);padding:4px 10px;border-radius:99px;font-weight:600;white-space:nowrap}
-.wallbar .wprog{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--sunken)}
-.wallbar .wprog i{display:block;height:100%;background:var(--accent);width:100%;transition:width .9s linear}
+.wallbar .wdots button{width:8px;height:8px;padding:0;border-radius:99px;border:0;background:rgba(255,255,255,.3);cursor:pointer;transition:width .2s,background .2s}
+.wallbar .wdots button.on{width:20px;background:#5BB5E2}
+.wallbar .wsec{width:auto;padding:5px 10px;border-radius:99px;font-size:calc(12px*var(--fs));background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);color:#fff;font-family:var(--f-mono)}
+.wallbar .wsec option{background:var(--side-bg);color:#fff}
+.wallbar .btn.ghost{color:#dbe6f3;border-color:rgba(255,255,255,.2);border-radius:99px;padding:5px 12px;font-size:calc(12px*var(--fs))}
+.wallbar .btn.ghost:hover{background:rgba(255,255,255,.12);color:#fff}
+.wallbar .wexit{border-color:rgba(238,123,123,.45)!important;color:#ffb4b4!important}
+.wallbar .wexit:hover{background:rgba(208,59,59,.25)!important;color:#fff!important}
+.wallbar .wcd{font-family:var(--f-mono);font-size:calc(11.5px*var(--fs));color:#8FCFEE;background:rgba(91,181,226,.16);padding:5px 11px;border-radius:99px;font-weight:600;white-space:nowrap}
+.wallbar .wprog{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.1)}
+.wallbar .wprog i{display:block;height:100%;background:#5BB5E2;width:100%;transition:width .9s linear}
 body.wall .shell{display:block}
 body.wall .side,body.wall .mtop,body.wall .fwrap,body.wall .pagehead,body.wall #subnav,body.wall footer,body.wall .secjump,body.wall .sechd,body.wall .rowlbl{display:none!important}
-body.wall .wrap{max-width:none;margin:0;padding:12px 18px 20px}
+body.wall .wrap{max-width:none;margin:0;padding:12px 18px 18px;min-height:100vh}
 body.wall .wallbar{display:flex}
-body.wall .grid{margin-top:10px;gap:14px}
-body.wall .panel{padding:14px 16px}
+body.wall .grid{margin-top:8px;gap:14px;align-items:stretch}
+body.wall .panel{padding:15px 18px}
+body.wall .tall{max-height:calc(100vh - 210px)}
 .wslide-hide{display:none!important}
 body.wall .wslide-in{animation:wallfade .35s ease}
-@keyframes wallfade{from{opacity:.15;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes wallfade{from{opacity:.25;transform:translateY(4px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){body.wall .wslide-in{animation:none}}
 @media (max-width:900px){#wallBtn{display:none}}
 @media (max-width:900px){.dutychip{display:none}}
@@ -757,7 +768,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
   </div>
   <div class="wrap">
     <div class="wallbar" id="wallBar" role="region" aria-label="TV Wall Slideshow">
-      <span class="wbrand"><img src="assets/tera-icon-col.png" class="lg-l" alt=""><img src="assets/tera-icon-rev.png" class="lg-d" alt=""><span id="wallTitle">TERA Dashboard</span></span>
+      <span class="wbrand"><img src="assets/tera-icon-rev.png" alt=""><span id="wallTitle">TERA Dashboard</span></span>
       <span class="wmeta" id="wallSub"></span>
       <span id="dutyW" class="dutychip"></span>
       <span class="wacts">
@@ -765,11 +776,11 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
         <select class="wsec" id="wallSecSel" aria-label="Slide duration" title="Slide duration"><option value="10">10s / slide</option><option value="15">15s / slide</option><option value="20">20s / slide</option><option value="30">30s / slide</option><option value="45">45s / slide</option><option value="60">60s / slide</option></select>
         <button class="btn ghost sm" id="wallRotBtn" type="button" title="Toggle rotating across configured menus or looping this page">Rotate menus</button>
         <span class="wcd" id="wallCd">Refresh 60s</span>
-        <button class="btn ghost sm" id="wallExit" type="button">Exit (Esc)</button>
+        <button class="btn ghost sm wexit" id="wallExit" type="button">Exit (Esc)</button>
       </span>
       <span class="wprog"><i id="wallProg"></i></span>
     </div>
-    <div class="pagehead"><h2 id="ptitle"></h2><span class="sub" id="psub" hidden></span><span class="ph-right"><button class="btn ghost sm" id="wallBtn" type="button" title="Fullscreen TV / Wall Slideshow mode">TV / Wall Mode</button><span id="dutyH" class="dutychip"></span></span></div>
+    <div class="pagehead"><h2 id="ptitle"></h2><span class="sub" id="psub" hidden></span><span class="ph-right"><button class="wallbtn" id="wallBtn" type="button" title="Fullscreen TV / Wall Slideshow mode"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>TV / Wall Mode</button><span id="dutyH" class="dutychip"></span></span></div>
     <div id="subnav"></div>
     <div id="laybar"></div>
     <div class="fwrap" id="fwrap">

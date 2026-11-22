@@ -109,7 +109,6 @@ function showWallSlide(idx, resetTimer = true) {
   });
   if (resetTimer) WALL.slideLeft = wallCfgSlide();
   updateWallBar();
-  window.dispatchEvent(new Event("resize"));
   devMaps();
 }
 function wallStep(dir) {
@@ -150,8 +149,10 @@ function setWall(on) {
     WALL.slideSec = wallCfgSlide(); WALL.slideLeft = WALL.slideSec;
     WALL.refSec = wallCfgRefresh(); WALL.refLeft = WALL.refSec;
     WALL.rotate = wallRotationList().length > 1;
+    _wallW = window.innerWidth; _wallH = window.innerHeight;
     if (S.layEdit) set({layEdit: false});
     renderDuty();
+    window.scrollTo({top: 0});
     if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
     requestAnimationFrame(() => buildWallSlides(false));
   } else {
@@ -160,8 +161,14 @@ function setWall(on) {
     window.dispatchEvent(new Event("resize"));
   }
 }
-let _wallResizeT = null;
-window.addEventListener("resize", () => { if (!WALL.on) return; clearTimeout(_wallResizeT); _wallResizeT = setTimeout(() => buildWallSlides(true), 220); });
+let _wallResizeT = null, _wallW = 0, _wallH = 0;
+window.addEventListener("resize", () => {
+  if (!WALL.on) return;
+  if (window.innerWidth === _wallW && window.innerHeight === _wallH) return;
+  _wallW = window.innerWidth; _wallH = window.innerHeight;
+  clearTimeout(_wallResizeT);
+  _wallResizeT = setTimeout(() => buildWallSlides(true), 250);
+});
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     if (!$("sheet").hidden) openSheet(false);
