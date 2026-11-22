@@ -6,24 +6,28 @@ function xl(labels, x, y) { const n = labels.length, sparse = labels.some(t => t
 const empty = (t) => `<div class="empty"><b>No data yet</b><span>${t || "No data for this filter. Try changing the period, shift, or location."}</span></div>`;
 function axisFmt(v, unit) { return unit === "mbps" ? fx(v, v < 10 && v ? 1 : 0) : fmt(v); }
 function bars(B, series, o = {}) {
-  const W = o.w || 720, Hh = o.h || 220, L = 52, R = 8, T = 10, Bm = 26, pw = W - L - R, ph = Hh - T - Bm, n = B.length, k = series.length, dec = o.dec || 0, ff = v => dec ? fx(v, dec) : fmt(v);
+  const W = o.w || 720, Hh = o.h || 220, L = 52, R = 16, T = 10, Bm = 26, pw = W - L - R, ph = Hh - T - Bm, n = B.length, k = series.length, dec = o.dec || 0, ff = v => dec ? fx(v, dec) : fmt(v);
   if (!n || !series.some(s => s.v.some(v => v > 0))) return empty(o.empty);
-  const top = Math.max(...B.map((b, i) => o.stack ? series.reduce((a, s) => a + s.v[i], 0) : Math.max(...series.map(s => s.v[i])))), mx = nice(top), steps = [4, 5, 2].find(s => mx / s >= 1 ? Number.isInteger(mx / s) : true) || 4, gw = pw / n, y = v => T + ph - v / mx * ph;
+  const refV = o.ref && o.ref.v > 0 ? o.ref.v : 0;
+  const top = Math.max(refV, ...B.map((b, i) => o.stack ? series.reduce((a, s) => a + s.v[i], 0) : Math.max(...series.map(s => s.v[i])))), mx = nice(top), steps = [4, 5, 2].find(s => mx / s >= 1 ? Number.isInteger(mx / s) : true) || 4, gw = pw / n, y = v => T + ph - v / mx * ph;
   let g = ""; for (let i = 0; i <= steps; i++) { const v = mx / steps * i; g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(${i ? "--line" : "--axis"})"/><text x="${L - 6}" y="${y(v) + 3.5}" text-anchor="end">${mx / steps < 1 ? fx(v, 1) : fmt(v)}</text>`; }
   let m = ""; const bw = o.stack || k === 1 ? Math.min(28, gw * .66) : Math.min(16, gw * .72 / k);
   B.forEach((b, i) => { const cx = L + gw * i + gw / 2, tip = esc(b.full + "\n" + series.map(s => s.name + ": " + ff(s.v[i]) + (o.unit || "")).join("\n"));
     if (o.stack) { let acc = 0; series.forEach(s => { const v = s.v[i]; if (!v) return; m += `<rect x="${cx - bw / 2}" y="${y(acc + v)}" width="${bw}" height="${Math.max(v / mx * ph, 1)}" fill="var(${s.c})" stroke="var(--surface)" stroke-width="1"/>`; acc += v; }); }
     else series.forEach((s, j) => { const v = s.v[i], x = cx - (k * bw + (k - 1) * 2) / 2 + j * (bw + 2); if (v) m += `<rect x="${x}" y="${y(v)}" width="${bw}" height="${Math.max(v / mx * ph, 1)}" rx="2" fill="var(${s.c})"/>`; });
     m += `<rect x="${L + gw * i}" y="${T}" width="${gw}" height="${ph}" fill="transparent" data-tip="${tip}"/>`; });
+  if (refV) { const ry = y(refV), rc = o.ref.c || "--warn"; m += `<line x1="${L}" x2="${W - R}" y1="${ry}" y2="${ry}" stroke="var(${rc})" stroke-width="1.5" stroke-dasharray="5 4"/>${o.ref.label ? `<text x="${W - R}" y="${Math.max(T + 10, ry - 4)}" text-anchor="end" fill="var(${rc})" font-weight="600">${esc(o.ref.label)}</text>` : ""}`; }
   return `<svg class="chart" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="${esc(o.label || "")}">${g}${m}${xl(B.map(b => b.label), i => L + gw * i + gw / 2, Hh - 8)}</svg>`;
 }
 function lines(B, series, o = {}) {
-  const W = o.w || 720, Hh = o.h || 230, L = 52, R = 10, T = 10, Bm = 26, pw = W - L - R, ph = Hh - T - Bm, n = B.length;
+  const W = o.w || 720, Hh = o.h || 230, L = 52, R = 26, T = 10, Bm = 26, pw = W - L - R, ph = Hh - T - Bm, n = B.length;
   const vals = series.flatMap(s => s.v.filter(v => v != null)); if (!n || !vals.some(v => v > 0)) return empty(o.empty);
-  const mx = nice(Math.max(...vals)), x = i => L + (n < 2 ? pw / 2 : pw * i / (n - 1)), y = v => T + ph - v / mx * ph;
+  const refV = o.ref && o.ref.v > 0 ? o.ref.v : 0;
+  const mx = nice(Math.max(refV, ...vals)), x = i => L + (n < 2 ? pw / 2 : pw * i / (n - 1)), y = v => T + ph - v / mx * ph;
   let g = ""; for (let i = 0; i <= 4; i++) { const v = mx / 4 * i; g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(${i ? "--line" : "--axis"})"/><text x="${L - 6}" y="${y(v) + 3.5}" text-anchor="end">${mx / 4 < 1 ? fx(v, 1) : fmt(v)}</text>`; }
   let m = ""; series.forEach(s => { let d = "", pen = false; s.v.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; }); m += `<path d="${d}" fill="none" stroke="var(${s.c})" stroke-width="${o.thin ? 1.4 : 2}" stroke-linejoin="round" stroke-linecap="round"/>`; });
   if (o.marks) o.marks.forEach(i => { m += `<line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${T + ph}" stroke="var(--crit)" stroke-opacity=".35" stroke-width="${Math.max(1, pw / n)}"/>`; });
+  if (refV) { const ry = y(refV), rc = o.ref.c || "--warn"; m += `<line x1="${L}" x2="${W - R}" y1="${ry}" y2="${ry}" stroke="var(${rc})" stroke-width="1.5" stroke-dasharray="5 4"/>${o.ref.label ? `<text x="${W - R}" y="${Math.max(T + 10, ry - 4)}" text-anchor="end" fill="var(${rc})" font-weight="600">${esc(o.ref.label)}</text>` : ""}`; }
   const gw = pw / Math.max(1, n - 1); let ov = "";
   B.forEach((b, i) => { ov += `<rect x="${x(i) - gw / 2}" y="${T}" width="${gw}" height="${ph}" fill="transparent" data-tip="${esc(b.full + "\n" + series.map(s => s.name + ": " + (s.v[i] == null ? "no data" : fx(s.v[i], o.dec ?? 1) + (o.unit || ""))).join("\n"))}"/>`; });
   return `<svg class="chart" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="${esc(o.label || "")}">${g}${m}${ov}${xl(B.map(b => b.label), x, Hh - 8)}</svg>`;
@@ -93,7 +97,7 @@ function subnav(parent) {
 function kpiCols() { $("view").querySelectorAll(".kpis").forEach(k => { const n = k.children.length, c = n <= 6 ? n : Math.ceil(n / 2); k.style.setProperty("--kn", c); k.style.setProperty("--kc", c < 6 ? Math.min(c, 4) : c % 3 === 0 ? 3 : 2); k.style.setProperty("--kb", c % 3 === 0 ? 3 : 2); }); }
 function renderDuty() {
   const n = nowShift(), tm = teamOn(n.date, n.shift), d = new Date(nowMs()), hh = pad(d.getUTCHours()), mm = pad(d.getUTCMinutes()), ss = pad(d.getUTCSeconds());
-  ["duty", "dutyH"].forEach(id => {
+  ["duty", "dutyH", "dutyW"].forEach(id => {
     const e = $(id); if (!e) return;
     if (!e.querySelector(".clk")) e.innerHTML = `<i></i><span><span class="dtxt"></span><small class="clk"><span class="th"></span><b>:</b><span class="tm"></span><b>:</b><span class="ts"></span> WIB</small></span>`;   // structure is built once so the animation does not restart every second
     e.querySelector(".dtxt").textContent = `On duty: Team ${tm} · ${SN[n.shift]}`;
@@ -111,7 +115,7 @@ function renderShell(loading) {
   const NAVT = TABS.filter(t => topOf(t[0]) === t[0]), curTop = topOf(S.tab);
   /* The pages under a menu item (ISP, WiFi, ...) are listed under it in the sidebar while it is open; on a phone they stay as tabs inside the page */
   const subL = k => { const it = TABS.filter(t => !SUBHIDE.includes(t[0]) && (t[0] === k || (MODS[t[0]] || {}).parent === k)); return it.length < 2 ? "" : it.map(([sk, sl]) => `<a role="tab" class="subl" href="#${sk}" data-tab="${sk}" aria-selected="${sk === S.tab}">${esc(sk === k && SUBSUM[k] ? SUBSUM[k] : sl)}</a>`).join(""); }, SHORT = {cyber: "Cyber"};
-  $("tabs").innerHTML = NAVT.map(([k, l, bd]) => `<a role="tab" href="#${k}" data-tab="${k}" title="${esc(l)}" aria-selected="${k === curTop}">${icon(k)}<span>${SHORT[k] ? `<span class="lf">${esc(l)}</span><span class="ls">${SHORT[k]}</span>` : esc(l)}</span></a>${k === curTop ? subL(k) : ""}`).join("");
+  $("tabs").innerHTML = NAVT.map(([k, l, bd], idx) => `<a role="tab"${idx >= 4 ? ' class="mhide"' : ""} href="#${k}" data-tab="${k}" title="${esc(l)}" aria-selected="${k === curTop}">${icon(k)}<span>${SHORT[k] ? `<span class="lf">${esc(l)}</span><span class="ls">${SHORT[k]}</span>` : esc(l)}</span></a>${k === curTop ? subL(k) : ""}`).join("");
   $("sheetGrid").innerHTML = NAVT.map(([k, l, bd]) => `<a href="#${k}" data-tab="${k}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></a>`).join("");
   $("moreBtn").classList.toggle("on", NAVT.findIndex(t => t[0] === curTop) > 3);
   const cur = TABS.find(t => t[0] === S.tab), par = (MODS[S.tab] || {}).parent, grp = SUBSUM[S.tab] ? S.tab : (SUBSUM[par] ? par : "");

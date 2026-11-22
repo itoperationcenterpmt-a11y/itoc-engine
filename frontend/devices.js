@@ -91,7 +91,7 @@ function vDevices() {
   const locs = D.byLoc.map(r => [r.k, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, r.deg || 0, r.maint, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}, {h: stBar(r)}]);
   const downByLoc = D.byLoc.filter(r => r.down).slice(0, 12).map(r => [r.k, r.down, 0, r.down + " / " + r.total]);
   const rows = D.list.map(x => [x.name, x.typeLabel, x.loc, {h: devPill(x.status)}, x.since ? dtime(x.since) : "-", {h: `<span class="${x.ageH != null && x.ageH > 24 ? "crit-t" : ""}">${durTxt(x.ageH)}</span>`}, x.problem]);
-  return insArea() + (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
+  return (kt ? "" : insArea()) + (warns.length ? grid(`<section class="panel c12">${kt ? fold(warns.length + " sync / mapping notices", `<ul class="att">${warns.join("")}</ul>`) : `<ul class="att">${warns.join("")}</ul>`}</section>`) : "") + kp + grid(
     panel(kt ? "c8" : "c7", "Site Map", D.map.length + " locations", mapLegend() + mapSvg(D)) +
     (kt ? "" : panel("c5", "Status by Category", "Updated " + dtime(D.updated), devLegend() + kinds)) +
     panel("c4", "Down Duration", D.downN + " devices down", hbars(D.ageDist.map(x => [x.k, x.n, 0, fmt(x.n)]))) +

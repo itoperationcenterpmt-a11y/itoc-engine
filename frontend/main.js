@@ -48,7 +48,37 @@ const VIEWS = {report: () => vReport(), ringkasan: () => vRingkasan(), servicede
   internet: () => vInternet(), insight: () => vInsight(), network: () => vNetwork(), cyber: () => vCyber(), jadwal: () => vJadwal(), serahterima: () => vHo(),
   kelengkapan: () => vData(), admin: () => vAdmin()};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
+let WALL_SEC = 60;
+function updateWallBar() {
+  if (!document.body.classList.contains("wall")) return;
+  const t = $("wallTitle"), s = $("wallSub"), cd = $("wallCd");
+  if (t) t.textContent = $("ptitle").textContent || BRAND;
+  if (s) s.textContent = ctxTxt();
+  if (cd) cd.textContent = "Auto-refresh " + WALL_SEC + "s";
+}
+function setWall(on) {
+  document.body.classList.toggle("wall", !!on);
+  WALL_SEC = 60;
+  if (on) {
+    if (S.layEdit) set({layEdit: false});
+    updateWallBar();
+    renderDuty();
+    if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+  } else if (document.fullscreenElement && document.exitFullscreen) {
+    document.exitFullscreen().catch(() => {});
+  }
+  window.dispatchEvent(new Event("resize"));
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    if (!$("sheet").hidden) openSheet(false);
+    else if (document.body.classList.contains("wall")) setWall(false);
+  }
+  if ((e.key === "Enter" || e.key === " ") && e.target.closest("[data-filter-site]")) {
+    e.preventDefault();
+    e.target.closest("[data-filter-site]").click();
+  }
+});
 /* Long pages: the panels are grouped under a heading that folds, with a "Jump to" bar on top. To move a widget to another group, edit the lists below. The names are widget titles (a title only has to start with the name); the first group is open until the user opens another. Pages in FLAT_SECTIONS keep the headings and the Jump to bar but never fold. */
 const SECTIONS = {
   devices: [["Overview", ["Site Map", "Status by Category"], true], ["Downtime analysis", ["Down Duration", "Down by Location", "Down History", "Down Incidents per Day", "Downtime per Day", "Downtime per Location", "Downtime per Device Type"]], ["Inventory", ["By Device Type", "Per Location", "Device List"]], ["Problem devices", ["Most Frequently Down", "Dominant Problems"]]],
@@ -103,7 +133,7 @@ async function render(reload) {
   try {
     await ensurePage(tab);
     if (S.tab !== tab) return;                                   // the user moved to another page while the script loaded
-    $("view").innerHTML = VIEWS[S.tab](); $("view").dataset.tab = S.tab; if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); kpiCols(); groupSections(); devMaps();
+    $("view").innerHTML = VIEWS[S.tab](); $("view").dataset.tab = S.tab; if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); kpiCols(); groupSections(); devMaps(); updateWallBar();
   } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Could not display the page: " + esc(e.message))}</section></div>`; }
 }
 /* Read-only Admin (role with admin_view but not is_admin): every edit control is hidden; the server still rejects changes. */
@@ -374,11 +404,15 @@ const pkOf = row => S.mdata.pk.map(k => row[k]).join("");
 
 /* ---------- event ---------- */
 document.addEventListener("click", async e => {
+  const tile = e.target.closest("[data-filter-site]");
+  if (tile && !CFG.me.site) { const st = tile.dataset.filterSite; set({site: S.site === st ? "" : st}); return; }
   const b = e.target.closest("button, a[data-tab], a[data-go]"); if (!b || b.disabled) return;
   if (b.tagName === "A") { if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button) return; e.preventDefault(); }       // menu entries are real links: right-click and Ctrl-click open a new tab
   const d = b.dataset;
   try {
-    if (b.id === "layBtn") set({layEdit: !S.layEdit, layRole: "", layProfile: curProfile()});
+    if (b.id === "wallBtn") { setWall(!document.body.classList.contains("wall")); return; }
+    else if (b.id === "wallExit") { setWall(false); return; }
+    else if (b.id === "layBtn") set({layEdit: !S.layEdit, layRole: "", layProfile: curProfile()});
     else if (b.id === "profNew") await profileNew();
     else if (b.id === "profRename") await profileRename();
     else if (b.id === "profDel") await profileDelete();
@@ -544,11 +578,28 @@ function openPw() {
 
 /* ---------- tooltip ---------- */
 const tip = $("tip");
-document.addEventListener("pointerover", e => { const el = e.target.closest("[data-tip]"); if (!el) { tip.hidden = true; return; } tip.textContent = el.dataset.tip; tip.hidden = false; });
+document.addEventListener("pointerover", e => { if (e.pointerType === "touch") return; const el = e.target.closest("[data-tip]"); if (!el) { tip.hidden = true; return; } tip.textContent = el.dataset.tip; tip.hidden = false; });
+document.addEventListener("pointerdown", e => {
+  if (e.pointerType !== "touch") return;
+  const el = e.target.closest("[data-tip]");
+  if (!el) { tip.hidden = true; return; }
+  tip.textContent = el.dataset.tip; tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(8, Math.min(innerWidth - w - 8, e.clientX - w / 2)) + "px";
+  tip.style.top = Math.max(8, e.clientY - h - 14) + "px";
+});
 document.addEventListener("pointermove", e => { if (tip.hidden) return; const w = tip.offsetWidth, h = tip.offsetHeight; tip.style.left = Math.min(innerWidth - w - 8, e.clientX + 12) + "px"; tip.style.top = (e.clientY + 14 + h > innerHeight ? e.clientY - h - 10 : e.clientY + 14) + "px"; });
 document.addEventListener("focusin", e => { const el = e.target.closest(".ib"); if (!el) return; const r = el.getBoundingClientRect(); tip.textContent = el.dataset.tip; tip.hidden = false; tip.style.left = Math.min(innerWidth - tip.offsetWidth - 8, r.left) + "px"; tip.style.top = r.bottom + 6 + "px"; });
 document.addEventListener("focusout", () => { tip.hidden = true; });
-setInterval(() => { if (!CFG || $("app").hidden || document.hidden) return; renderDuty(); }, 1000);
+setInterval(() => {
+  if (!CFG || $("app").hidden || document.hidden) return;
+  renderDuty();
+  if (document.body.classList.contains("wall")) {
+    WALL_SEC--;
+    if (WALL_SEC <= 0) { WALL_SEC = 60; render(true); }
+    updateWallBar();
+  }
+}, 1000);
 
 /* ---------- login & boot ---------- */
 function showLogin(msg, change) {
