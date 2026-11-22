@@ -48,31 +48,129 @@ const VIEWS = {report: () => vReport(), ringkasan: () => vRingkasan(), servicede
   internet: () => vInternet(), insight: () => vInsight(), network: () => vNetwork(), cyber: () => vCyber(), jadwal: () => vJadwal(), serahterima: () => vHo(),
   kelengkapan: () => vData(), admin: () => vAdmin()};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
-let WALL_SEC = 60;
+const WALL = {on: false, paused: false, rotate: true, slides: [], idx: 0, slideSec: 15, slideLeft: 15, refSec: 60, refLeft: 60, customSlideSec: null};
+const wallCfgSlide = () => Math.max(5, +(WALL.customSlideSec || (CFG && CFG.params["ui.wall_slide_sec"]) || 15));
+const wallCfgRefresh = () => Math.max(15, +((CFG && CFG.params["ui.wall_refresh_sec"]) || 60));
+function wallRotationList() {
+  const raw = (CFG && CFG.params["ui.wall_rotate_tabs"]) || [];
+  const allowed = new Set((TABS || []).map(t => t[0]));
+  return (Array.isArray(raw) ? raw : []).filter(k => allowed.has(k));
+}
+function wallCollectItems() {
+  const v = $("view"); if (!v) return [];
+  const lay = v.querySelector(":scope > .grid.lay");
+  if (lay) return [...lay.querySelectorAll(":scope > .wblock:not(.off)")];
+  const items = [];
+  [...v.children].forEach(ch => {
+    if (ch.classList.contains("grid")) {
+      [...ch.children].forEach(el => { if (!el.classList.contains("secjump") && !el.classList.contains("sechd") && !el.hidden) items.push(el); });
+    } else if (!ch.classList.contains("rowlbl") && !ch.hidden) {
+      items.push(ch);
+    }
+  });
+  return items;
+}
+function buildWallSlides(keepIdx) {
+  const items = wallCollectItems();
+  items.forEach(el => { el.classList.remove("wslide-hide", "wslide-in"); });
+  if (!WALL.on || !items.length) { WALL.slides = items.length ? [items] : []; WALL.idx = 0; updateWallBar(); return; }
+  /* Group items that sit side-by-side on the same visual row so a multi-column row (e.g. 4 gauges or c8+c4) is never split across slides. */
+  const rows = [];
+  items.forEach(el => {
+    const r = el.getBoundingClientRect();
+    if (!r.height) return;
+    const last = rows[rows.length - 1];
+    if (last && Math.abs(r.top - last.top) < 18) { last.els.push(el); last.h = Math.max(last.h, r.height); }
+    else rows.push({top: r.top, h: r.height, els: [el]});
+  });
+  const barH = ($("wallBar") ? $("wallBar").offsetHeight : 62) + 42;
+  const avail = Math.max(360, window.innerHeight - barH);
+  const slides = [];
+  let cur = [], curH = 0;
+  rows.forEach(row => {
+    const addH = row.h + (cur.length ? 14 : 0);
+    if (cur.length && curH + addH > avail) { slides.push(cur); cur = [...row.els]; curH = row.h; }
+    else { cur.push(...row.els); curH += addH; }
+  });
+  if (cur.length) slides.push(cur);
+  WALL.slides = slides.length ? slides : [items];
+  WALL.idx = keepIdx ? Math.min(WALL.idx, WALL.slides.length - 1) : 0;
+  showWallSlide(WALL.idx, false);
+}
+function showWallSlide(idx, resetTimer = true) {
+  if (!WALL.on) return;
+  const n = WALL.slides.length || 1;
+  WALL.idx = ((idx % n) + n) % n;
+  const active = new Set(WALL.slides[WALL.idx] || []);
+  wallCollectItems().forEach(el => {
+    const show = active.has(el);
+    el.classList.toggle("wslide-hide", !show);
+    if (show) { el.classList.remove("wslide-in"); void el.offsetWidth; el.classList.add("wslide-in"); }
+  });
+  if (resetTimer) WALL.slideLeft = wallCfgSlide();
+  updateWallBar();
+  window.dispatchEvent(new Event("resize"));
+  devMaps();
+}
+function wallStep(dir) {
+  if (!WALL.on) return;
+  const n = WALL.slides.length || 1, rot = WALL.rotate ? wallRotationList() : [];
+  const next = WALL.idx + dir;
+  if (next >= 0 && next < n) { showWallSlide(next); return; }
+  if (rot.length > 1) {
+    const ci = rot.indexOf(S.tab), ni = ci < 0 ? 0 : ((ci + (dir > 0 ? 1 : -1)) + rot.length) % rot.length;
+    WALL.idx = 0; WALL.slideLeft = wallCfgSlide();
+    set({tab: rot[ni]});
+    return;
+  }
+  showWallSlide(next);
+}
 function updateWallBar() {
-  if (!document.body.classList.contains("wall")) return;
-  const t = $("wallTitle"), s = $("wallSub"), cd = $("wallCd");
+  if (!WALL.on) return;
+  const t = $("wallTitle"), s = $("wallSub"), cd = $("wallCd"), sl = $("wallSl"), pl = $("wallPlay"), dots = $("wallDots"), prog = $("wallProg"), rb = $("wallRotBtn"), sel = $("wallSecSel");
+  const n = WALL.slides.length || 1, curSec = wallCfgSlide(), rot = wallRotationList();
   if (t) t.textContent = $("ptitle").textContent || BRAND;
   if (s) s.textContent = ctxTxt();
-  if (cd) cd.textContent = "Auto-refresh " + WALL_SEC + "s";
+  if (sl) sl.textContent = (WALL.idx + 1) + " / " + n;
+  if (pl) { pl.textContent = WALL.paused ? "▶" : "⏸"; pl.title = WALL.paused ? "Resume slideshow (Space)" : "Pause slideshow (Space)"; }
+  if (dots) dots.innerHTML = Array.from({length: n}, (_, i) => `<button type="button" data-wdot="${i}" class="${i === WALL.idx ? "on" : ""}" aria-label="Slide ${i + 1}"></button>`).join("");
+  if (rb) { rb.hidden = rot.length < 2; rb.textContent = WALL.rotate ? "Rotate menus (" + rot.length + ")" : "Loop this page"; }
+  if (sel) {
+    if (![...sel.options].some(o => +o.value === curSec)) sel.insertAdjacentHTML("afterbegin", `<option value="${curSec}">${curSec}s / slide</option>`);
+    sel.value = String(curSec);
+  }
+  if (cd) cd.textContent = "Refresh " + WALL.refLeft + "s";
+  if (prog) prog.style.width = Math.max(0, Math.min(100, (WALL.slideLeft / curSec) * 100)).toFixed(1) + "%";
 }
 function setWall(on) {
-  document.body.classList.toggle("wall", !!on);
-  WALL_SEC = 60;
-  if (on) {
+  WALL.on = !!on;
+  document.body.classList.toggle("wall", WALL.on);
+  if (WALL.on) {
+    WALL.paused = false;
+    WALL.slideSec = wallCfgSlide(); WALL.slideLeft = WALL.slideSec;
+    WALL.refSec = wallCfgRefresh(); WALL.refLeft = WALL.refSec;
+    WALL.rotate = wallRotationList().length > 1;
     if (S.layEdit) set({layEdit: false});
-    updateWallBar();
     renderDuty();
     if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
-  } else if (document.fullscreenElement && document.exitFullscreen) {
-    document.exitFullscreen().catch(() => {});
+    requestAnimationFrame(() => buildWallSlides(false));
+  } else {
+    wallCollectItems().forEach(el => el.classList.remove("wslide-hide", "wslide-in"));
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    window.dispatchEvent(new Event("resize"));
   }
-  window.dispatchEvent(new Event("resize"));
 }
+let _wallResizeT = null;
+window.addEventListener("resize", () => { if (!WALL.on) return; clearTimeout(_wallResizeT); _wallResizeT = setTimeout(() => buildWallSlides(true), 220); });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     if (!$("sheet").hidden) openSheet(false);
-    else if (document.body.classList.contains("wall")) setWall(false);
+    else if (WALL.on) setWall(false);
+  }
+  if (WALL.on && !["INPUT", "SELECT", "TEXTAREA"].includes((e.target || {}).tagName)) {
+    if (e.key === "ArrowRight") { e.preventDefault(); wallStep(1); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); wallStep(-1); }
+    else if (e.key === " ") { e.preventDefault(); WALL.paused = !WALL.paused; updateWallBar(); }
   }
   if ((e.key === "Enter" || e.key === " ") && e.target.closest("[data-filter-site]")) {
     e.preventDefault();
@@ -133,7 +231,7 @@ async function render(reload) {
   try {
     await ensurePage(tab);
     if (S.tab !== tab) return;                                   // the user moved to another page while the script loaded
-    $("view").innerHTML = VIEWS[S.tab](); $("view").dataset.tab = S.tab; if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); kpiCols(); groupSections(); devMaps(); updateWallBar();
+    $("view").innerHTML = VIEWS[S.tab](); $("view").dataset.tab = S.tab; if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); kpiCols(); groupSections(); devMaps(); if (WALL.on) requestAnimationFrame(() => buildWallSlides(WALL._keepIdx)); WALL._keepIdx = false;
   } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Could not display the page: " + esc(e.message))}</section></div>`; }
 }
 /* Read-only Admin (role with admin_view but not is_admin): every edit control is hidden; the server still rejects changes. */
@@ -297,6 +395,7 @@ const PICKP = {
   "sd.required_fields": {t: "multi", src: o => o.sd_fields}, "sd.rank_units": {t: "multi", src: o => o.units},
   "wifi.kill_roles": {t: "multi", src: o => o.roles}, "wifi.kill_users": {t: "multi", src: o => o.users}, "wifi.portal_auth": {t: "multi", src: o => o.wifi_auth},
   "ui.default_preset": {t: "single", src: () => (CFG.params["ui.presets"] || []).map(x => x[0]), lab: v => (((CFG.params["ui.presets"] || []).find(x => x[0] === v)) || [v, v])[1]},
+  "ui.wall_rotate_tabs": {t: "multi", src: () => (CFG.modules || []).filter(m => !["admin", "report", "kelengkapan"].includes(m.key)).map(m => m.key), lab: k => ((MODS[k] || {}).label || k)},
   "admin.locked_pages": {t: "multi", src: () => (typeof ADM !== "undefined" ? ADM.flatMap(([, , ps]) => ps.map(x => x[0])) : [])},
   "dev.tab_kinds": {t: "kvsel", src: o => o.dev_kinds}, "dev.kind_labels": {t: "kvtext", keys: o => o.dev_kinds}, "report.contact": {t: "object"}
 };
@@ -410,8 +509,13 @@ document.addEventListener("click", async e => {
   if (b.tagName === "A") { if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button) return; e.preventDefault(); }       // menu entries are real links: right-click and Ctrl-click open a new tab
   const d = b.dataset;
   try {
-    if (b.id === "wallBtn") { setWall(!document.body.classList.contains("wall")); return; }
+    if (b.id === "wallBtn") { setWall(!WALL.on); return; }
     else if (b.id === "wallExit") { setWall(false); return; }
+    else if (b.id === "wallPrev") { wallStep(-1); return; }
+    else if (b.id === "wallNext") { wallStep(1); return; }
+    else if (b.id === "wallPlay") { WALL.paused = !WALL.paused; updateWallBar(); return; }
+    else if (b.id === "wallRotBtn") { WALL.rotate = !WALL.rotate; updateWallBar(); return; }
+    else if (d.wdot !== undefined) { showWallSlide(+d.wdot); return; }
     else if (b.id === "layBtn") set({layEdit: !S.layEdit, layRole: "", layProfile: curProfile()});
     else if (b.id === "profNew") await profileNew();
     else if (b.id === "profRename") await profileRename();
@@ -485,6 +589,7 @@ document.addEventListener("change", async e => {
   else if (t.id === "layRole") set({layRole: t.value});
   else if (t.id === "layProf") set({layProfile: t.value});
   else if (t.id === "profSel") { await send("/api/me/profile", {profile: t.value}, "PUT"); CFG.me.profile = t.value; render(false); }
+  else if (t.id === "wallSecSel") { WALL.customSlideSec = +t.value || 15; WALL.slideLeft = wallCfgSlide(); updateWallBar(); }
   else if (t.dataset.wf !== undefined) applyWF();
   else if (t.dataset.wp !== undefined) applyWP();
   else if (t.dataset.wgroup !== undefined) {   // change the group filter on a map widget without adding a new widget
@@ -597,9 +702,13 @@ document.addEventListener("focusout", () => { tip.hidden = true; });
 setInterval(() => {
   if (!CFG || $("app").hidden || document.hidden) return;
   renderDuty();
-  if (document.body.classList.contains("wall")) {
-    WALL_SEC--;
-    if (WALL_SEC <= 0) { WALL_SEC = 60; render(true); }
+  if (WALL.on) {
+    WALL.refLeft--;
+    if (WALL.refLeft <= 0) { WALL.refLeft = wallCfgRefresh(); WALL._keepIdx = true; render(true); }
+    if (!WALL.paused) {
+      WALL.slideLeft--;
+      if (WALL.slideLeft <= 0) wallStep(1);
+    }
     updateWallBar();
   }
 }, 1000);

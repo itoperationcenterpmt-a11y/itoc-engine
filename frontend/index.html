@@ -476,7 +476,7 @@ tbody tr:hover td{background:var(--wash)}
 .kpis .kpi{border:0!important;box-shadow:-1px 0 0 var(--line),0 -1px 0 var(--line);min-width:0}
 .kpi .v{overflow-wrap:anywhere}.nw{white-space:nowrap}#newver{position:fixed;top:0;left:0;right:0;z-index:50;background:#0067B4;color:#fff;padding:10px 16px;display:flex;gap:14px;align-items:center;justify-content:center;font-size:calc(14px*var(--fs))}#newver button{background:#fff;color:#0B2A4A;border:0;border-radius:8px;padding:6px 14px;font-weight:600;cursor:pointer}
 /* Visual widgets */
-.vz-card{display:flex;flex-direction:column;gap:6px}
+.vz-card{display:flex;flex-direction:column;gap:6px;flex:1;justify-content:space-between}
 .vz-val{font-family:var(--f-mono,monospace);font-size:calc(30px*var(--fs));font-weight:600;line-height:1.1}
 .vz-sub{color:var(--muted);font-size:calc(12px*var(--fs))}
 .vz-spark{width:100%;height:calc(44px*var(--fs));display:block}
@@ -485,10 +485,10 @@ tbody tr:hover td{background:var(--wash)}
 .vz-gv{position:absolute;left:0;right:0;bottom:14%;display:flex;flex-direction:column;align-items:center;line-height:1.1}
 .vz-gv b{font-size:clamp(14px,13cqw,calc(28px*var(--fs)));font-family:var(--f-mono,monospace)}.vz-gv span{font-size:calc(12px*var(--fs));color:var(--muted)}
 .vz-note{text-align:center;color:var(--muted);font-size:calc(11.5px*var(--fs));margin-top:6px}
-.vz-donut{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:center}
+.vz-donut{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:center;flex:1}
 .vz-dwrap{position:relative;width:min(150px,45%);min-width:110px;flex:0 0 auto;container-type:inline-size}.vz-dwrap svg{width:100%;display:block}.vz-dwrap .vz-gv{top:50%;bottom:auto;transform:translateY(-50%)}.vz-dwrap .vz-gv b{font-size:clamp(14px,17cqw,calc(26px*var(--fs)))}
 .vz-leg{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;flex:1 1 130px;min-width:120px}
-.vz-leg li{display:flex;align-items:center;gap:8px;font-size:calc(13px*var(--fs))}.vz-leg i{width:10px;height:10px;border-radius:3px;flex:none}.vz-leg span{flex:1}
+.vz-leg li{display:flex;align-items:center;gap:8px;font-size:calc(13px*var(--fs));min-width:0}.vz-leg i{width:10px;height:10px;border-radius:3px;flex:none}.vz-leg span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vz-leg b{font-family:var(--f-mono,monospace);font-variant-numeric:tabular-nums;white-space:nowrap}
 .vz-heat{display:grid;grid-template-columns:auto repeat(24,minmax(0,1fr));gap:2px;align-items:center}
 .vz-c{aspect-ratio:1/1;border-radius:3px;background:var(--c);opacity:calc(.1 + var(--a)*.9);min-height:8px}
 .vz-hl,.vz-hd{font-size:calc(11px*var(--fs));color:var(--muted);white-space:nowrap}.vz-hd{padding-right:6px}.vz-hl{text-align:left}
@@ -507,10 +507,10 @@ tbody tr:hover td{background:var(--wash)}
 .vz-topc{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-left:5px solid var(--warn);border-radius:10px}
 .vz-topc.crit{border-left-color:var(--crit)}.vz-rank{font-family:var(--f-mono,monospace);color:var(--muted)}.vz-topc b{display:block;overflow-wrap:anywhere}.vz-topc small{color:var(--muted);font-size:calc(11.5px*var(--fs))}.vz-topc em{font-style:normal;font-family:var(--f-mono,monospace);font-weight:600;white-space:nowrap}
 .vz-meters{display:flex;flex-direction:column;gap:9px}
-.vz-m{display:grid;grid-template-columns:minmax(70px,28%) 1fr auto;gap:8px;align-items:center;font-size:calc(12.5px*var(--fs))}
+.vz-m{display:grid;grid-template-columns:minmax(70px,28%) 1fr auto;gap:8px;align-items:center;font-size:calc(12.5px*var(--fs))}.vz-m span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vz-m b{font-family:var(--f-mono,monospace);white-space:nowrap}
 .vz-mb{height:10px;background:var(--sunken);border-radius:6px;overflow:hidden}.vz-mb i{display:block;height:100%;border-radius:6px;background:var(--good)}.vz-mb i.warn{background:var(--warn)}.vz-mb i.crit{background:var(--crit)}
-@media (max-width:520px){.panel:has(.vz-gauge),.panel:has(.vz-card){grid-column:span 12}.vz-gauge{max-width:300px;margin:0 auto}.vz-val{font-size:calc(24px*var(--fs))}}
-@media (max-width:700px){.vz-tlh,.vz-tlr{grid-template-columns:84px 1fr 44px;gap:6px}.vz-hl{font-size:calc(11px*var(--fs))}.vz-heat{gap:1px}}
+@media (max-width:520px){.panel:has(.vz-gauge),.panel:has(.vz-card){grid-column:span 12}.vz-gauge{max-width:260px;margin:0 auto}.vz-val{font-size:calc(24px*var(--fs))}.vz-hl{font-size:9px}}
+@media (max-width:700px){.vz-tlh,.vz-tlr{grid-template-columns:84px 1fr 48px;gap:6px}.vz-tlh em:not(:first-child):not(:last-child):not(:nth-child(4)){display:none}.vz-hl{font-size:calc(10px*var(--fs))}.vz-heat{gap:1px}}
 /* TERA brand: icon + wordmark in the sidebar, lockup on the login page. The wordmark is text (Montserrat 800) so it stays sharp at any size. */
 .wm{font-family:"Montserrat",var(--f-head,sans-serif);font-weight:800;letter-spacing:.09em}.wm .e{color:#5BB5E2}
 .brand-tera{flex-direction:row;align-items:center;gap:14px;padding:8px 8px 10px}.brand-tera .g2{width:calc(66px*var(--fs));height:calc(66px*var(--fs));max-width:none;flex:none;object-fit:contain}
@@ -610,19 +610,34 @@ footer{margin-top:28px;color:var(--muted);font-size:calc(12px*var(--fs));display
 .zisp-chip.bad{border-color:rgba(208,59,59,.45);color:var(--crit-text);background:rgba(208,59,59,.12)}.zisp-chip.bad i{background:var(--crit)}
 .zisp-loc{cursor:pointer;font-weight:600;color:var(--ink)}.zisp-loc:hover{color:var(--accent);text-decoration:underline}
 .scroll{position:relative;-webkit-overflow-scrolling:touch}
-/* TV / Wall Mode (Command Center): edge-to-edge full screen, hidden sidebar & filters, live status strip + auto-refresh */
-.wallbar{display:none;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 16px;margin-bottom:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--rad);box-shadow:var(--shadow)}
+/* TV / Wall Mode (Command Center Slideshow): edge-to-edge full screen, auto-chunked slides, optional multi-menu rotation, live status strip + auto-refresh */
+.ph-right{display:inline-flex;align-items:center;gap:10px;margin-left:auto}
+.wallbar{display:none;position:relative;overflow:hidden;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px 13px;margin-bottom:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--rad);box-shadow:var(--shadow)}
 .wallbar .wbrand{display:inline-flex;align-items:center;gap:10px;font:800 calc(16px*var(--fs)) var(--f-display)}
 .wallbar .wbrand img{height:28px;width:auto}
 .wallbar .wmeta{font-size:calc(12.5px*var(--fs));color:var(--muted)}
-.wallbar .wacts{margin-left:auto;display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
-.wallbar .wcd{font-family:var(--f-mono);font-size:calc(12px*var(--fs));color:var(--accent);background:var(--wash);padding:4px 10px;border-radius:99px;font-weight:600}
+.wallbar .wacts{margin-left:auto;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.wallbar .wctrl{display:inline-flex;align-items:center;gap:4px;background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:2px 6px}
+.wallbar .wctrl button{background:none;border:0;color:var(--ink);cursor:pointer;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:calc(14px*var(--fs))}
+.wallbar .wctrl button:hover{background:var(--wash);color:var(--accent)}
+.wallbar .wsl{font-family:var(--f-mono);font-size:calc(12px*var(--fs));font-weight:600;padding:0 6px;color:var(--ink2);white-space:nowrap}
+.wallbar .wdots{display:inline-flex;align-items:center;gap:5px;padding:0 4px}
+.wallbar .wdots button{width:8px;height:8px;padding:0;border-radius:99px;border:0;background:var(--axis);cursor:pointer;transition:width .2s,background .2s}
+.wallbar .wdots button.on{width:20px;background:var(--accent)}
+.wallbar .wsec{width:auto;padding:4px 8px;border-radius:99px;font-size:calc(12px*var(--fs));background:var(--sunken);border:1px solid var(--line);color:var(--ink);font-family:var(--f-mono)}
+.wallbar .wcd{font-family:var(--f-mono);font-size:calc(11.5px*var(--fs));color:var(--accent);background:var(--wash);padding:4px 10px;border-radius:99px;font-weight:600;white-space:nowrap}
+.wallbar .wprog{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--sunken)}
+.wallbar .wprog i{display:block;height:100%;background:var(--accent);width:100%;transition:width .9s linear}
 body.wall .shell{display:block}
-body.wall .side,body.wall .mtop,body.wall .fwrap,body.wall .pagehead,body.wall #subnav,body.wall footer{display:none!important}
+body.wall .side,body.wall .mtop,body.wall .fwrap,body.wall .pagehead,body.wall #subnav,body.wall footer,body.wall .secjump,body.wall .sechd,body.wall .rowlbl{display:none!important}
 body.wall .wrap{max-width:none;margin:0;padding:12px 18px 20px}
 body.wall .wallbar{display:flex}
-body.wall .grid{margin-top:12px;gap:14px}
+body.wall .grid{margin-top:10px;gap:14px}
 body.wall .panel{padding:14px 16px}
+.wslide-hide{display:none!important}
+body.wall .wslide-in{animation:wallfade .35s ease}
+@keyframes wallfade{from{opacity:.15;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){body.wall .wslide-in{animation:none}}
 @media (max-width:900px){#wallBtn{display:none}}
 @media (max-width:900px){.dutychip{display:none}}
 .rowlbl{font-size:calc(11px*var(--fs));letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:14px 2px 6px}
@@ -741,13 +756,20 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
     <div class="mr"><span id="dutyM"></span></div>
   </div>
   <div class="wrap">
-    <div class="wallbar" id="wallBar" role="region" aria-label="TV Wall Mode">
+    <div class="wallbar" id="wallBar" role="region" aria-label="TV Wall Slideshow">
       <span class="wbrand"><img src="assets/tera-icon-col.png" class="lg-l" alt=""><img src="assets/tera-icon-rev.png" class="lg-d" alt=""><span id="wallTitle">TERA Dashboard</span></span>
       <span class="wmeta" id="wallSub"></span>
       <span id="dutyW" class="dutychip"></span>
-      <span class="wacts"><span class="wcd" id="wallCd">Auto-refresh 60s</span><button class="btn ghost sm" id="wallExit" type="button">Exit Wall Mode (Esc)</button></span>
+      <span class="wacts">
+        <span class="wctrl" aria-label="Slideshow controls"><button id="wallPrev" type="button" title="Previous slide (←)">‹</button><button id="wallPlay" type="button" title="Pause / Resume (Space)">⏸</button><button id="wallNext" type="button" title="Next slide (→)">›</button><span class="wsl" id="wallSl">1 / 1</span><span class="wdots" id="wallDots"></span></span>
+        <select class="wsec" id="wallSecSel" aria-label="Slide duration" title="Slide duration"><option value="10">10s / slide</option><option value="15">15s / slide</option><option value="20">20s / slide</option><option value="30">30s / slide</option><option value="45">45s / slide</option><option value="60">60s / slide</option></select>
+        <button class="btn ghost sm" id="wallRotBtn" type="button" title="Toggle rotating across configured menus or looping this page">Rotate menus</button>
+        <span class="wcd" id="wallCd">Refresh 60s</span>
+        <button class="btn ghost sm" id="wallExit" type="button">Exit (Esc)</button>
+      </span>
+      <span class="wprog"><i id="wallProg"></i></span>
     </div>
-    <div class="pagehead"><h2 id="ptitle"></h2><span class="sub" id="psub" hidden></span><span id="dutyH" class="dutychip"></span></div>
+    <div class="pagehead"><h2 id="ptitle"></h2><span class="sub" id="psub" hidden></span><span class="ph-right"><button class="btn ghost sm" id="wallBtn" type="button" title="Fullscreen TV / Wall Slideshow mode">TV / Wall Mode</button><span id="dutyH" class="dutychip"></span></span></div>
     <div id="subnav"></div>
     <div id="laybar"></div>
     <div class="fwrap" id="fwrap">
@@ -762,7 +784,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
         <div class="fg" id="gTyp" hidden><span class="k">Type</span><select id="fTyp" aria-label="Device type"></select></div>
         <div class="fg" id="gStat" hidden><span class="k">Status</span><div class="seg" id="fStat"></div></div>
         <div class="fg" id="gCmp"><label class="chk"><input type="checkbox" id="fCmp"> Compare with previous period</label></div>
-        <span class="fright"><button class="btn ghost" id="fReset" type="button">Reset</button><label class="profsel" id="profWrap" hidden><span class="k">Profile</span><select id="profSel" aria-label="Dashboard profile"></select></label><button class="btn ghost" id="wallBtn" type="button" title="Fullscreen TV / Command Center mode with auto-refresh">Wall mode</button><button class="btn ghost" id="layBtn" type="button" hidden>Customize</button></span>
+        <span class="fright"><button class="btn ghost" id="fReset" type="button">Reset</button><label class="profsel" id="profWrap" hidden><span class="k">Profile</span><select id="profSel" aria-label="Dashboard profile"></select></label><button class="btn ghost" id="layBtn" type="button" hidden>Customize</button></span>
       </div>
       <div id="fApplies"></div>
     </div>
