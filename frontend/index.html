@@ -635,7 +635,24 @@ footer{margin-top:28px;color:var(--muted);font-size:calc(12px*var(--fs));display
 .ph-pop button.danger{color:var(--crit-text)}
 .ph-pop button.danger:hover{background:rgba(208,59,59,.1);color:var(--crit)}
 .wslide-full{grid-column:1/-1!important}
-@media (max-width:900px){.ph-right{display:none}}
+@media (min-width:901px) and (max-width:1240px){
+  .ph-right{gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .dutychip{padding:5px 11px;font-size:calc(12.5px*var(--fs));gap:7px}
+  .dutychip small{font-size:calc(12px*var(--fs));margin-left:5px;padding-left:7px}
+  .userpill{padding:4px 5px}
+  .userpill .uname{display:none}
+}
+@media (max-width:1440px){
+  .wallbar{gap:8px;padding:8px 14px 11px}
+  .wallbar .wmeta{display:none}
+}
+@media (max-width:900px){
+  .ph-right{gap:6px}
+  #dutyH,#wallBtn,#themeH,#layBtn{display:none!important}
+  .userpill{padding:4px 5px;height:36px}
+  .userpill .uname{display:none}
+  .ph-icon{width:36px;height:36px;border-radius:10px}
+}
 .wallbar{display:none;position:relative;overflow:hidden;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 18px 13px;margin-bottom:14px;background:var(--side-bg);color:#f2f5f8;border:1px solid rgba(255,255,255,.1);border-radius:var(--rad);box-shadow:0 8px 24px -10px rgba(0,0,0,.45)}
 .wallbar .wbrand{display:inline-flex;align-items:center;gap:10px;font:800 calc(16px*var(--fs)) var(--f-display);color:#fff}
 .wallbar .wbrand img{height:28px;width:auto}
