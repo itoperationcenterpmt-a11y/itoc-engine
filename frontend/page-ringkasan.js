@@ -69,7 +69,7 @@ function vRingkasan() {
   ${hasX ? xdrPanels(Xd).daily() + xdrPanels(Xd).sev() : ""}
   ${!hasH ? "" : panel("c6", "Open Handovers", hoOpen.length + " items", hoList(hoOpen.slice(0, 3), true) + go("serahterima", "All handovers"))}
   ${contactP}
-  ${wg("dev-map:NETWORK-SDWAN")}
+  ${wg("dev-map:NETWORK-SDWAN").replace("panel c8", "panel c12")}
 </div>`;
 }
 

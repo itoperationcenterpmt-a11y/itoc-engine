@@ -108,9 +108,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sheet-f{display:flex;gap:10px;margin-top:14px}.sheet-f .iconbtn{flex:1;padding:10px}
 .mtop{display:none}
 .wrap{max-width:calc(1320px*var(--fs));margin:0 auto;padding:22px 24px 56px}
-.pagehead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-bottom:14px}
-.pagehead h2{font-size:calc(24px*var(--fs));font-weight:800;letter-spacing:-.01em}
-.pagehead .sub{font-size:calc(13px*var(--fs))}
+.pagehead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;margin-bottom:14px}
+.ph-left{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ph-crumb{font-size:calc(11px*var(--fs));font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);line-height:1.2}
+.pagehead h2{font-size:calc(24px*var(--fs));font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.pagehead .sub{font-size:calc(13px*var(--fs));color:var(--muted)}
 @media (max-width:900px){
   .shell{display:block}
   .side{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;padding:6px 6px calc(6px + env(safe-area-inset-bottom));gap:0;border-top:1px solid var(--side-line);box-shadow:0 -8px 24px -10px rgba(0,0,0,.4)}
@@ -175,7 +177,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .off #gPeriode,.off #gShift,.off #gSite,.off #gCmp{opacity:.4}
 
 /* grid & panel */
-.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;margin-top:16px}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));grid-auto-flow:dense;gap:16px;margin-top:16px}
 .c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
 @media (max-width:1000px){.c3{grid-column:span 6}.c4,.c5,.c6,.c7,.c8{grid-column:span 12}}
 @media (max-width:520px){.c3{grid-column:span 12}}
@@ -610,11 +612,30 @@ footer{margin-top:28px;color:var(--muted);font-size:calc(12px*var(--fs));display
 .zisp-chip.bad{border-color:rgba(208,59,59,.45);color:var(--crit-text);background:rgba(208,59,59,.12)}.zisp-chip.bad i{background:var(--crit)}
 .zisp-loc{cursor:pointer;font-weight:600;color:var(--ink)}.zisp-loc:hover{color:var(--accent);text-decoration:underline}
 .scroll{position:relative;-webkit-overflow-scrolling:touch}
-/* TV / Wall Mode (Command Center Slideshow): edge-to-edge full screen, auto-chunked slides, optional multi-menu rotation, live status strip + auto-refresh */
-.ph-right{display:inline-flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:nowrap}
-.wallbtn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:7px 15px;font-size:calc(13.5px*var(--fs));font-weight:600;line-height:1.3;background:var(--surface);color:var(--accent);border:1px solid var(--line);cursor:pointer;white-space:nowrap;box-shadow:var(--shadow);transition:background .15s,border-color .15s}
-.wallbtn:hover{background:var(--wash);border-color:var(--accent)}
-.wallbtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+/* Top-right SaaS header controls (icon-only actions + user pill) & TV / Wall Mode */
+.ph-right{display:inline-flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:nowrap;position:relative}
+.ph-icon{width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);display:inline-grid;place-items:center;cursor:pointer;box-shadow:var(--shadow);transition:background .15s,border-color .15s,color .15s;padding:0;flex:none}
+.ph-icon:hover,.ph-icon[aria-expanded="true"]{background:var(--wash);border-color:var(--accent);color:var(--accent)}
+.ph-icon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.ph-icon[hidden]{display:none}
+.ph-popwrap{position:relative;display:inline-flex;align-items:center}
+.ph-popwrap[hidden]{display:none}
+.userpill{display:inline-flex;align-items:center;gap:9px;height:38px;padding:4px 14px 4px 5px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 calc(13.5px*var(--fs)) var(--f-body);cursor:pointer;box-shadow:var(--shadow);white-space:nowrap;transition:border-color .15s,background .15s}
+.userpill:hover,.userpill[aria-expanded="true"]{border-color:var(--accent);background:var(--wash)}
+.userpill .uav{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font:700 12.5px var(--f-display);flex:none}
+.userpill .uname{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ph-pop{position:absolute;top:calc(100% + 8px);right:0;min-width:210px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 40px -12px rgba(15,26,42,.28);padding:6px;z-index:40;display:flex;flex-direction:column;gap:2px}
+.ph-pop[hidden]{display:none}
+.ph-pop .pop-hd{padding:8px 10px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.ph-pop .pop-hd b{display:block;font-size:calc(13.5px*var(--fs));color:var(--ink)}
+.ph-pop .pop-hd small{display:block;font-size:calc(11.5px*var(--fs));color:var(--muted)}
+.ph-pop button{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:0;border-radius:9px;padding:8px 10px;font-size:calc(13px*var(--fs));color:var(--ink);cursor:pointer}
+.ph-pop button:hover{background:var(--wash);color:var(--accent)}
+.ph-pop button.on{background:var(--wash);color:var(--accent);font-weight:600}
+.ph-pop button.danger{color:var(--crit-text)}
+.ph-pop button.danger:hover{background:rgba(208,59,59,.1);color:var(--crit)}
+.wslide-full{grid-column:1/-1!important}
+@media (max-width:900px){.ph-right{display:none}}
 .wallbar{display:none;position:relative;overflow:hidden;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 18px 13px;margin-bottom:14px;background:var(--side-bg);color:#f2f5f8;border:1px solid rgba(255,255,255,.1);border-radius:var(--rad);box-shadow:0 8px 24px -10px rgba(0,0,0,.45)}
 .wallbar .wbrand{display:inline-flex;align-items:center;gap:10px;font:800 calc(16px*var(--fs)) var(--f-display);color:#fff}
 .wallbar .wbrand img{height:28px;width:auto}
@@ -780,7 +801,28 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
       </span>
       <span class="wprog"><i id="wallProg"></i></span>
     </div>
-    <div class="pagehead"><h2 id="ptitle"></h2><span class="sub" id="psub" hidden></span><span class="ph-right"><button class="wallbtn" id="wallBtn" type="button" title="Fullscreen TV / Wall Slideshow mode"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>TV / Wall Mode</button><span id="dutyH" class="dutychip"></span></span></div>
+    <div class="pagehead">
+      <div class="ph-left"><span class="ph-crumb" id="pcrumb">TERA › OVERVIEW</span><h2 id="ptitle"></h2><span class="sub" id="psub"></span></div>
+      <div class="ph-right">
+        <span id="dutyH" class="dutychip"></span>
+        <button class="ph-icon" id="wallBtn" type="button" aria-label="TV / Wall Slideshow Mode" title="TV / Wall Slideshow Mode"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></button>
+        <button class="ph-icon" id="themeH" type="button" aria-label="Switch light or dark theme" title="Switch light or dark theme"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+        <div class="ph-popwrap" id="profWrap" hidden>
+          <button class="ph-icon" id="profBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Dashboard profile" title="Switch dashboard profile"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg></button>
+          <select id="profSel" hidden aria-hidden="true"></select>
+          <div class="ph-pop" id="profPop" role="menu" hidden></div>
+        </div>
+        <button class="ph-icon" id="layBtn" type="button" hidden aria-label="Customize layout" title="Customize dashboard layout"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
+        <div class="ph-popwrap" id="userWrap">
+          <button class="userpill" id="userBtn" type="button" aria-haspopup="menu" aria-expanded="false"><span class="uav" id="avH"></span><span class="uname" id="meH"></span></button>
+          <div class="ph-pop" id="userPop" role="menu" hidden>
+            <div class="pop-hd"><b id="mePop"></b><small id="rolePop"></small></div>
+            <button type="button" id="pwOpenH" role="menuitem">Change password</button>
+            <button type="button" id="logoutH" class="danger" role="menuitem">Sign out</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="subnav"></div>
     <div id="laybar"></div>
     <div class="fwrap" id="fwrap">
@@ -795,7 +837,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
         <div class="fg" id="gTyp" hidden><span class="k">Type</span><select id="fTyp" aria-label="Device type"></select></div>
         <div class="fg" id="gStat" hidden><span class="k">Status</span><div class="seg" id="fStat"></div></div>
         <div class="fg" id="gCmp"><label class="chk"><input type="checkbox" id="fCmp"> Compare with previous period</label></div>
-        <span class="fright"><button class="btn ghost" id="fReset" type="button">Reset</button><label class="profsel" id="profWrap" hidden><span class="k">Profile</span><select id="profSel" aria-label="Dashboard profile"></select></label><button class="btn ghost" id="layBtn" type="button" hidden>Customize</button></span>
+        <span class="fright"><button class="btn ghost" id="fReset" type="button">Reset</button></span>
       </div>
       <div id="fApplies"></div>
     </div>

@@ -101,10 +101,11 @@ function showWallSlide(idx, resetTimer = true) {
   if (!WALL.on) return;
   const n = WALL.slides.length || 1;
   WALL.idx = ((idx % n) + n) % n;
-  const active = new Set(WALL.slides[WALL.idx] || []);
+  const list = WALL.slides[WALL.idx] || [], active = new Set(list), solo = list.length === 1;
   wallCollectItems().forEach(el => {
     const show = active.has(el);
     el.classList.toggle("wslide-hide", !show);
+    el.classList.toggle("wslide-full", show && solo);
     if (show) { el.classList.remove("wslide-in"); void el.offsetWidth; el.classList.add("wslide-in"); }
   });
   if (resetTimer) WALL.slideLeft = wallCfgSlide();
@@ -156,7 +157,7 @@ function setWall(on) {
     if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
     requestAnimationFrame(() => buildWallSlides(false));
   } else {
-    wallCollectItems().forEach(el => el.classList.remove("wslide-hide", "wslide-in"));
+    wallCollectItems().forEach(el => el.classList.remove("wslide-hide", "wslide-in", "wslide-full"));
     if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
     window.dispatchEvent(new Event("resize"));
   }
@@ -277,11 +278,16 @@ function layoutRows(page, role) {
   const own = pick(prof);
   return own.length || prof === "default" ? own : pick("default");
 }
+function closePops() {
+  [["profPop", "profBtn"], ["userPop", "userBtn"]].forEach(([p, b]) => { if ($(p)) $(p).hidden = true; if ($(b)) $(b).setAttribute("aria-expanded", "false"); });
+}
 function profileSwitcher(on) {
   const w = $("profWrap"), P = CFG.profiles || [];
   w.hidden = !(on && P.length > 1);
   if (w.hidden) return;
   $("profSel").innerHTML = P.map(p => `<option value="${esc(p.key)}" ${p.key === curProfile() ? "selected" : ""} title="${esc(p.description || "")}">${esc(p.name)}</option>`).join("");
+  const pop = $("profPop");
+  if (pop) pop.innerHTML = `<div class="pop-hd"><b>Dashboard Profile</b><small>Switch layout preset</small></div>` + P.map(p => `<button type="button" role="menuitem" data-pick-prof="${esc(p.key)}" class="${p.key === curProfile() ? "on" : ""}" title="${esc(p.description || "")}"><span>${esc(p.name)}</span>${p.key === curProfile() ? "<b>✓</b>" : ""}</button>`).join("");
 }
 function applyLayout() {
   const v = $("view"), on = LAYOUT_PAGES.includes(S.tab);
@@ -510,13 +516,17 @@ const pkOf = row => S.mdata.pk.map(k => row[k]).join("");
 
 /* ---------- event ---------- */
 document.addEventListener("click", async e => {
+  if (!e.target.closest(".ph-popwrap")) closePops();
   const tile = e.target.closest("[data-filter-site]");
   if (tile && !CFG.me.site) { const st = tile.dataset.filterSite; set({site: S.site === st ? "" : st}); return; }
   const b = e.target.closest("button, a[data-tab], a[data-go]"); if (!b || b.disabled) return;
   if (b.tagName === "A") { if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button) return; e.preventDefault(); }       // menu entries are real links: right-click and Ctrl-click open a new tab
   const d = b.dataset;
   try {
-    if (b.id === "wallBtn") { setWall(!WALL.on); return; }
+    if (b.id === "profBtn") { const open = $("profPop").hidden; closePops(); $("profPop").hidden = !open; b.setAttribute("aria-expanded", String(open)); return; }
+    else if (b.id === "userBtn") { const open = $("userPop").hidden; closePops(); $("userPop").hidden = !open; b.setAttribute("aria-expanded", String(open)); return; }
+    else if (d.pickProf) { closePops(); await send("/api/me/profile", {profile: d.pickProf}, "PUT"); CFG.me.profile = d.pickProf; $("profSel").value = d.pickProf; render(false); return; }
+    else if (b.id === "wallBtn") { closePops(); setWall(!WALL.on); return; }
     else if (b.id === "wallExit") { setWall(false); return; }
     else if (b.id === "wallPrev") { wallStep(-1); return; }
     else if (b.id === "wallNext") { wallStep(1); return; }
@@ -575,10 +585,10 @@ document.addEventListener("click", async e => {
     else if (d.secjump !== undefined) { toggleSec(+d.secjump, true); const h = $("view").querySelector(`.sechd[data-sec="${d.secjump}"]`); if (h) h.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth", block: "start"}); }
     else if (b.id === "fToggle") { const w = $("fwrap").classList.toggle("open"); b.setAttribute("aria-expanded", w); }
     else if (b.id === "railBtn") { const on = $("app").classList.toggle("rail"); b.textContent = on ? "›" : "‹"; try { localStorage.setItem("itoc.rail", on ? "1" : ""); } catch (_) {} }
-    else if (b.id === "logout" || b.id === "logoutM" || b.id === "logoutS") logout();
-    else if (b.id === "pwOpen" || b.id === "pwOpenS") openPw();
+    else if (b.id === "logout" || b.id === "logoutM" || b.id === "logoutS" || b.id === "logoutH") { closePops(); logout(); }
+    else if (b.id === "pwOpen" || b.id === "pwOpenS" || b.id === "pwOpenH") { closePops(); openPw(); }
     else if (b.hasAttribute("data-pwclose")) $("dlgPw").close();
-    else if (b.id === "theme" || b.id === "themeM" || b.id === "themeS" || b.id === "themeL") { const r = document.documentElement, dark = (r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark"; r.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("itoc.theme", r.dataset.theme); } catch (_) {} }
+    else if (b.id === "theme" || b.id === "themeM" || b.id === "themeS" || b.id === "themeL" || b.id === "themeH") { const r = document.documentElement, dark = (r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark"; r.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("itoc.theme", r.dataset.theme); } catch (_) {} }
   } catch (err) { if (err) alert(err.message); }
 });
 document.addEventListener("change", async e => {
@@ -754,7 +764,11 @@ async function boot() {
   if (CFG.me.must_change_pw) return showLogin("", true);
   if (!TABS.length) return showLogin("Your role has no access to any page yet.");
   $("login").hidden = true; $("app").hidden = false;
-  $("me").textContent = CFG.me.name; $("av").textContent = CFG.me.name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase(); $("role").textContent = ROLES[CFG.me.role] || CFG.me.role; applyBrand(); $("foot").textContent = footText();
+  const ini = CFG.me.name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase(), rlab = ROLES[CFG.me.role] || CFG.me.role;
+  $("me").textContent = CFG.me.name; $("av").textContent = ini; $("role").textContent = rlab;
+  if ($("meH")) $("meH").textContent = CFG.me.name; if ($("avH")) $("avH").textContent = ini;
+  if ($("mePop")) $("mePop").textContent = CFG.me.name; if ($("rolePop")) $("rolePop").textContent = rlab;
+  applyBrand(); $("foot").textContent = footText();
   readHash(); render(true);
 }
 boot();

@@ -50,10 +50,21 @@ function delta(cur, prev, o = {}) {
 const kpi = (l, v, d, o = {}) => `<div class="kpi ${o.cls || ""}"><span class="lbl">${l}${o.tip ? info(o.tip) : ""}</span><span class="v">${v}</span><span class="d">${o.dl || ""}${d || ""}</span></div>`;
 function tbl(heads, rows, o = {}) {
   if (!rows.length) return `<div class="empty sm">${o.empty || "No data for this filter."}</div>`;
-  const isN = heads.map((h, i) => rows.some(r => typeof r[i] === "number") || (o.r || []).includes(i));
-  const cell = c => c == null ? "–" : typeof c === "number" ? (Number.isInteger(c) ? fmt(c) : fx(c, 2)) : c.h != null ? c.h : esc(c);
-  const auto = rows.length > (o.max || 12) && o.tall !== false;      // long tables scroll inside their own box instead of stretching the page
-  return `<div class="scroll ${o.tall || auto ? "tall" : ""}"><table class="rt"><thead><tr>${heads.map((h, i) => `<th class="${isN[i] ? "r" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>` + rows.map(r => `<tr>${r.map((c, i) => typeof c === "string" && !isN[i] && c.length > 48 ? `<td class="t cut" data-l="${esc(heads[i])}" title="${esc(c)}">${esc(c)}</td>` : `<td class="${isN[i] ? "r num" : "t" + (typeof c === "string" && c.length <= 28 ? " nw" : "")}" data-l="${esc(heads[i])}">${cell(c)}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>` + (auto ? `<div class="sub tcount">${fmt(rows.length)} rows · scroll inside the table to see more</div>` : "");
+  const blank = c => c == null || c === "" || c === "-" || c === "–" || (typeof c === "object" && c.h != null && /^<span[^>]*>[-–\s]*<\/span>$/.test(String(c.h).trim()));
+  let H = heads, R = rows, rSet = new Set(o.r || []);
+  if (o.trimEmpty) {
+    const keep = heads.map((_, i) => i === 0 || rows.some(r => !blank(r[i])));
+    H = heads.filter((_, i) => keep[i]);
+    R = rows.map(r => r.filter((_, i) => keep[i]));
+    const nr = new Set();
+    let ni = 0;
+    keep.forEach((k, i) => { if (k) { if (rSet.has(i)) nr.add(ni); ni++; } });
+    rSet = nr;
+  }
+  const isN = H.map((h, i) => R.some(r => typeof r[i] === "number") || rSet.has(i));
+  const cell = c => blank(c) ? `<span class="sub">–</span>` : typeof c === "number" ? (Number.isInteger(c) ? fmt(c) : fx(c, 2)) : c.h != null ? c.h : esc(c);
+  const auto = R.length > (o.max || 12) && o.tall !== false;      // long tables scroll inside their own box instead of stretching the page
+  return `<div class="scroll ${o.tall || auto ? "tall" : ""}"><table class="rt"><thead><tr>${H.map((h, i) => `<th class="${isN[i] ? "r" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>` + R.map(r => `<tr>${r.map((c, i) => typeof c === "string" && !isN[i] && c.length > 48 ? `<td class="t cut" data-l="${esc(H[i])}" title="${esc(c)}">${esc(c)}</td>` : `<td class="${isN[i] ? "r num" : "t" + (typeof c === "string" && c.length <= 28 ? " nw" : "")}" data-l="${esc(H[i])}">${cell(c)}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>` + (auto ? `<div class="sub tcount">${fmt(R.length)} rows · scroll inside the table to see more</div>` : "");
 }
 const dayB = arr => arr.map(x => ({label: dmon(x.date), full: dlong(x.date)}));
 const stPill = s => ({h: s === NST.ok ? pill("good", s) : s === NST.bad ? pill("crit", s) : pill("idle", s)});
@@ -119,9 +130,12 @@ function renderShell(loading) {
   $("sheetGrid").innerHTML = NAVT.map(([k, l, bd]) => `<a href="#${k}" data-tab="${k}" aria-selected="${k === curTop}">${icon(k)}<span>${esc(l)}</span></a>`).join("");
   $("moreBtn").classList.toggle("on", NAVT.findIndex(t => t[0] === curTop) > 3);
   const cur = TABS.find(t => t[0] === S.tab), par = (MODS[S.tab] || {}).parent, grp = SUBSUM[S.tab] ? S.tab : (SUBSUM[par] ? par : "");
-  $("ptitle").textContent = !cur ? "" : grp ? MODS[grp].label + " · " + (S.tab === grp ? SUBSUM[grp] : cur[1]) : cur[1];
+  const crumb = $("pcrumb");
+  if (crumb) crumb.textContent = !cur ? "TERA" : grp ? (MODS[grp].label + " › " + (S.tab === grp ? SUBSUM[grp] : cur[1])).toUpperCase() : ("DASHBOARD › " + cur[1]).toUpperCase();
+  $("ptitle").textContent = !cur ? "" : (S.tab === grp ? MODS[grp].label : cur[1]);
   $("subnav").innerHTML = subnav(curTop);
-  $("psub").textContent = APPLY[S.tab] && APPLY[S.tab].p ? rangeTxt() : "";
+  const apSub = APPLY[S.tab] && APPLY[S.tab].p ? ctxTxt() : ((MODS[S.tab] || {}).note || "");
+  $("psub").textContent = apSub; $("psub").hidden = !apSub;
   $("fPreset").innerHTML = PRESETS.map(([k, l]) => `<button type="button" data-p="${k}" aria-pressed="${S.preset === k}">${l}</button>`).join("");
   $("fShift").innerHTML = SN.map((l, i) => `<button type="button" data-s="${i}" aria-pressed="${S.sf === i}" ${i ? `title="${shiftHours(i)}"` : ""}>${l}</button>`).join("");
   $("fSite").innerHTML = `<option value="">${CFG.me.site ? "Your account's location" : "All locations"}</option>` + [...CFG.sites, ...(DEVTAB(S.tab) && V.dev ? V.dev.unmapped.map(u => u.code) : []), ...(S.tab === "wifi" && V.wifi ? V.wifi.opts.locs.filter(x => !CFG.sites.includes(x)) : [])].map(s => `<option ${s === S.site ? "selected" : ""}>${esc(s)}</option>`).join("");
