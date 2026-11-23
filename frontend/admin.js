@@ -4,7 +4,7 @@ const ADM = [
   ["akses", "Access", [["pengguna", "Users"], ["roles", "Roles"], ["apikeys", "API Keys"]]],
   ["sumber", "Data Sources", [["integrasi", "Integrations"], ["pemetaan", "Mapping"], ["dilengkapi", "Needs Completion"]]],
   ["operasional", "Operations", [["personel", "Personnel"], ["tim", "Teams & Shifts"], ["parameter", "Targets & Parameters"], ["rumus", "Formulas"]]],
-  ["notifikasi", "Notifications", [["smtp", "Email"], ["webhooks", "Webhooks"]]],
+  ["notifikasi", "Notifications", [["smtp", "Email"], ["webhooks", "Webhooks"], ["chatcmd", "Bot & Notifier API"]]],
   ["sistem", "System", [["audit", "Audit Log"], ["sharelinks", "Share Links"], ["status", "Source Status"], ["menu", "Menus & Widgets"], ["akses", "Page Access"], ["backup", "Backup & Restore"]]]
 ];
 const COLN = {id: "ID", name: "Name", kind: "Type", aliases: "Aliases", active: "Active", sort: "Order", lat: "Latitude", lon: "Longitude", sys_name: "System Name", unit: "Unit", job: "Job Title",
@@ -181,6 +181,7 @@ function vAdmin() {
   if (S.adm === "sharelinks") body = vShareLinks();
   if (S.adm === "smtp") body = vSmtp();
   if (S.adm === "webhooks") body = vWebhooks();
+  if (S.adm === "chatcmd") body = vChatCmd();
   if (S.adm === "roles") body = vRoles();
   if (S.adm === "parameter") body = admTitle("Targets & Parameters", "Values used in calculations and display. Changes apply to every page immediately.") + paramForm() + `<h4 class="admsub">SLA Targets</h4>` + masterView("sla_target");
   if (S.adm === "rumus") body = admTitle("Formulas", "Formula descriptions shown in the info tooltips.") + masterView("formula");

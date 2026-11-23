@@ -68,7 +68,8 @@ def _config(cfg: Config) -> dict:
 
 def catalog(cfg: Config, can=None) -> list[dict]:
     """The commands that /help lists (only those this account may use), for a chat app that offers them while the user types a slash."""
-    return [{"name": x["name"], "aliases": [str(a) for a in x.get("aliases", [])], "help": x.get("help") or x["name"]} for x in _config(cfg)["commands"] if not x.get("hidden") and (can is None or kind_allowed(x["kind"], can))]
+    return [{"name": x["name"], "aliases": [str(a) for a in x.get("aliases", [])], "kind": x.get("kind", "full"), "scope": x.get("scope", "duty"), "branch_arg": bool(x.get("branch_arg")), "help": x.get("help") or x["name"]}
+            for x in _config(cfg)["commands"] if not x.get("hidden") and (can is None or kind_allowed(x["kind"], can))]
 
 
 def help_text(cfg: Config) -> str:
