@@ -1,10 +1,10 @@
 /* Widget catalog: extra blocks Super Admin can install through Customize -> Add widget.
    Each widget reads data the page already loaded (V.tk, V.net, V.soc, V.dev) and only appears when its data exists and the role may see the module. */
 "use strict";
-const hrs24 = () => [...Array(24).keys()].map(h => ({label: pad(h), full: "Pukul " + pad(h) + ".00-" + pad(h) + ".59 · shift " + SN[shiftOf(h)]}));
+const hrs24 = () => [...Array(24).keys()].map(h => ({label: pad(h), full: pad(h) + ".00-" + pad(h) + ".59 · shift " + SN[shiftOf(h)]}));
 const WIDGETS = [
   {key: "tk-groups", mod: "servicedesk", need: "tk", title: "Group Ranking", desc: "Ranking of Team 1 to 4 and Head Office", size: "c12",
-    html: () => panel("c12", "Group Ranking", "", tbl(["#", "Group", "Members", "Tickets", "% daftar", "Close", "Open", "Average (hours)", "% within target"], (V.tk.groupRanking || []).map(x => [x.rank, x.name, x.members, x.n, pc(x.share), x.done, x.open, x.avg, pc(x.inPct)]), {r: [2, 3, 4, 5, 6, 7, 8]}))},
+    html: () => panel("c12", "Group Ranking", "", tbl(["#", "Group", "Members", "Tickets", "% of list", "Closed", "Open", "Average (hours)", "% within target"], (V.tk.groupRanking || []).map(x => [x.rank, x.name, x.members, x.n, pc(x.share), x.done, x.open, x.avg, pc(x.inPct)]), {r: [2, 3, 4, 5, 6, 7, 8]}))},
   {key: "tk-tech", mod: "servicedesk", need: "tk", title: "Top 10 Technicians", desc: "Technicians with the most tickets", size: "c6",
     html: () => panel("c6", "Top 10 Technicians", ctxTxt(), tbl(["#", "Name", "Tickets", "% within target"], V.tk.ranking.filter(x => x.n > 0).slice(0, 10).map(x => [x.rank, x.name, x.n, pc(x.inPct)]), {r: [2, 3], empty: "No data yet."}))},
   {key: "tk-open", mod: "servicedesk", need: "tk", title: "Open Tickets", desc: "Oldest open tickets and their age", size: "c6",
@@ -14,7 +14,7 @@ const WIDGETS = [
   {key: "tk-hours", mod: "servicedesk", need: "tk", title: "Tickets per Hour", desc: "Tickets by hour created", size: "c8",
     html: () => panel("c8", "Tickets per Hour", V.tk.peakHour != null ? "Busiest hour " + pad(V.tk.peakHour) + ".00" : "", bars(hrs24(), [{name: "Tickets In", c: "--s1", v: V.tk.hours}], {label: "Tickets per hour"}))},
   {key: "tk-quality", mod: "servicedesk", need: "tk", title: "Data Quality Notes", desc: "Ticket input quality checks", size: "c6",
-    html: () => panel("c6", "Data Quality Notes", "", tbl(["Pemeriksaan", "Tickets", "% total"], V.tk.quality.map(x => [x.k, x.n, pc(x.pct)]), {r: [1, 2]}))},
+    html: () => panel("c6", "Data Quality Notes", "", tbl(["Check", "Tickets", "% total"], V.tk.quality.map(x => [x.k, x.n, pc(x.pct)]), {r: [1, 2]}))},
   {key: "net-rank", mod: "noc", need: "net", title: "Link Ranking by Downtime", desc: "10 links with the lowest availability", size: "c6",
     html: () => panel("c6", "Link Ranking by Downtime", ctxTxt(), tbl(["Link", "Availability", "Down (mnt)", "Status"], V.net.rank.slice(0, 10).map(x => [x.link, pc(x.av, 2), fx(x.downMin, 0), x.status]), {r: [1, 2], empty: "No data yet."}))},
   {key: "net-isp", mod: "noc", need: "net", title: "Summary per ISP", desc: "Availability and downtime per ISP", size: "c6",
@@ -84,14 +84,14 @@ function widgetList() {
   return WIDGETS.concat(extra);
 }
 /* Widget berparameter: "dev-map:<group>" = a map for one Zabbix host group (e.g. Network-SDWAN). More than one may be installed. */
-const mapWidget = g => ({key: "dev-map:" + encodeURIComponent(g), mod: "devices", need: "dev", title: "Devices Map · " + g, desc: "Peta group " + g, size: "c8",
+const mapWidget = g => ({key: "dev-map:" + encodeURIComponent(g), mod: "devices", need: "dev", title: "Devices Map · " + g, desc: "Map for group " + g, size: "c8",
   html: () => panel("c8", "Devices Map · " + g, "group " + g, mapLegend() + mapSvg({map: (V.dev.groupMaps || {})[g] || [], noCoord: []}))});
 function widgetFind(key) {
   const i = key.indexOf(":");
   if (i > 0 && key.slice(0, i) === "dev-map") return mapWidget(decodeURIComponent(key.slice(i + 1)));
   return widgetList().find(x => x.key === key);
 }
-const widgetOk = w => !!V[w.need] && (w.need !== "dev" || V.dev.all.total > 0) && (CFG.me.role === "superadmin" || (CFG.modules || []).some(m => m.key === w.mod));
+const widgetOk = w => !!V[w.need] && (w.need !== "dev" || V.dev.all.total > 0) && (w.need !== "zbx_isp" || (V.zbx_isp.all && V.zbx_isp.all.total > 0)) && (CFG.me.role === "superadmin" || (CFG.modules || []).some(m => m.key === w.mod));
 const widgetEl = w => { const t = document.createElement("div"); t.innerHTML = w.html(); return t.firstElementChild; };
 function widgetBlock(w) {
   const el = widgetEl(w), h2 = el.querySelector(":scope > header h2");
@@ -109,5 +109,5 @@ function catalogHtml() {
   if (!list.length) return ownHtml || `<div class="empty sm">There are no extra widgets for this page.</div>`;
   const groups = {};
   list.forEach(w => { const g = w.grp || mods[w.mod] || w.mod; (groups[g] = groups[g] || []).push(w); });
-  return ownHtml + Object.entries(groups).map(([g, ws]) => `<div class="catg"><span class="lbl">${esc(g)}</span><div class="catl">${ws.map(w => `<div class="catw"><div><b>${esc(w.title)}</b><span class="sub">${esc(w.desc)}</span></div>${w.key === "dev-map" ? `<span class="catp"><select data-wparam aria-label="Group"><option value="">All groups</option>${((V.dev && V.dev.groups) || []).map(g => `<option value="${esc(g.name)}">${esc(g.name)}</option>`).join("")}</select><button class="btn ghost" type="button" data-wadd="dev-map">Add</button></span>` : present.has("w-" + w.key) ? `<span class="tag">Ditambahkan</span>` : `<button class="btn ghost" type="button" data-wadd="${esc(w.key)}">Add</button>`}</div>`).join("")}</div></div>`).join("");
+  return ownHtml + Object.entries(groups).map(([g, ws]) => `<div class="catg"><span class="lbl">${esc(g)}</span><div class="catl">${ws.map(w => `<div class="catw"><div><b>${esc(w.title)}</b><span class="sub">${esc(w.desc)}</span></div>${w.key === "dev-map" ? `<span class="catp"><select data-wparam aria-label="Group"><option value="">All groups</option>${((V.dev && V.dev.groups) || []).map(g => `<option value="${esc(g.name)}">${esc(g.name)}</option>`).join("")}</select><button class="btn ghost" type="button" data-wadd="dev-map">Add</button></span>` : present.has("w-" + w.key) ? `<span class="tag">Added</span>` : `<button class="btn ghost" type="button" data-wadd="${esc(w.key)}">Add</button>`}</div>`).join("")}</div></div>`).join("");
 }

@@ -566,7 +566,32 @@ def d_data_quality(db: Session, cfg: Config) -> list[dict]:
     return out
 
 
-DETECTORS = [d_tickets, d_ticket_sites, d_ticket_trends, d_sla_risk, d_links, d_availability, d_capacity, d_ndr, d_ndr_traffic, d_xdr, d_xdr_tickets, d_ndr_mix, d_devices, d_flapping_devices, d_incidents, d_wifi, d_wifi_zones, d_kuma, d_milestone, d_site_multi, d_data_quality]
+def d_zbx_isp(db: Session, cfg: Config) -> list[dict]:
+    """Zabbix ISP-* monitoring: detects branches with all ISP links down, dual-link branches on single-link risk, and flapping ISP links over the last 7 days."""
+    from .calc import zbx_isp as ZBXISP
+    today = cfg.now().date()
+    Z = ZBXISP.build(db, cfg, today - timedelta(days=6), today)
+    if not Z["all"]["total"]:
+        return []
+    out = []
+    for r in Z["byLoc"]:
+        if r["rtone"] == "crit":
+            provs = ", ".join(x["provider"] for x in r["links"] if not x["reachable"])
+            out.append(_ins(f"zbxisp_site_down:{r['k']}", "network", "crit", f"All ISP links down at {r['k']} (Zabbix)",
+                            f"{r['down']} of {r['total']} ISP links unreachable ({provs}). Site internet connectivity is down.", "noc", {"down": r["down"], "total": r["total"]}, site=r["k"]))
+        elif r["rtone"] == "warn":
+            down_p = ", ".join(x["provider"] for x in r["links"] if not x["reachable"])
+            up_p = ", ".join(x["provider"] for x in r["links"] if x["reachable"])
+            out.append(_ins(f"zbxisp_single:{r['k']}", "network", "warn", f"Dual-link redundancy lost at {r['k']} (Zabbix ISP)",
+                            f"{down_p} is down; branch is running on a single link ({up_p}).", "noc", {"down": r["down"], "online": r["online"]}, site=r["k"]))
+    for h in (Z.get("hist") or {}).get("byHost") or []:
+        if h["events"] >= 4:
+            out.append(_ins(f"zbxisp_flap:{h['k']}", "network", "warn", f"Flapping ISP link: {h['k']}",
+                            f"Went down {h['events']} times in the last 7 days ({fmt(h['hours'], 1)} hours total downtime) in Zabbix.", "noc", {"events": h["events"], "hours": h["hours"]}))
+    return out
+
+
+DETECTORS = [d_tickets, d_ticket_sites, d_ticket_trends, d_sla_risk, d_links, d_zbx_isp, d_availability, d_capacity, d_ndr, d_ndr_traffic, d_xdr, d_xdr_tickets, d_ndr_mix, d_devices, d_flapping_devices, d_incidents, d_wifi, d_wifi_zones, d_kuma, d_milestone, d_site_multi, d_data_quality]
 
 
 # ---------------- rankings, health, summary (computed on request) ----------------
@@ -646,18 +671,19 @@ TXT = {
            "xdr": "XDR (Trend Micro): {n} alert baru", "xdr_open": ", {o} critical/high masih open", "xdr_model": "- model deteksi teratas: {x}",
            "al_noc": "Alert NOC : Kritis({c}) Peringatan({w}) Info({i})", "al_ndr": "Alert SOC (NDR) : C({c}) H({h}) M({m}) L({l}) N({n})", "al_xdr": "Alert SOC (XDR) : C({c}) H({h}) M({m}) L({l})",
            "find": "🔎 *TEMUAN OTOMATIS*", "crit": "KRITIS", "warn": "PERINGATAN", "link": "Link Pendukung : {u}",
-           "eos": "EOS", "n_cctv": "CCTV", "n_wifi": "WiFi", "n_device": "Perangkat", "n_link": "Link / Web", "branch": "Cabang: {x}", "all_branches": "Semua cabang", "st_net": "Status Jaringan : {s}", "st_dev": "Status Perangkat : {s}", "ok": "OK", "warn_n": "PERHATIAN ({n} link down)", "dev_warn": "PERHATIAN ({n} perangkat down)",
-           "s_net": "🌐 *JARINGAN*", "s_dev": "🖥️ *PERANGKAT*", "dev_none": "Belum ada data perangkat dari Zabbix.", "dev_tot": "Perangkat: {t} unit, {d} down saat ini (ketersediaan {a}%).", "dev_ev": "Kejadian down {f}–{t}: {n} kejadian, total {h} jam.", "dev_line": "- {name} ({loc}): down {h}",
+           "eos": "EOS", "n_cctv": "CCTV", "n_wifi": "WiFi", "n_device": "Perangkat", "n_link": "Link / Web", "n_isp": "ISP", "branch": "Cabang: {x}", "all_branches": "Semua cabang", "st_net": "Status Jaringan : {s}", "st_dev": "Status Perangkat : {s}", "ok": "OK", "warn_n": "PERHATIAN ({n} link down)", "dev_warn": "PERHATIAN ({n} perangkat down)",
+           "s_net": "🌐 *JARINGAN*", "s_dev": "🖥️ *PERANGKAT*", "dev_none": "Belum ada data perangkat dari Zabbix.", "dev_tot": "Perangkat: {t} unit, {d} down saat ini (ketersediaan {a}%).", "dev_ev": "Kejadian down {r}: {n} kejadian, total {h} jam.", "dev_line": "- {name} ({loc}): down {h}",
            "d_duty": "Hari tugas {d} ({h}.00–{h}.00 esok hari)",
-           "st_cctv": "Status CCTV : {s}", "st_device": "Status Perangkat : {s}", "st_wifi": "Status WiFi : {s}", "st_link": "Status Link / Web : {s}", "st_srv": "Status Server Milestone : {s}", "srv_warn": "PERHATIAN ({n} server tidak sinkron)",
+           "st_cctv": "Status CCTV : {s}", "st_device": "Status Perangkat : {s}", "st_wifi": "Status WiFi : {s}", "st_link": "Status Link / Web : {s}", "st_isp": "Status ISP (Zabbix) : {s}", "st_prtg": "Status Link (PRTG) : {s}", "st_srv": "Status Server Milestone : {s}", "srv_warn": "PERHATIAN ({n} server tidak sinkron)",
+           "isp_none": "Belum ada data host ISP-* dari Zabbix.", "isp_tot": "ISP Zabbix (ISP-*): {o} dari {t} link aktif (availability {a}%){dn}.", "isp_red": "Redundansi cabang: {dual} cabang dual-link{risk}.", "isp_prov": "Per provider (aktif/total): {x}", "isp_ev": "Riwayat gangguan {r}: {n} kejadian pada {h} link, total {hr} jam{mttr}.", "isp_down_hd": "Link sedang down saat ini:", "isp_line": "- {name} ({loc} · {prov}): down {h}", "isp_risk_hd": "Cabang berisiko / tanpa redundansi:", "isp_risk_line": "- {loc} ({red}): {links}", "isp_top_hd": "Link dengan gangguan terbanyak pada periode ini:", "isp_top_line": "- {name}: {n} kejadian ({hr} jam)",
            "ms_tot": "Milestone: {t} kamera ({r} merekam), server sinkron {s}/{n}", "ms_fail": ". Bermasalah: {x}", "ms_pa": "Public announcer: {t} unit, {d} down", "dev_loc": "Cabang dengan perangkat down terbanyak: {x}", "dev_kind": "Per kategori (down/total): {x}",
            "ap_warn": "PERHATIAN ({n} AP offline)", "wifi_none": "Belum ada data WiFi dari Ruckus.", "wifi_ap": "Access Point: {o} dari {t} online, {f} offline", "wifi_cl": "Client aktif: {c} ({u} pengguna), sinyal lemah (di bawah {r} dBm): {w}",
            "wifi_loc": "Cabang dengan AP offline: {x}", "wifi_line": "- {name} ({zone}): offline", "link_warn": "PERHATIAN ({n} link down, {w} monitor web down)",
            "kuma": "Web (Uptime Kuma): {t} monitor, {d} down, availability {a}%", "kuma_line": "- {name} ({loc}): down", "kuma_none": "Web (Uptime Kuma): belum ada data.",
            "d_full": "Hari penuh {d}", "d_h1": "Setengah hari pertama, {d} (00.00–12.00)", "d_h2": "Setengah hari kedua, {d} (12.00–24.00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "24 jam terakhir", "d_7": "7 hari terakhir", "d_30": "30 hari terakhir", "d_month": "Bulan {m} {y}", "d_range": "Hari tugas {a} – {b}", "d_thismonth": "Bulan ini ({m} {y})", "d_lastmonth": "Bulan lalu ({m} {y})"},
 }
-SUMMARY_KINDS = ("full", "noc", "soc", "eos", "cctv", "wifi", "device", "link")
-SITE_KINDS = ("eos", "cctv", "wifi", "device", "link")           # summaries that can be limited to one branch
+SUMMARY_KINDS = ("full", "noc", "soc", "eos", "cctv", "wifi", "device", "link", "isp")
+SITE_KINDS = ("eos", "cctv", "wifi", "device", "link", "isp")           # summaries that can be limited to one branch
 
 
 def _dt(d: datetime) -> str:
@@ -825,25 +851,37 @@ def _net_lines(db: Session, t: dict, a: datetime, end: datetime, site: str = "")
     return L, len(link_rows)
 
 
+def _drange(d1: date, d2: date) -> str:
+    return f"{d1:%d/%m}" if d1 == d2 else f"{d1:%d/%m}–{d2:%d/%m}"
+
+
 def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: str, tk_max: int = 15, f_max: int = 8) -> str:
     """Summary for the EOS teams: tickets, network, and device status, for all branches or one branch. No security part."""
-    from .calc import devices as DEV
+    from .calc import devices as DEV, zbx_isp as ZBXISP
     t = TXT["id"]
     now = cfg.now()
     a, b, label = _window(cfg, scope, day)
     end = min(b, now)
     head = t["title"] + " · EOS"
     if a >= now:
-        return f"{head}\n{label}\n\n{t['not_started']}"
+        return "\n".join([head, label, "", t["not_started"]] + _link_lines(cfg, t, scope, day, "eos", site, now))
     live = b > now
+    d1, d2 = a.date(), (end - timedelta(seconds=1)).date()
     L = _head_lines(cfg, t, head, a, b, end, now, label, live, scope)
     L.insert(1, t["branch"].format(x=site or t["all_branches"]))
     net, n_down = _net_lines(db, t, a, end, site)
+    Zi = ZBXISP.build(db, cfg, d1, d2, site)
+    n_zisp = Zi["all"]["down"] if Zi["all"]["total"] else 0
+    if Zi["all"]["total"]:
+        Za, Zh = Zi["all"], Zi["hist"]
+        net.append(f"ISP Zabbix (ISP-*): {_f(Za['online'])}/{_f(Za['total'])} aktif" + (f", {_f(Za['down'])} down" if Za["down"] else "") + (f", {_f(Za['singleRisk'])} cabang tanpa redundansi" if Za["singleRisk"] else "") + f" · {_f(Zh['events'])} gangguan ({_f(Zh['hours'], 1)} jam).")
+        for x in Zi["down"][:min(6, max(3, tk_max))]:
+            net.append(t["isp_line"].format(name=x["name"], loc=x["loc"], prov=x["provider"], h=_dur(x["ageH"] or 0)))
     D = DEV.build(db, cfg, site, "", "", down_all=True)
-    H = DEV.history(db, cfg, a.date(), (end - timedelta(seconds=1)).date(), site)
+    H = DEV.history(db, cfg, d1, d2, site)
     A = D["all"]
     L.append(t["s_status"])
-    L.append(t["st_net"].format(s=t["warn_n"].format(n=n_down) if n_down else t["ok"]))
+    L.append(t["st_net"].format(s=t["warn_n"].format(n=n_down + n_zisp) if (n_down + n_zisp) else t["ok"]))
     L.append(t["st_dev"].format(s=t["dev_warn"].format(n=A["down"]) if A["down"] else t["ok"]))
     tk, _ = _ticket_lines(db, cfg, t, a, end, site, tk_max)
     L += tk + ["", t["s_net"]] + net + ["", t["s_dev"]]
@@ -851,7 +889,7 @@ def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: s
         L.append(t["dev_none"])
     else:
         L.append(t["dev_tot"].format(t=_f(A["total"]), d=_f(A["down"]), a=_f((A["avail"] or 0) * 100, 1)))
-        L.append(t["dev_ev"].format(f=f"{a:%d/%m}", t=f"{(end - timedelta(seconds=1)):%d/%m}", n=_f(H["events"]), h=_f(H["hours"], 1)))
+        L.append(t["dev_ev"].format(r=_drange(d1, d2), n=_f(H["events"]), h=_f(H["hours"], 1)))
         dev_max = min(10, max(3, tk_max))
         for x in D["down"][:dev_max]:
             L.append(t["dev_line"].format(name=x["name"], loc=x["loc"], h=_dur(x["ageH"] or 0)))
@@ -871,15 +909,18 @@ def _eos_summary(db: Session, cfg: Config, scope: str, day: date | None, site: s
 
 def _link_lines(cfg: Config, t: dict, scope: str, day: date | None, kind: str, site: str, now: datetime) -> list[str]:
     base = (cfg.p("ui.public_url", "") or "").strip().rstrip("/")
-    if not base or scope.startswith("range:"):                  # the page has no date-range view, so a range has no link
+    if not base:
         return []
     d = day or cfg.clock.duty_date(now)
-    url = f"{base}/#insight?ins=summary&scope={scope}&kind={kind}" + (f"&day={d.isoformat()}" if scope not in ("24h", "7d", "30d", "thismonth", "lastmonth") else "") + (f"&site={quote(site)}" if site else "")
+    if scope.startswith("range:"):
+        url = f"{base}/#insight?ins=summary&kind={kind}" + (f"&site={quote(site)}" if site else "")
+    else:
+        url = f"{base}/#insight?ins=summary&scope={scope}&kind={kind}" + (f"&day={d.isoformat()}" if scope not in ("24h", "7d", "30d", "thismonth", "lastmonth") else "") + (f"&site={quote(site)}" if site else "")
     return ["", t["link"].format(u=url)]
 
 
-AREA_KINDS = ("cctv", "wifi", "device", "link")                  # one area each: status, key figures, the worst items, findings; all branches or one branch
-AREA_FINDINGS = {"cctv": {"cctv"}, "wifi": {"wifi"}, "device": {"devices"}, "link": {"links", "capacity"}}
+AREA_KINDS = ("cctv", "wifi", "device", "link", "isp")           # one area each: status, key figures, the worst items, findings; all branches or one branch
+AREA_FINDINGS = {"cctv": {"cctv"}, "wifi": {"wifi"}, "device": {"devices"}, "link": {"links", "capacity"}, "isp": {"links", "capacity"}}
 
 
 def _findings_lines(db: Session, t: dict, a: datetime, end: datetime, kinds: set, site: str, f_max: int) -> list[str]:
@@ -898,7 +939,7 @@ def _dev_lines(t: dict, D: dict, H: dict, d1: date, d2: date, site: str, n_down:
     A = D["all"]
     if not A["total"]:
         return [t["dev_none"]]
-    L = [t["dev_tot"].format(t=_f(A["total"]), d=_f(A["down"]), a=_f((A["avail"] or 0) * 100, 1)), t["dev_ev"].format(f=f"{d1:%d/%m}", t=f"{d2:%d/%m}", n=_f(H["events"]), h=_f(H["hours"], 1))]
+    L = [t["dev_tot"].format(t=_f(A["total"]), d=_f(A["down"]), a=_f((A["avail"] or 0) * 100, 1)), t["dev_ev"].format(r=_drange(d1, d2), n=_f(H["events"]), h=_f(H["hours"], 1))]
     if not site:
         worst = [r for r in sorted(D["byLoc"], key=lambda r: -r["down"]) if r["down"]][:5]
         if worst:
@@ -919,7 +960,7 @@ def _area_summary(db: Session, cfg: Config, scope: str, day: date | None, kind: 
     end = min(b, now)
     head = t["title"] + " · " + t["n_" + kind]
     if a >= now:
-        return f"{head}\n{label}\n\n{t['not_started']}"
+        return "\n".join([head, label, "", t["not_started"]] + _link_lines(cfg, t, scope, day, kind, site, now))
     live = b > now
     d1, d2 = a.date(), (end - timedelta(seconds=1)).date()
     n_dev = min(10, max(3, tk_max))
@@ -960,12 +1001,74 @@ def _area_summary(db: Session, cfg: Config, scope: str, day: date | None, kind: 
                 body.append(t["wifi_line"].format(name=x["name"], zone=x["zone"] or "-"))
             if len(W["apDown"]) > n_dev:
                 body.append(t["tk_more"].format(n=len(W["apDown"]) - n_dev).replace("tiket", "AP"))
+    elif kind == "isp":
+        from .calc import zbx_isp as ZBXISP
+        Zi = ZBXISP.build(db, cfg, d1, d2, site)
+        Za, Zh = Zi["all"], Zi["hist"]
+        net, n_links = _net_lines(db, t, a, end, site)
+        if not Za["total"]:
+            status.append(t["st_isp"].format(s=t["ok"]))
+            body.append(t["isp_none"])
+        else:
+            dn, sr, sd = Za["down"], Za["singleRisk"], Za["siteDown"]
+            issues = []
+            if dn:
+                issues.append(f"{_f(dn)} link down")
+            if sd:
+                issues.append(f"{_f(sd)} lokasi down")
+            if sr:
+                issues.append(f"{_f(sr)} cabang tanpa redundansi")
+            status.append(t["st_isp"].format(s=f"PERHATIAN ({', '.join(issues)})" if issues else t["ok"]))
+            body.append(t["isp_tot"].format(
+                o=_f(Za["online"]), t=_f(Za["total"]),
+                a=_f((Za["avail"] or 0) * 100, 2) if Za["avail"] is not None else "-",
+                dn=f", {_f(dn)} down" if dn else "",
+            ))
+            if not site:
+                rparts = []
+                if sd:
+                    rparts.append(f"{_f(sd)} site down")
+                if sr:
+                    rparts.append(f"{_f(sr)} single-link risk")
+                body.append(t["isp_red"].format(dual=_f(Za["dualSites"]), risk=f" ({', '.join(rparts)})" if rparts else " (semua aman)"))
+            if Zi["byProvider"]:
+                body.append(t["isp_prov"].format(x=", ".join(f"{r['k']} {r['online']}/{r['total']}" for r in Zi["byProvider"])))
+            mttr = f", MTTR {_f(Zh['mttr'], 1)} jam" if Zh.get("mttr") is not None else ""
+            body.append(t["isp_ev"].format(r=_drange(d1, d2), n=_f(Zh["events"]), h=_f(Zh["hosts"]), hr=_f(Zh["hours"], 1), mttr=mttr))
+            if Zi["down"]:
+                body.append(t["isp_down_hd"])
+                for x in Zi["down"][:n_dev]:
+                    body.append(t["isp_line"].format(name=x["name"], loc=x["loc"], prov=x["provider"], h=_dur(x["ageH"] or 0)))
+                if len(Zi["down"]) > n_dev:
+                    body.append(t["tk_more"].format(n=len(Zi["down"]) - n_dev).replace("tiket", "link"))
+            if not site:
+                risks = [r for r in Zi["byLoc"] if r["rtone"] in ("crit", "warn")][:6]
+                if risks:
+                    body.append(t["isp_risk_hd"])
+                    for r in risks:
+                        ltxt = ", ".join(f"{l['provider']} ({'UP' if l['reachable'] else 'DOWN'})" for l in r["links"])
+                        body.append(t["isp_risk_line"].format(loc=r["k"], red=r["redundancy"], links=ltxt))
+            top_h = (Zh.get("byHost") or [])[:5]
+            if top_h:
+                body.append(t["isp_top_hd"])
+                for x in top_h:
+                    body.append(t["isp_top_line"].format(name=x["k"], n=_f(x["events"]), hr=_f(x["hours"], 1)))
+        status.append(t["st_prtg"].format(s=t["warn_n"].format(n=n_links) if n_links else t["ok"]))
+        body += net
     else:
         net, n_links = _net_lines(db, t, a, end, site)
+        from .calc import zbx_isp as ZBXISP
+        Zi = ZBXISP.build(db, cfg, d1, d2, site)
+        n_zisp = Zi["all"]["down"] if Zi["all"]["total"] else 0
         K = KUMA.build(db, cfg, d1, d2, site)
         n_web = K["down"] if K["configured"] and K["total"] else 0
-        status.append(t["st_link"].format(s=t["link_warn"].format(n=n_links, w=n_web) if (n_links or n_web) else t["ok"]))
+        status.append(t["st_link"].format(s=t["link_warn"].format(n=n_links + n_zisp, w=n_web) if (n_links or n_zisp or n_web) else t["ok"]))
         body += net
+        if Zi["all"]["total"]:
+            Za, Zh = Zi["all"], Zi["hist"]
+            body.append(f"ISP Zabbix (ISP-*): {_f(Za['online'])}/{_f(Za['total'])} aktif" + (f", {_f(Za['down'])} down" if Za["down"] else "") + (f", {_f(Za['singleRisk'])} cabang tanpa redundansi" if Za["singleRisk"] else "") + f" · {_f(Zh['events'])} gangguan ({_f(Zh['hours'], 1)} jam).")
+            for x in Zi["down"][:n_dev]:
+                body.append(t["isp_line"].format(name=x["name"], loc=x["loc"], prov=x["provider"], h=_dur(x["ageH"] or 0)))
         if K["configured"] and K["total"]:
             body.append(t["kuma"].format(t=K["total"], d=K["down"], a=_f((K["avail"] or 0) * 100, 2) if K["avail"] is not None else "-"))
             for m in [m for m in K["mons"] if m["status"] == 0][:n_dev]:
@@ -985,6 +1088,12 @@ def shift_summary(db: Session, cfg: Config, top: list[dict] | None = None, scope
         out = _summary(db, cfg, scope, day, kind, site, tk_max, f_max)
         if not max_chars or len(out) <= max_chars:
             return out
+    marker = "\n\nLink Pendukung :"
+    if marker in out:
+        body, tail = out.rsplit(marker, 1)
+        tail = marker + tail
+        keep = max(0, max_chars - len(tail) - 1)
+        return body[:keep] + "…" + tail
     return out[: max_chars - 1] + "…"
 
 
@@ -1002,7 +1111,7 @@ def _summary(db: Session, cfg: Config, scope: str, day: date | None, kind: str, 
     end = min(b, now)
     head = t["title"] + ("" if kind == "full" else " · " + t[kind])
     if a >= now:
-        return f"{head}\n{label}\n\n{t['not_started']}"
+        return "\n".join([head, label, "", t["not_started"]] + _link_lines(cfg, t, scope, day, kind, site, now))
     live = b > now                                              # window still running: "open now" is meaningful
     noc, soc = kind in ("full", "noc"), kind in ("full", "soc")
     L = _head_lines(cfg, t, head, a, b, end, now, label, live, scope)
@@ -1037,6 +1146,13 @@ def _summary(db: Session, cfg: Config, scope: str, day: date | None, kind: str, 
     if noc:
         net, _ = _net_lines(db, t, a, end)
         L += net
+        from .calc import zbx_isp as ZBXISP
+        Zi = ZBXISP.build(db, cfg, a.date(), (end - timedelta(seconds=1)).date())
+        if Zi["all"]["total"]:
+            Za, Zh = Zi["all"], Zi["hist"]
+            L.append(f"ISP Zabbix (ISP-*): {_f(Za['online'])}/{_f(Za['total'])} aktif" + (f", {_f(Za['down'])} down" if Za["down"] else "") + (f", {_f(Za['singleRisk'])} cabang tanpa redundansi" if Za["singleRisk"] else "") + f" · {_f(Zh['events'])} gangguan ({_f(Zh['hours'], 1)} jam).")
+            for x in Zi["down"][:5]:
+                L.append(t["isp_line"].format(name=x["name"], loc=x["loc"], prov=x["provider"], h=_dur(x["ageH"] or 0)))
         if live:
             ap_t = db.scalar(select(func.count()).select_from(M.WifiAp)) or 0
             ap_o = db.scalar(select(func.count()).select_from(M.WifiAp).where(~func.lower(func.coalesce(M.WifiAp.status, "")).startswith("online"))) or 0

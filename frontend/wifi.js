@@ -1,6 +1,6 @@
 /* WiFi Users menu: active WiFi clients, Access Points, usage, and trends from Ruckus vSZ. The client list filter runs in the browser (data is already loaded). */
 "use strict";
-const wBytes = n => n == null ? "-" : n >= 1099511627776 ? (n / 1099511627776).toFixed(2) + " TB" : n >= 1073741824 ? (n / 1073741824).toFixed(2) + " GB" : n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
+const wBytes = n => n == null ? "-" : n >= 1099511627776 ? fx(n / 1099511627776, 2) + " TB" : n >= 1073741824 ? fx(n / 1073741824, 2) + " GB" : n >= 1048576 ? fx(n / 1048576, 1) + " MB" : fmt(Math.round(n / 1024)) + " KB";
 const wSel = (id, label, items) => `<select id="${id}" data-wf aria-label="${label}"><option value="">${label}</option>${[...new Set(items.filter(x => x && x !== "-"))].sort().map(x => `<option>${esc(x)}</option>`).join("")}</select>`;
 function applyWP() {
   const q = (($("wpq") || {}).value || "").trim().toLowerCase(), st = ($("wpSt") || {}).value || "";

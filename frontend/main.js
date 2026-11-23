@@ -12,10 +12,10 @@ const PAGE_FILE = {report: "page-report.js", ringkasan: "page-ringkasan.js", ser
   jadwal: "page-jadwal.js", serahterima: "page-handover.js", kelengkapan: "page-data.js", admin: "admin.js"};
 const FILE_DEPS = {
   "vendor/leaflet/leaflet.js": [], "devices.js": ["vendor/leaflet/leaflet.js", "insight.js"], "wifi.js": ["insight.js"], "xdr.js": ["insight.js"], "cctv.js": ["insight.js"],
-  "groups.js": ["wifi.js", "xdr.js", "insight.js"], "internet.js": ["page-soc.js"], "page-soc.js": ["insight.js"], "page-noc.js": ["insight.js"], "page-servicedesk.js": ["insight.js"],
-  "page-ringkasan.js": ["insight.js", "wifi.js", "xdr.js"], "page-jadwal.js": ["page-handover.js"], "admin.js": ["integrations.js"], "integrations.js": ["admin.js"]
+  "page-zbxisp.js": ["insight.js"], "groups.js": ["wifi.js", "xdr.js", "page-zbxisp.js", "insight.js"], "internet.js": ["page-soc.js"], "page-soc.js": ["insight.js"], "page-noc.js": ["insight.js", "page-zbxisp.js"], "page-servicedesk.js": ["insight.js"],
+  "page-ringkasan.js": ["insight.js", "wifi.js", "xdr.js", "page-zbxisp.js"], "page-jadwal.js": ["page-handover.js"], "admin.js": ["integrations.js"], "integrations.js": ["admin.js"]
 };
-const WIDGET_FILE = {dev: "devices.js", xdr: "xdr.js", cctv: "cctv.js", wifi: "wifi.js"};   // data key in V → script that renders its widgets
+const WIDGET_FILE = {dev: "devices.js", xdr: "xdr.js", cctv: "cctv.js", wifi: "wifi.js", zbx_isp: "page-zbxisp.js"};   // data key in V → script that renders its widgets
 const JS_LOADED = {};
 let BASEMAP_ASKED = false;
 function loadScript(src) {
@@ -48,7 +48,143 @@ const VIEWS = {report: () => vReport(), ringkasan: () => vRingkasan(), servicede
   internet: () => vInternet(), insight: () => vInsight(), network: () => vNetwork(), cyber: () => vCyber(), jadwal: () => vJadwal(), serahterima: () => vHo(),
   kelengkapan: () => vData(), admin: () => vAdmin()};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) openSheet(false); });
+const WALL = {on: false, paused: false, rotate: true, slides: [], idx: 0, slideSec: 15, slideLeft: 15, refSec: 60, refLeft: 60, customSlideSec: null};
+const wallCfgSlide = () => Math.max(5, +(WALL.customSlideSec || (CFG && CFG.params["ui.wall_slide_sec"]) || 15));
+const wallCfgRefresh = () => Math.max(15, +((CFG && CFG.params["ui.wall_refresh_sec"]) || 60));
+function wallRotationList() {
+  const raw = (CFG && CFG.params["ui.wall_rotate_tabs"]) || [];
+  const allowed = new Set((TABS || []).map(t => t[0]));
+  return (Array.isArray(raw) ? raw : []).filter(k => allowed.has(k));
+}
+function wallCollectItems() {
+  const v = $("view"); if (!v) return [];
+  const lay = v.querySelector(":scope > .grid.lay");
+  if (lay) return [...lay.querySelectorAll(":scope > .wblock:not(.off)")];
+  const items = [];
+  [...v.children].forEach(ch => {
+    if (ch.classList.contains("grid")) {
+      [...ch.children].forEach(el => { if (!el.classList.contains("secjump") && !el.classList.contains("sechd") && !el.hidden) items.push(el); });
+    } else if (!ch.classList.contains("rowlbl") && !ch.hidden) {
+      items.push(ch);
+    }
+  });
+  return items;
+}
+function buildWallSlides(keepIdx) {
+  const items = wallCollectItems();
+  items.forEach(el => { el.classList.remove("wslide-hide", "wslide-in"); });
+  if (!WALL.on || !items.length) { WALL.slides = items.length ? [items] : []; WALL.idx = 0; updateWallBar(); return; }
+  /* Group items that sit side-by-side on the same visual row so a multi-column row (e.g. 4 gauges or c8+c4) is never split across slides. */
+  const rows = [];
+  items.forEach(el => {
+    const r = el.getBoundingClientRect();
+    if (!r.height) return;
+    const last = rows[rows.length - 1];
+    if (last && Math.abs(r.top - last.top) < 18) { last.els.push(el); last.h = Math.max(last.h, r.height); }
+    else rows.push({top: r.top, h: r.height, els: [el]});
+  });
+  const barH = ($("wallBar") ? $("wallBar").offsetHeight : 62) + 42;
+  const avail = Math.max(360, window.innerHeight - barH);
+  const slides = [];
+  let cur = [], curH = 0;
+  rows.forEach(row => {
+    const addH = row.h + (cur.length ? 14 : 0);
+    if (cur.length && curH + addH > avail) { slides.push(cur); cur = [...row.els]; curH = row.h; }
+    else { cur.push(...row.els); curH += addH; }
+  });
+  if (cur.length) slides.push(cur);
+  WALL.slides = slides.length ? slides : [items];
+  WALL.idx = keepIdx ? Math.min(WALL.idx, WALL.slides.length - 1) : 0;
+  showWallSlide(WALL.idx, false);
+}
+function showWallSlide(idx, resetTimer = true) {
+  if (!WALL.on) return;
+  const n = WALL.slides.length || 1;
+  WALL.idx = ((idx % n) + n) % n;
+  const list = WALL.slides[WALL.idx] || [], active = new Set(list), solo = list.length === 1;
+  wallCollectItems().forEach(el => {
+    const show = active.has(el);
+    el.classList.toggle("wslide-hide", !show);
+    el.classList.toggle("wslide-full", show && solo);
+    if (show) { el.classList.remove("wslide-in"); void el.offsetWidth; el.classList.add("wslide-in"); }
+  });
+  if (resetTimer) WALL.slideLeft = wallCfgSlide();
+  updateWallBar();
+  devMaps();
+}
+function wallStep(dir) {
+  if (!WALL.on) return;
+  const n = WALL.slides.length || 1, rot = WALL.rotate ? wallRotationList() : [];
+  const next = WALL.idx + dir;
+  if (next >= 0 && next < n) { showWallSlide(next); return; }
+  if (rot.length > 1) {
+    const ci = rot.indexOf(S.tab), ni = ci < 0 ? 0 : ((ci + (dir > 0 ? 1 : -1)) + rot.length) % rot.length;
+    WALL.idx = 0; WALL.slideLeft = wallCfgSlide();
+    set({tab: rot[ni]});
+    return;
+  }
+  showWallSlide(next);
+}
+function updateWallBar() {
+  if (!WALL.on) return;
+  const t = $("wallTitle"), s = $("wallSub"), cd = $("wallCd"), sl = $("wallSl"), pl = $("wallPlay"), dots = $("wallDots"), prog = $("wallProg"), rb = $("wallRotBtn"), sel = $("wallSecSel");
+  const n = WALL.slides.length || 1, curSec = wallCfgSlide(), rot = wallRotationList();
+  if (t) t.textContent = $("ptitle").textContent || BRAND;
+  if (s) s.textContent = ctxTxt();
+  if (sl) sl.textContent = (WALL.idx + 1) + " / " + n;
+  if (pl) { pl.textContent = WALL.paused ? "▶" : "⏸"; pl.title = WALL.paused ? "Resume slideshow (Space)" : "Pause slideshow (Space)"; }
+  if (dots) dots.innerHTML = Array.from({length: n}, (_, i) => `<button type="button" data-wdot="${i}" class="${i === WALL.idx ? "on" : ""}" aria-label="Slide ${i + 1}"></button>`).join("");
+  if (rb) { rb.hidden = rot.length < 2; rb.textContent = WALL.rotate ? "Rotate menus (" + rot.length + ")" : "Loop this page"; }
+  if (sel) {
+    if (![...sel.options].some(o => +o.value === curSec)) sel.insertAdjacentHTML("afterbegin", `<option value="${curSec}">${curSec}s / slide</option>`);
+    sel.value = String(curSec);
+  }
+  if (cd) cd.textContent = "Refresh " + WALL.refLeft + "s";
+  if (prog) prog.style.width = Math.max(0, Math.min(100, (WALL.slideLeft / curSec) * 100)).toFixed(1) + "%";
+}
+function setWall(on) {
+  WALL.on = !!on;
+  document.body.classList.toggle("wall", WALL.on);
+  if (WALL.on) {
+    WALL.paused = false;
+    WALL.slideSec = wallCfgSlide(); WALL.slideLeft = WALL.slideSec;
+    WALL.refSec = wallCfgRefresh(); WALL.refLeft = WALL.refSec;
+    WALL.rotate = wallRotationList().length > 1;
+    _wallW = window.innerWidth; _wallH = window.innerHeight;
+    if (S.layEdit) set({layEdit: false});
+    renderDuty();
+    window.scrollTo({top: 0});
+    if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+    requestAnimationFrame(() => buildWallSlides(false));
+  } else {
+    wallCollectItems().forEach(el => el.classList.remove("wslide-hide", "wslide-in", "wslide-full"));
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    window.dispatchEvent(new Event("resize"));
+  }
+}
+let _wallResizeT = null, _wallW = 0, _wallH = 0;
+window.addEventListener("resize", () => {
+  if (!WALL.on) return;
+  if (window.innerWidth === _wallW && window.innerHeight === _wallH) return;
+  _wallW = window.innerWidth; _wallH = window.innerHeight;
+  clearTimeout(_wallResizeT);
+  _wallResizeT = setTimeout(() => buildWallSlides(true), 250);
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    if (!$("sheet").hidden) openSheet(false);
+    else if (WALL.on) setWall(false);
+  }
+  if (WALL.on && !["INPUT", "SELECT", "TEXTAREA"].includes((e.target || {}).tagName)) {
+    if (e.key === "ArrowRight") { e.preventDefault(); wallStep(1); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); wallStep(-1); }
+    else if (e.key === " ") { e.preventDefault(); WALL.paused = !WALL.paused; updateWallBar(); }
+  }
+  if ((e.key === "Enter" || e.key === " ") && e.target.closest("[data-filter-site]")) {
+    e.preventDefault();
+    e.target.closest("[data-filter-site]").click();
+  }
+});
 /* Long pages: the panels are grouped under a heading that folds, with a "Jump to" bar on top. To move a widget to another group, edit the lists below. The names are widget titles (a title only has to start with the name); the first group is open until the user opens another. Pages in FLAT_SECTIONS keep the headings and the Jump to bar but never fold. */
 const SECTIONS = {
   devices: [["Overview", ["Site Map", "Status by Category"], true], ["Downtime analysis", ["Down Duration", "Down by Location", "Down History", "Down Incidents per Day", "Downtime per Day", "Downtime per Location", "Downtime per Device Type"]], ["Inventory", ["By Device Type", "Per Location", "Device List"]], ["Problem devices", ["Most Frequently Down", "Dominant Problems"]]],
@@ -103,7 +239,7 @@ async function render(reload) {
   try {
     await ensurePage(tab);
     if (S.tab !== tab) return;                                   // the user moved to another page while the script loaded
-    $("view").innerHTML = VIEWS[S.tab](); $("view").dataset.tab = S.tab; if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); kpiCols(); groupSections(); devMaps();
+    $("view").innerHTML = VIEWS[S.tab](); $("view").dataset.tab = S.tab; if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); kpiCols(); groupSections(); devMaps(); if (WALL.on) requestAnimationFrame(() => buildWallSlides(WALL._keepIdx)); WALL._keepIdx = false;
   } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Could not display the page: " + esc(e.message))}</section></div>`; }
 }
 /* Read-only Admin (role with admin_view but not is_admin): every edit control is hidden; the server still rejects changes. */
@@ -142,11 +278,16 @@ function layoutRows(page, role) {
   const own = pick(prof);
   return own.length || prof === "default" ? own : pick("default");
 }
+function closePops() {
+  [["profPop", "profBtn"], ["userPop", "userBtn"]].forEach(([p, b]) => { if ($(p)) $(p).hidden = true; if ($(b)) $(b).setAttribute("aria-expanded", "false"); });
+}
 function profileSwitcher(on) {
   const w = $("profWrap"), P = CFG.profiles || [];
   w.hidden = !(on && P.length > 1);
   if (w.hidden) return;
   $("profSel").innerHTML = P.map(p => `<option value="${esc(p.key)}" ${p.key === curProfile() ? "selected" : ""} title="${esc(p.description || "")}">${esc(p.name)}</option>`).join("");
+  const pop = $("profPop");
+  if (pop) pop.innerHTML = `<div class="pop-hd"><b>Dashboard Profile</b><small>Switch layout preset</small></div>` + P.map(p => `<button type="button" role="menuitem" data-pick-prof="${esc(p.key)}" class="${p.key === curProfile() ? "on" : ""}" title="${esc(p.description || "")}"><span>${esc(p.name)}</span>${p.key === curProfile() ? "<b>✓</b>" : ""}</button>`).join("");
 }
 function applyLayout() {
   const v = $("view"), on = LAYOUT_PAGES.includes(S.tab);
@@ -267,6 +408,7 @@ const PICKP = {
   "sd.required_fields": {t: "multi", src: o => o.sd_fields}, "sd.rank_units": {t: "multi", src: o => o.units},
   "wifi.kill_roles": {t: "multi", src: o => o.roles}, "wifi.kill_users": {t: "multi", src: o => o.users}, "wifi.portal_auth": {t: "multi", src: o => o.wifi_auth},
   "ui.default_preset": {t: "single", src: () => (CFG.params["ui.presets"] || []).map(x => x[0]), lab: v => (((CFG.params["ui.presets"] || []).find(x => x[0] === v)) || [v, v])[1]},
+  "ui.wall_rotate_tabs": {t: "multi", src: () => (CFG.modules || []).filter(m => !["admin", "report", "kelengkapan"].includes(m.key)).map(m => m.key), lab: k => ((MODS[k] || {}).label || k)},
   "admin.locked_pages": {t: "multi", src: () => (typeof ADM !== "undefined" ? ADM.flatMap(([, , ps]) => ps.map(x => x[0])) : [])},
   "dev.tab_kinds": {t: "kvsel", src: o => o.dev_kinds}, "dev.kind_labels": {t: "kvtext", keys: o => o.dev_kinds}, "report.contact": {t: "object"}
 };
@@ -374,11 +516,24 @@ const pkOf = row => S.mdata.pk.map(k => row[k]).join("");
 
 /* ---------- event ---------- */
 document.addEventListener("click", async e => {
+  if (!e.target.closest(".ph-popwrap")) closePops();
+  const tile = e.target.closest("[data-filter-site]");
+  if (tile && !CFG.me.site) { const st = tile.dataset.filterSite; set({site: S.site === st ? "" : st}); return; }
   const b = e.target.closest("button, a[data-tab], a[data-go]"); if (!b || b.disabled) return;
   if (b.tagName === "A") { if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button) return; e.preventDefault(); }       // menu entries are real links: right-click and Ctrl-click open a new tab
   const d = b.dataset;
   try {
-    if (b.id === "layBtn") set({layEdit: !S.layEdit, layRole: "", layProfile: curProfile()});
+    if (b.id === "profBtn") { const open = $("profPop").hidden; closePops(); $("profPop").hidden = !open; b.setAttribute("aria-expanded", String(open)); return; }
+    else if (b.id === "userBtn") { const open = $("userPop").hidden; closePops(); $("userPop").hidden = !open; b.setAttribute("aria-expanded", String(open)); return; }
+    else if (d.pickProf) { closePops(); await send("/api/me/profile", {profile: d.pickProf}, "PUT"); CFG.me.profile = d.pickProf; $("profSel").value = d.pickProf; render(false); return; }
+    else if (b.id === "wallBtn") { closePops(); setWall(!WALL.on); return; }
+    else if (b.id === "wallExit") { setWall(false); return; }
+    else if (b.id === "wallPrev") { wallStep(-1); return; }
+    else if (b.id === "wallNext") { wallStep(1); return; }
+    else if (b.id === "wallPlay") { WALL.paused = !WALL.paused; updateWallBar(); return; }
+    else if (b.id === "wallRotBtn") { WALL.rotate = !WALL.rotate; updateWallBar(); return; }
+    else if (d.wdot !== undefined) { showWallSlide(+d.wdot); return; }
+    else if (b.id === "layBtn") set({layEdit: !S.layEdit, layRole: "", layProfile: curProfile()});
     else if (b.id === "profNew") await profileNew();
     else if (b.id === "profRename") await profileRename();
     else if (b.id === "profDel") await profileDelete();
@@ -430,10 +585,10 @@ document.addEventListener("click", async e => {
     else if (d.secjump !== undefined) { toggleSec(+d.secjump, true); const h = $("view").querySelector(`.sechd[data-sec="${d.secjump}"]`); if (h) h.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth", block: "start"}); }
     else if (b.id === "fToggle") { const w = $("fwrap").classList.toggle("open"); b.setAttribute("aria-expanded", w); }
     else if (b.id === "railBtn") { const on = $("app").classList.toggle("rail"); b.textContent = on ? "›" : "‹"; try { localStorage.setItem("itoc.rail", on ? "1" : ""); } catch (_) {} }
-    else if (b.id === "logout" || b.id === "logoutM" || b.id === "logoutS") logout();
-    else if (b.id === "pwOpen" || b.id === "pwOpenS") openPw();
+    else if (b.id === "logout" || b.id === "logoutM" || b.id === "logoutS" || b.id === "logoutH") { closePops(); logout(); }
+    else if (b.id === "pwOpen" || b.id === "pwOpenS" || b.id === "pwOpenH") { closePops(); openPw(); }
     else if (b.hasAttribute("data-pwclose")) $("dlgPw").close();
-    else if (b.id === "theme" || b.id === "themeM" || b.id === "themeS" || b.id === "themeL") { const r = document.documentElement, dark = (r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark"; r.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("itoc.theme", r.dataset.theme); } catch (_) {} }
+    else if (b.id === "theme" || b.id === "themeM" || b.id === "themeS" || b.id === "themeL" || b.id === "themeH") { const r = document.documentElement, dark = (r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark"; r.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("itoc.theme", r.dataset.theme); } catch (_) {} }
   } catch (err) { if (err) alert(err.message); }
 });
 document.addEventListener("change", async e => {
@@ -451,6 +606,7 @@ document.addEventListener("change", async e => {
   else if (t.id === "layRole") set({layRole: t.value});
   else if (t.id === "layProf") set({layProfile: t.value});
   else if (t.id === "profSel") { await send("/api/me/profile", {profile: t.value}, "PUT"); CFG.me.profile = t.value; render(false); }
+  else if (t.id === "wallSecSel") { WALL.customSlideSec = +t.value || 15; WALL.slideLeft = wallCfgSlide(); updateWallBar(); }
   else if (t.dataset.wf !== undefined) applyWF();
   else if (t.dataset.wp !== undefined) applyWP();
   else if (t.dataset.wgroup !== undefined) {   // change the group filter on a map widget without adding a new widget
@@ -484,6 +640,9 @@ document.addEventListener("change", async e => {
     try { const r = await send("/api/ingest/tickets", fd); refresh({msg: ""}); setTimeout(() => { const m = $("upmsg2"); if (m) m.innerHTML = `<div class="msg ok">${esc(r.file)}: ${fmt(r.rows)} tickets saved or updated${r.skipped ? ", " + fmt(r.skipped) + " skipped (created date unreadable)" : ""}.</div>`; }, 400); }
     catch (err) { $("upmsg2").innerHTML = `<div class="msg err">${esc(err.message)}</div>`; }
   }
+});
+document.addEventListener("input", e => {
+  if (e.target.id === "zq" && typeof applyZispFilter === "function") applyZispFilter();
 });
 document.addEventListener("submit", async e => {
   e.preventDefault(); const f = e.target, v = id => ($(id) ? $(id).value.trim() : "");
@@ -544,11 +703,32 @@ function openPw() {
 
 /* ---------- tooltip ---------- */
 const tip = $("tip");
-document.addEventListener("pointerover", e => { const el = e.target.closest("[data-tip]"); if (!el) { tip.hidden = true; return; } tip.textContent = el.dataset.tip; tip.hidden = false; });
+document.addEventListener("pointerover", e => { if (e.pointerType === "touch") return; const el = e.target.closest("[data-tip]"); if (!el) { tip.hidden = true; return; } tip.textContent = el.dataset.tip; tip.hidden = false; });
+document.addEventListener("pointerdown", e => {
+  if (e.pointerType !== "touch") return;
+  const el = e.target.closest("[data-tip]");
+  if (!el) { tip.hidden = true; return; }
+  tip.textContent = el.dataset.tip; tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(8, Math.min(innerWidth - w - 8, e.clientX - w / 2)) + "px";
+  tip.style.top = Math.max(8, e.clientY - h - 14) + "px";
+});
 document.addEventListener("pointermove", e => { if (tip.hidden) return; const w = tip.offsetWidth, h = tip.offsetHeight; tip.style.left = Math.min(innerWidth - w - 8, e.clientX + 12) + "px"; tip.style.top = (e.clientY + 14 + h > innerHeight ? e.clientY - h - 10 : e.clientY + 14) + "px"; });
 document.addEventListener("focusin", e => { const el = e.target.closest(".ib"); if (!el) return; const r = el.getBoundingClientRect(); tip.textContent = el.dataset.tip; tip.hidden = false; tip.style.left = Math.min(innerWidth - tip.offsetWidth - 8, r.left) + "px"; tip.style.top = r.bottom + 6 + "px"; });
 document.addEventListener("focusout", () => { tip.hidden = true; });
-setInterval(() => { if (!CFG || $("app").hidden || document.hidden) return; renderDuty(); }, 1000);
+setInterval(() => {
+  if (!CFG || $("app").hidden || document.hidden) return;
+  renderDuty();
+  if (WALL.on) {
+    WALL.refLeft--;
+    if (WALL.refLeft <= 0) { WALL.refLeft = wallCfgRefresh(); WALL._keepIdx = true; render(true); }
+    if (!WALL.paused) {
+      WALL.slideLeft--;
+      if (WALL.slideLeft <= 0) wallStep(1);
+    }
+    updateWallBar();
+  }
+}, 1000);
 
 /* ---------- login & boot ---------- */
 function showLogin(msg, change) {
@@ -584,7 +764,10 @@ async function boot() {
   if (CFG.me.must_change_pw) return showLogin("", true);
   if (!TABS.length) return showLogin("Your role has no access to any page yet.");
   $("login").hidden = true; $("app").hidden = false;
-  $("me").textContent = CFG.me.name; $("av").textContent = CFG.me.name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase(); $("role").textContent = ROLES[CFG.me.role] || CFG.me.role; applyBrand(); $("foot").textContent = footText();
+  const ini = CFG.me.name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase(), rlab = ROLES[CFG.me.role] || CFG.me.role;
+  if ($("meH")) $("meH").textContent = CFG.me.name; if ($("avH")) $("avH").textContent = ini;
+  if ($("mePop")) $("mePop").textContent = CFG.me.name; if ($("rolePop")) $("rolePop").textContent = rlab;
+  applyBrand(); $("foot").textContent = footText();
   readHash(); render(true);
 }
 boot();

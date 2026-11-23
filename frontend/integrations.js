@@ -1,7 +1,7 @@
 /* TERA Dashboard — Admin: Integrations, API Keys, Email (SMTP), Webhooks. Secrets are write-only and never shown again. */
 "use strict";
-const INT = {integrations: null, apikeys: null, smtp: null, webhooks: null, msg: null, newKey: null, hookEdit: null, keyForm: false, busy: {}};
-const intReset = () => { if (typeof AUD !== "undefined") AUD.loaded = false; INT.sharelinks = INT.integrations = INT.apikeys = INT.smtp = INT.webhooks = INT.msg = INT.newKey = INT.hookEdit = INT.todo = INT.status = INT.roles = INT.roleEdit = null; INT.keyForm = false; };
+const INT = {integrations: null, apikeys: null, smtp: null, webhooks: null, chatcmd: null, cmdIn: "/isp", cmdOut: "", cmdBusy: false, msg: null, newKey: null, hookEdit: null, keyForm: false, busy: {}};
+const intReset = () => { if (typeof AUD !== "undefined") AUD.loaded = false; INT.sharelinks = INT.integrations = INT.apikeys = INT.smtp = INT.webhooks = INT.chatcmd = INT.msg = INT.newKey = INT.hookEdit = INT.todo = INT.status = INT.roles = INT.roleEdit = null; INT.keyForm = false; };
 const intDt = s => s ? new Date(s).toLocaleString("id-ID", {dateStyle: "medium", timeStyle: "short"}) : "–";
 const intMsg = () => INT.msg ? `<div class="msg ${INT.msg.ok ? "ok" : "err"}">${esc(INT.msg.t)}</div>` : "";
 async function intLoad(name, path) {
@@ -27,7 +27,8 @@ const intField = (id, label, inp, wide) => `<div class="fld ${wide ? "wide" : ""
 
 function vIntegrations() {
   if (!INT.integrations) { intLoad("integrations", "integrations"); return intLoading(); }
-  return intMsg() + `<div class="icards">${INT.integrations.rows.map(s => {
+  const actN = INT.integrations.rows.filter(s => s.enabled).length;
+  return admTitle("Integrations", `${INT.integrations.rows.length} data sources (${actN} active). Configure API credentials, sync schedules, and test connections.`) + intMsg() + `<div class="icards">${INT.integrations.rows.map(s => {
     const f = "i_" + s.key;
     const creds = s.creds.map(c => `<div class="fld"><label for="${f}_${c.name}">${esc(c.label)} ${c.set ? `<span class="tag">saved</span>` : c.env_set ? `<span class="tag">from .env (${esc(c.env)})</span>` : `<span class="tag warn">not set</span>`}</label>
       <input id="${f}_${c.name}" data-secret="${esc(c.name)}" type="password" autocomplete="new-password" placeholder="${c.set ? "•••••••• (leave empty = unchanged)" : "Fill in to save"}">${c.set ? `<button type="button" class="btn ghost sm" data-w data-int="clear" data-key="${esc(s.key)}" data-name="${esc(c.name)}">Remove saved</button>` : ""}</div>`).join("");
@@ -64,17 +65,17 @@ function vApiKeys(roles) {
       ${intField("k_site", "Limit to location", `<select id="k_site" data-f="site"><option value="">All allowed by role</option>${CFG.sites.map(x => `<option ${ek && ek.site === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`)}
       ${intField("k_days", ek ? "Expiry" : "Valid for", `<select id="k_days" data-f="days">${intOpt([...(ek ? [["keep", "Keep current" + (ek.expires_at ? " (" + intDt(ek.expires_at) + ")" : " (none)")]] : []), ["", "No expiry"], ["30", ek ? "30 days from now" : "30 days"], ["90", ek ? "90 days from now" : "90 days"], ["365", ek ? "1 year from now" : "1 year"]], ek ? "keep" : "90")}</select>`)}
       <div class="acts wide"><button class="btn" type="submit" data-w>${ek ? "Save" : "Generate"}</button><button class="btn ghost" type="button" data-int="keyform">Cancel</button></div></form>` : "";
-  return intMsg() + `<div class="toolbar"><span class="sub">API keys for other systems that read dashboard data.</span><button class="btn" type="button" data-w data-int="keyform">+ Generate key</button></div>${nk}${form}
+  return admTitle("API Keys", "API keys for external systems, bots, or scripts that read dashboard data.", `<button class="btn" type="button" data-w data-int="keyform">+ Generate key</button>`) + intMsg() + `${nk}${form}
     <div class="mcards">${INT.apikeys.rows.map(k => `<article class="mcard ${k.revoked ? "off" : ""}"><div class="mh"><b>${esc(k.name)}</b><span class="mid">${esc(k.prefix)}…</span></div>
       <div class="mchips"><span class="mchip"><i>role</i>${esc(CFG.roles[k.role_key] ? CFG.roles[k.role_key].label : k.role_key)}</span>${k.site ? `<span class="mchip"><i>location</i>${esc(k.site)}</span>` : ""}<span class="mchip"><i>last used</i>${esc(intDt(k.last_used_at))}</span><span class="mchip"><i>expires</i>${k.expires_at ? esc(intDt(k.expires_at)) : "never"}</span>${k.revoked ? `<span class="mchip">revoked</span>` : ""}</div>
-      ${k.revoked ? "" : `<span class="acts"><button class="btn ghost" type="button" data-int="keyedit" data-id="${k.id}">Edit</button><button class="btn ghost" type="button" data-w data-int="revoke" data-id="${k.id}">Revoke</button></span>`}</article>`).join("") || `<div class="empty sm">No API keys yet.</div>`}</div>
-    <details class="howto"><summary>How to use</summary><pre>curl -H "X-API-Key: itoc_xxx" "${esc(o)}/api/view/servicedesk?from=2026-10-01&amp;to=2026-10-19"</pre><span class="sub">The same read endpoints as the dashboard (/api/view/…, /api/report/…) follow the role rights on the key.</span></details>`;
+      ${k.revoked ? "" : `<span class="acts"><button class="btn ghost sm" type="button" data-int="keyedit" data-id="${k.id}">Edit</button><button class="btn ghost sm" type="button" data-w data-int="revoke" data-id="${k.id}">Revoke</button></span>`}</article>`).join("") || `<div class="empty sm">No API keys yet.</div>`}</div>
+    <details class="howto"><summary>How to use</summary><pre>curl -H "X-API-Key: itoc_xxx" "${esc(o)}/api/view/servicedesk?from=2026-10-01&amp;to=2026-10-19"</pre><span class="sub">The same read endpoints as the dashboard (/api/view/…, /api/report/…, /api/insights/command) follow the role rights on the key.</span></details>`;
 }
 
 function vSmtp() {
   if (!INT.smtp) { intLoad("smtp", "smtp"); return intLoading(); }
   const c = INT.smtp;
-  return intMsg() + `
+  return admTitle("Email (SMTP)", "Outgoing mail server used for scheduled reports, alerts, and account notifications.") + intMsg() + `
     <form class="form formbox intform" data-int-form="smtp">
       ${intField("m_host", "Host", `<input id="m_host" data-f="host" type="text" placeholder="smtp.pelindo.co.id" value="${esc(c.host)}">`)}
       ${intField("m_port", "Port", `<input id="m_port" data-f="port" type="number" value="${esc(c.port)}">`)}
@@ -84,7 +85,8 @@ function vSmtp() {
       ${intField("m_from", "Sender address", `<input id="m_from" data-f="sender" type="email" placeholder="itoc@pelindo.co.id" value="${esc(c.sender)}">`)}
       ${intField("m_fn", "Sender name", `<input id="m_fn" data-f="from_name" type="text" value="${esc(c.from_name)}">`)}
       <div class="acts wide"><button class="btn" type="submit" data-w>Save</button></div></form>
-    <form class="form intform smtptest" data-int-form="smtptest"><div class="fld"><label for="m_to">Send test email to</label><input id="m_to" data-f="to" type="email" placeholder="name@pelindo.co.id"></div><div class="acts"><button class="btn ghost" type="submit" data-w>Send test</button></div></form>`;
+    <h4 class="admsub">Test Email Delivery</h4>
+    <form class="form formbox intform smtptest" data-int-form="smtptest"><div class="fld"><label for="m_to">Send test email to</label><input id="m_to" data-f="to" type="email" placeholder="name@pelindo.co.id"></div><div class="acts" style="align-self:end"><button class="btn ghost" type="submit" data-w>Send test</button></div></form>`;
 }
 
 function vWebhooks() {
@@ -96,11 +98,86 @@ function vWebhooks() {
       ${intField("w_url", "URL " + (e.id ? "(saved, empty = unchanged)" : "*"), `<input id="w_url" data-f="url" type="url" autocomplete="off" placeholder="${e.id ? esc(e.url) : "https://…"}">`, true)}
       <div class="fld wide"><span class="lbl">Send on</span><div class="evs">${ev.map(([k, l]) => `<label class="chk"><input type="checkbox" data-ev="${esc(k)}" ${(e.events || []).includes(k) ? "checked" : ""}> ${esc(l)}</label>`).join("")}</div></div>
       ${intField("w_en", "Status", `<select id="w_en" data-f="enabled">${intOpt([["true", "Active"], ["false", "Inactive"]], String(e.enabled !== false))}</select>`)}
-      <div class="acts wide"><button class="btn" type="submit" data-w>Save</button><button class="btn ghost" type="button" data-int="hookform" data-id="x">Cancel</button><span class="sub">Telegram: pakai URL …/sendMessage?chat_id=ID. Teams/Slack: URL incoming webhook.</span></div></form>` : "";
-  return intMsg() + `<div class="toolbar"><span class="sub">Automatic notifications to chat or other systems.</span><button class="btn" type="button" data-w data-int="hookform" data-id="new">+ Add webhook</button></div>${form}
+      <div class="acts wide"><button class="btn" type="submit" data-w>Save</button><button class="btn ghost" type="button" data-int="hookform" data-id="x">Cancel</button><span class="sub">Telegram: …/sendMessage?chat_id=ID · WhatsApp: URL gateway/webhook (menerima JSON text &amp; message) · Teams/Slack: incoming webhook.</span></div></form>` : "";
+  return admTitle("Webhooks", "Automatic event-driven notifications to WhatsApp, Telegram, Teams, Slack, or custom JSON endpoints.", `<button class="btn" type="button" data-w data-int="hookform" data-id="new">+ Add webhook</button>`) + intMsg() + `${form}
     <div class="mcards">${W.rows.map(w => `<article class="mcard"><div class="mh"><b>${esc(w.name)}</b><span class="mid">${esc((W.kinds || {})[w.kind] || w.kind)}</span></div>
       <div class="mchips"><span class="mchip"><i>url</i>${esc(w.url)}</span>${w.events.map(k => `<span class="mchip">${esc((W.events || {})[k] || k)}</span>`).join("")}${w.enabled ? "" : `<span class="mchip">disabled</span>`}<span class="mchip"><i>last</i>${esc(w.last_status || "never")}${w.last_at ? " · " + esc(intDt(w.last_at)) : ""}</span></div>
-      <span class="acts"><button class="btn ghost" type="button" data-w data-int="hookform" data-id="${w.id}">Edit</button><button class="btn ghost" type="button" data-w data-int="hooktest" data-id="${w.id}">Test</button><button class="btn ghost" type="button" data-w data-int="hookdel" data-id="${w.id}">Delete</button></span></article>`).join("") || `<div class="empty sm">No webhooks yet.</div>`}</div>`;
+      <span class="acts"><button class="btn ghost sm" type="button" data-w data-int="hookform" data-id="${w.id}">Edit</button><button class="btn ghost sm" type="button" data-w data-int="hooktest" data-id="${w.id}">Test</button><button class="btn ghost sm" type="button" data-w data-int="hookdel" data-id="${w.id}">Delete</button></span></article>`).join("") || `<div class="empty sm">No webhooks yet.</div>`}</div>`;
+}
+
+async function loadChatCmd() {
+  if (INT.busy.chatcmd) return; INT.busy.chatcmd = true;
+  try { INT.chatcmd = await api("/api/insights/commands"); }
+  catch (e) { INT.chatcmd = {commands: []}; INT.msg = {ok: false, t: e.message}; }
+  finally { INT.busy.chatcmd = false; render(false); }
+}
+async function runChatCmd(cmdText) {
+  const txt = (cmdText || "").trim() || "/help";
+  INT.cmdIn = txt; INT.cmdBusy = true; render(false);
+  try { const r = await api("/api/insights/command?format=json&text=" + encodeURIComponent(txt)); INT.cmdOut = r.text || ""; }
+  catch (e) { INT.cmdOut = "Error: " + (e.message || e); }
+  finally { INT.cmdBusy = false; render(false); }
+}
+function vChatCmd() {
+  if (!INT.chatcmd) { loadChatCmd(); return intLoading(); }
+  const cmds = INT.chatcmd.commands || [];
+  const base = ((CFG && CFG.params && CFG.params["ui.public_url"]) || location.origin).replace(/\/$/, "");
+  const exOf = c => {
+    const p = ["/" + c.name];
+    if (c.branch_arg) p.push("/" + c.name + "-belawan");
+    if (["duty", "day", "half1", "half2"].includes(c.scope) || String(c.scope || "").startsWith("shift:")) p.push("/" + c.name + "-20261123");
+    return p.join(" · ");
+  };
+  const tgMenu = cmds.map(c => `${c.name} - ${c.help}`).join("\n") + "\ncabang - daftar nama cabang\nhelp - daftar perintah TERA";
+  const snipBot = `# 1. Bot Interaktif (WA / Telegram Bridge → TERA API)
+# Teruskan teks pesan user (mis. /isp, /isp-belawan, /fullday, /noc, /help) ke:
+curl -sG "${base}/api/insights/command" \\
+  -H "X-API-Key: <TERA_API_KEY>" \\
+  --data-urlencode "text=/isp" \\
+  --data-urlencode "format=text"`;
+  const snipTg = `# 2a. Notifier Mandiri → Telegram (Cron / n8n / Script)
+MSG=$(curl -sG "${base}/api/insights/summary" \\
+  -H "X-API-Key: <TERA_API_KEY>" \\
+  --data-urlencode "scope=duty" \\
+  --data-urlencode "kind=isp" \\
+  --data-urlencode "format=text")
+curl -s -X POST "https://api.telegram.org/bot<BOT_TOKEN>/sendMessage" \\
+  -d "chat_id=<CHAT_ID>" --data-urlencode "text=$MSG"`;
+  const snipWa = `# 2b. Notifier Mandiri → WhatsApp Gateway (WAHA / Fonnte / Baileys / n8n)
+MSG=$(curl -sG "${base}/api/insights/summary" \\
+  -H "X-API-Key: <TERA_API_KEY>" \\
+  --data-urlencode "scope=duty" \\
+  --data-urlencode "kind=isp" \\
+  --data-urlencode "format=text")
+# Kirim $MSG ke endpoint WA Gateway Anda (JSON {"text": "$MSG"} atau {"message": "$MSG"})
+# Pilihan kind: full | noc | soc | eos | isp | cctv | wifi | device | link
+# Opsional per cabang: tambahkan --data-urlencode "site=Branch Belawan"`;
+  const rows = [
+    ...cmds.map(c => [
+      {h: `<code class="num">/${esc(c.name)}</code>`},
+      (c.aliases || []).length ? c.aliases.map(a => "/" + a).join(", ") : "–",
+      `${c.kind || "full"} · ${c.scope || "duty"}${c.branch_arg ? " · +cabang" : ""}`,
+      {h: `<span class="sub num">${esc(exOf(c))}</span>`},
+      c.help || c.name,
+      {h: `<span class="acts"><button type="button" class="btn ghost sm" data-int="cmdfill" data-key="/${esc(c.name)}">Test</button><button type="button" class="btn ghost sm" data-int="cmdcopy" data-key="/${esc(c.name)}">Copy</button></span>`},
+    ]),
+    [{h: `<code class="num">/cabang</code>`}, "/branch", "meta", {h: `<span class="sub num">/cabang</span>`}, "Daftar nama cabang untuk filter per cabang (mis. /isp-belawan, /eos-janirah)", {h: `<span class="acts"><button type="button" class="btn ghost sm" data-int="cmdfill" data-key="/cabang">Test</button><button type="button" class="btn ghost sm" data-int="cmdcopy" data-key="/cabang">Copy</button></span>`}],
+    [{h: `<code class="num">/help</code>`}, "/, /bantuan, /start", "meta", {h: `<span class="sub num">/help</span>`}, "Menampilkan daftar seluruh perintah aktif", {h: `<span class="acts"><button type="button" class="btn ghost sm" data-int="cmdfill" data-key="/help">Test</button><button type="button" class="btn ghost sm" data-int="cmdcopy" data-key="/help">Copy</button></span>`}],
+  ];
+  const quick = ["/help", "/fullday", "/isp", "/noc", "/soc", "/eos", "/cabang"];
+  return admTitle("Bot & Notifier API (WhatsApp & Telegram)", "Command templates and API endpoints for WA/Telegram bot bridges or standalone scheduled notifiers. Authenticate with an API key from Access → API Keys.", `<button type="button" class="btn ghost sm" data-adm="apikeys">API Keys</button><button type="button" class="btn ghost sm" data-adm="webhooks">Webhooks</button><button type="button" class="btn ghost sm" data-adm="parameter">Edit chat.commands</button>`) + intMsg() +
+    `<div class="formbox" style="margin-bottom:14px"><form class="toolbar" data-int-form="cmdtest" style="margin:0"><input id="cmdTestIn" type="text" data-f="cmd" value="${esc(INT.cmdIn)}" placeholder="Ketik command, mis. /isp atau /isp-belawan atau /fullday-20261123" style="flex:1;min-width:220px"><button class="btn" type="submit"${INT.cmdBusy ? " disabled" : ""}>${INT.cmdBusy ? "Testing…" : "Test Command"}</button>${INT.cmdOut ? `<button type="button" class="btn ghost" data-int="cmdcopy" data-id="cmdOutPre">Copy Output</button>` : ""}</form>` +
+    `<div class="chips sm" style="margin-top:8px">${quick.map(q => `<button type="button" class="chip" data-int="cmdfill" data-key="${esc(q)}">${esc(q)}</button>`).join("")}</div>` +
+    `${INT.cmdOut ? `<pre class="sumtxt" id="cmdOutPre" style="margin-top:10px;max-height:300px">${esc(INT.cmdOut)}</pre>` : `<p class="sub" style="margin:8px 0 0">Klik <b>Test Command</b> atau salah satu command di bawah untuk melihat preview pesan siap kirim ke WA/Telegram.</p>`}</div>` +
+    `<h4 class="admsub">Daftar Template Command (${cmds.length + 2} perintah aktif)</h4>` +
+    tbl(["Command", "Aliases", "Tipe & Scope", "Contoh Penggunaan", "Keterangan", "Aksi"], rows, {tall: true}) +
+    `<h4 class="admsub">Template Integrasi Notifier (Integrasi Bot &amp; Mandiri)</h4>` +
+    `<div class="grid" style="margin-top:8px">` +
+      `<section class="panel c6"><header><h2>1. Bot Interaktif (WA / Telegram Bridge)</h2><button type="button" class="btn ghost sm" data-int="cmdcopy" data-id="snipBot">Copy</button></header><p class="sub">Untuk bot dua arah: user mengetik <code>/isp</code>, <code>/noc</code>, <code>/eos-belawan</code> di WA/Telegram, lalu bridge meneruskan ke endpoint ini.</p><pre class="sumtxt" id="snipBot" style="max-height:200px">${esc(snipBot)}</pre></section>` +
+      `<section class="panel c6"><header><h2>Menu Slash Telegram (@BotFather /setcommands)</h2><button type="button" class="btn ghost sm" data-int="cmdcopy" data-id="snipTgMenu">Copy</button></header><p class="sub">Salin dan tempel langsung ke <b>@BotFather → /setcommands</b> agar menu slash otomatis muncul saat user mengetik <code>/</code> di Telegram.</p><pre class="sumtxt" id="snipTgMenu" style="max-height:200px">${esc(tgMenu)}</pre></section>` +
+      `<section class="panel c6"><header><h2>2a. Notifier Mandiri → Telegram (Terjadwal)</h2><button type="button" class="btn ghost sm" data-int="cmdcopy" data-id="snipTg">Copy</button></header><p class="sub">Tarik Shift Summary secara terjadwal (cron / n8n / systemd) lalu kirim ke grup Telegram.</p><pre class="sumtxt" id="snipTg" style="max-height:220px">${esc(snipTg)}</pre></section>` +
+      `<section class="panel c6"><header><h2>2b. Notifier Mandiri → WhatsApp Gateway</h2><button type="button" class="btn ghost sm" data-int="cmdcopy" data-id="snipWa">Copy</button></header><p class="sub">Tarik teks siap-kirim (format bold <code>*...*</code> kompatibel WA) untuk dikirim via WAHA, Fonnte, Baileys, atau n8n. Untuk push otomatis berbasis event (Handover, Insight baru, Sync gagal), gunakan <b>Notifications → Webhooks</b> (tipe <b>WhatsApp</b> / <b>Telegram</b>).</p><pre class="sumtxt" id="snipWa" style="max-height:220px">${esc(snipWa)}</pre></section>` +
+    `</div>`;
 }
 
 const intVal = el => el.type === "checkbox" ? el.checked : el.value;
@@ -134,6 +211,12 @@ document.addEventListener("click", async e => {
     else if (a === "hookform") { INT.hookEdit = id === "x" ? null : id === "new" ? {events: ["handover_high"], enabled: true} : Object.assign({}, INT.webhooks.rows.find(w => String(w.id) === id)); INT.msg = null; render(false); }
     else if (a === "hooktest") { b.disabled = true; b.textContent = "Sending…"; const r = await send("/api/admin/webhooks/" + id + "/test", {}).catch(er => ({ok: false, msg: er.message})); INT.webhooks = null; INT.msg = {ok: r.ok, t: r.msg || "Failed"}; render(false); }
     else if (a === "hookdel") { if (!confirm("Delete this webhook?")) return; await api("/api/admin/webhooks/" + id, {method: "DELETE"}); intDone("webhooks", true, "Webhook deleted."); }
+    else if (a === "cmdfill") { runChatCmd(key); }
+    else if (a === "cmdcopy") {
+      const txt = id ? ($(id) ? $(id).textContent : "") : (key || "");
+      try { await navigator.clipboard.writeText(txt); const o = b.textContent; b.textContent = "Copied"; setTimeout(() => { b.textContent = o; }, 1400); }
+      catch (_) { if (id && $(id)) { const r = document.createRange(); r.selectNode($(id)); getSelection().removeAllRanges(); getSelection().addRange(r); } }
+    }
   } catch (er) { if (er) { INT.msg = {ok: false, t: er.message || String(er)}; render(false); } }
 });
 
@@ -143,6 +226,7 @@ document.addEventListener("submit", async e => {
   const k = f.dataset.intForm, v = intForm(f);
   try {
     if (k === "smtp") { await send("/api/admin/smtp", {host: v.host, port: +v.port || 587, security: v.security, user: v.user, password: v.password || null, sender: v.sender, from_name: v.from_name}, "PUT"); intDone("smtp", true, "SMTP settings saved."); }
+    else if (k === "cmdtest") { runChatCmd(v.cmd); }
     else if (k === "smtptest") { const r = await send("/api/admin/smtp/test", {to: v.to}); INT.msg = {ok: true, t: r.msg}; render(false); }
     else if (k === "apikey" && INT.keyEdit) { await send("/api/admin/apikeys/" + INT.keyEdit, {name: v.name, role_key: v.role_key, site: v.site || null, days: v.days === "keep" ? null : v.days ? +v.days : 0}, "PUT"); INT.keyEdit = null; intDone("apikeys", true, "API key updated."); }
     else if (k === "apikey") { const r = await send("/api/admin/apikeys", {name: v.name, role_key: v.role_key, site: v.site || null, days: v.days ? +v.days : null}); INT.apikeys = null; INT.keyForm = false; INT.newKey = r.key; INT.msg = {ok: true, t: "API key created."}; render(false); }
@@ -170,16 +254,14 @@ async function audLoad(more) {
 function vAudit() {
   if (!AUD.loaded) { audLoad(false); return intLoading(); }
   const f = AUD.f, rows = AUD.rows.map(a => [a.at.replace("T", " ").slice(0, 19), a.by, a.t]);
-  return `${AUD.err ? `<div class="msg err">${esc(AUD.err)}</div>` : ""}
+  return admTitle("Audit Log", `${fmt(AUD.total)} records${AUD.rows.length < AUD.total ? ` (showing ${fmt(AUD.rows.length)})` : ""}. Track sign-ins, configuration changes, uploads, and API/bot activity.`, `<button class="btn ghost sm" type="button" data-int="audexport">Export CSV</button>`) + `${AUD.err ? `<div class="msg err">${esc(AUD.err)}</div>` : ""}
     <form class="toolbar mbar" data-int-form="audit">
       <label class="sub">From <input type="date" data-f="frm" value="${esc(f.frm)}"></label><label class="sub">To <input type="date" data-f="to" value="${esc(f.to)}"></label>
       <label class="sub">User <select data-f="who"><option value="">All</option>${AUD.users.map(u => `<option ${u === f.who ? "selected" : ""}>${esc(u)}</option>`).join("")}</select></label>
       <input type="search" class="msearch" data-f="q" value="${esc(f.q)}" placeholder="Search activity or user" aria-label="Search">
-      <button class="btn" type="submit">Terapkan</button><button class="btn ghost" type="button" data-int="audreset">Reset</button>
-      <span class="mtools"><button class="btn" type="button" data-int="audexport">Ekspor CSV</button></span></form>
-    <p class="sub">${fmt(AUD.total)} catatan${AUD.rows.length < AUD.total ? `, menampilkan ${fmt(AUD.rows.length)}` : ""}</p>
+      <button class="btn" type="submit">Apply</button><button class="btn ghost" type="button" data-int="audreset">Reset</button></form>
     ${tbl(["Time (WIB)", "User", "Activity"], rows, {tall: true, empty: "No records for this filter."})}
-    ${AUD.rows.length < AUD.total ? `<div class="toolbar"><button class="btn ghost" type="button" data-int="audmore">Show more</button></div>` : ""}`;
+    ${AUD.rows.length < AUD.total ? `<div class="toolbar" style="margin-top:10px"><button class="btn ghost" type="button" data-int="audmore">Show more</button></div>` : ""}`;
 }
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-int]"); if (!b) return;

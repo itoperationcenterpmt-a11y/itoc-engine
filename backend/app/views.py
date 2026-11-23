@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from . import models as M
 from .store import Config, cached
 from .timeutil import ms
-from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR, cctv as CCTV, soc_fw as SOCFW, insight as INSIGHT, viz as VIZ, kuma as KUMA
+from .calc import servicedesk as SD, network as NET, soc as SOC, devices as DEV, wifi as WIFI, xdr as XDR, cctv as CCTV, soc_fw as SOCFW, insight as INSIGHT, viz as VIZ, kuma as KUMA, zbx_isp as ZBXISP
 from .calc.common import iso
 from .security import can_see, locked_pages
 
@@ -133,6 +133,8 @@ def bundle(db: Session, cfg: Config, tab: str, f: Filt, user: M.User) -> dict:
         V["inet_prev"] = SOCFW.build(db, cfg, pa, pb, st) if f.cmp and tab == "internet" else None
     if tab in ("kuma", "ringkasan", "network") and ok("kuma"):
         V["kuma"] = KUMA.build(db, cfg, a, b, st)
+    if tab in ("ringkasan", "network", "noc") and (ok("noc") or ok("network")):
+        V["zbx_isp"] = ZBXISP.build(db, cfg, a, b, st, full=(tab == "noc"))
     if tab == "soc" and ok("soc"):
         V["socfw"] = SOCFW.build(db, cfg, a, b, st)
     if tab == "ringkasan":

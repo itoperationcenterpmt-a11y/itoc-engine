@@ -10,12 +10,14 @@ from .models import Webhook
 log = logging.getLogger("itoc.notify")
 EVENTS = {"handover_new": "New handover (all priorities)", "handover_high": "High-priority handover",
           "sync_failed": "Data source sync failed", "insight_new": "Insight baru (peringatan dan kritis)", "test": "Test message"}
-KINDS = {"generic": "Generic JSON", "teams": "Microsoft Teams", "slack": "Slack", "telegram": "Telegram"}
+KINDS = {"generic": "Generic JSON", "whatsapp": "WhatsApp (Gateway / Webhook)", "telegram": "Telegram", "teams": "Microsoft Teams", "slack": "Slack"}
 
 
 def _payload(kind: str, event: str, text: str, data: dict | None) -> dict:
     if kind in ("teams", "slack", "telegram"):
         return {"text": text}
+    if kind == "whatsapp":
+        return {"text": text, "message": text, "event": event, "data": data or {}, "at": datetime.utcnow().isoformat() + "Z"}
     return {"event": event, "text": text, "data": data or {}, "at": datetime.utcnow().isoformat() + "Z"}
 
 

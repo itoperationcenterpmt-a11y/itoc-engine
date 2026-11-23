@@ -42,7 +42,7 @@ function vSocSite() {
   ${panel("c6", "Threat Types", "", hb(F.typ))}
   ${panel("c6", "Top Applications by Volume", "", hb(F.app, fwB))}
   ${panel("c6", "Top Sources by Traffic", "source IP, bytes sent through the firewall", hb(F.src, fwB))}
-  ${panel("c6", "Blocked per Day", "events not just alerted", bars(B, [{name: "Blocked", c: "--good", v: F.days.map(x => x.blocked)}], {label: "Blocked per day"}))}
+  ${panel("c12", "Blocked per Day", "events not just alerted", bars(B, [{name: "Blocked", c: "--good", v: F.days.map(x => x.blocked)}], {label: "Blocked per day"}))}
   ${P.table()}${socFwVal(F, null)}</div>`;
 }
 function vSoc() {

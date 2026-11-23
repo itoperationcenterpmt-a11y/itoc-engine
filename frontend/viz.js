@@ -31,7 +31,7 @@ function vzGauge(pct, o = {}) {
   const arc = (t0, t1, r = R) => { const a = pt(t0, r), b = pt(t1, r); return `M${a[0].toFixed(2)} ${a[1].toFixed(2)} A${r} ${r} 0 0 1 ${b[0].toFixed(2)} ${b[1].toFixed(2)}`; };
   const t = f(pct), warn = o.target != null ? o.target : hi, tone = pct == null ? VZC.low : pct >= warn ? VZC.good : pct >= warn - (hi - lo) * 0.25 ? VZC.warn : VZC.crit;
   const tk = o.target != null ? (() => { const a = pt(f(o.target), R - 14), b = pt(f(o.target), R + 10); return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>`; })() : "";
-  return `<div class="vz-gauge"><svg viewBox="0 0 200 112" role="img" aria-label="${esc(o.label || "Gauge")}"><path d="${arc(0, 1)}" fill="none" stroke="var(--sunken)" stroke-width="16" stroke-linecap="round"/>${pct == null ? "" : `<path d="${arc(0, Math.max(t, 0.012))}" fill="none" stroke="${tone}" stroke-width="16" stroke-linecap="round"/>`}${tk}<text x="14" y="110" font-size="9" fill="var(--muted)" text-anchor="start">${pc(lo, lo < 0.9 ? 0 : 1)}</text><text x="186" y="110" font-size="9" fill="var(--muted)" text-anchor="end">${pc(hi, 0)}</text></svg>
+  return `<div class="vz-gauge"><svg viewBox="0 0 200 124" role="img" aria-label="${esc(o.label || "Gauge")}"><path d="${arc(0, 1)}" fill="none" stroke="var(--sunken)" stroke-width="16" stroke-linecap="round"/>${pct == null ? "" : `<path d="${arc(0, Math.max(t, 0.012))}" fill="none" stroke="${tone}" stroke-width="16" stroke-linecap="round"/>`}${tk}<text x="12" y="121" font-size="9.5" fill="var(--muted)" text-anchor="start">${pc(lo, lo < 0.9 ? 0 : 1)}</text><text x="188" y="121" font-size="9.5" fill="var(--muted)" text-anchor="end">${pc(hi, 0)}</text></svg>
     <div class="vz-gv"><b>${pct == null ? "–" : o.fmt ? o.fmt(pct) : pc(pct, 1)}</b>${o.sub ? `<span>${o.sub}</span>` : ""}</div></div>`;
 }
 const vzGaugeCard = (size, title, pct, o) => panel(size, title, "", vzGauge(pct, o) + (o.note ? `<div class="vz-note">${o.note}</div>` : ""));
@@ -62,11 +62,11 @@ function vzTimeline(rows, from, to) {
     rows.map(r => `<div class="vz-tlr"><span title="${esc(r.name)}">${esc(r.name)}</span><div class="vz-tla">${r.events.map(([s, e]) => `<i style="left:${((s - from) / span * 100).toFixed(2)}%;width:${Math.max(0.5, (e - s) / span * 100).toFixed(2)}%" title="${dtime(s)} – ${dtime(e)} · ${fx((e - s) / 60000, 0)} min"></i>`).join("")}</div><b>${fmt(r.minutes)} min</b></div>`).join("") + `</div>`;
 }
 
-/* One tile per location, coloured by health score (0-100). */
+/* One tile per location, coloured by health score (0-100). Clicking a tile filters the dashboard to that location (click again to clear). */
 function vzWall(items) {
   if (!items.length) return `<div class="empty sm">No location data yet.</div>`;
-  return `<div class="vz-wall">${items.map(x => { const tone = x.score >= 80 ? "good" : x.score >= 60 ? "warn" : "crit";
-    return `<div class="vz-tile ${tone}" title="Link ${x.link == null ? "–" : pc(x.link, 2)} · devices down ${x.devDown} · tickets past SLA ${x.overdue}"><b>${esc(x.site)}</b><span class="vz-score">${x.score}</span><small>${x.devTotal ? x.devDown + "/" + x.devTotal + " down" : "–"}${x.overdue ? " · " + x.overdue + " late" : ""}</small></div>`; }).join("")}</div>`;
+  return `<div class="vz-wall">${items.map(x => { const tone = x.score >= 80 ? "good" : x.score >= 60 ? "warn" : "crit", act = S.site === x.site ? " active" : "";
+    return `<div class="vz-tile ${tone}${act}" role="button" tabindex="0" data-filter-site="${esc(x.site)}" title="Click to filter ${esc(x.site)} · Link ${x.link == null ? "–" : pc(x.link, 2)} · devices down ${x.devDown} · tickets past SLA ${x.overdue}"><b>${esc(x.site)}</b><span class="vz-score">${x.score}</span><small>${x.devTotal ? x.devDown + "/" + x.devTotal + " down" : "–"}${x.overdue ? " · " + x.overdue + " late" : ""}</small></div>`; }).join("")}</div>`;
 }
 
 /* Cards for the top problems (replaces a long ranking table). items: [{title, sub, value, tone}] */
@@ -134,5 +134,19 @@ const VIZ_WIDGETS = [
     html: () => panel("c6", "Top problem links", ctxTxt(), vzTop((V.net.rank || []).slice(0, 5).map(x => ({title: x.link, sub: pc(x.av, 2) + " availability · " + x.status, value: fx(x.downMin, 0) + " min", tone: x.av < V.net.P.target ? "crit" : "warn"}))))},
   {key: "viz-top-devices", grp: "Visual", mod: "devices", need: "dev", title: "Longest-down devices (cards)", desc: "The five devices down the longest", size: "c6",
     html: () => panel("c6", "Longest-down devices", "", vzTop((V.dev.down || []).slice(0, 5).map(x => ({title: x.name, sub: x.loc + (x.problem ? " · " + x.problem : ""), value: durTxt(x.ageH), tone: x.ageH != null && x.ageH > 24 ? "crit" : "warn"}))))},
+  {key: "viz-gauge-zbxisp", grp: "Visual", mod: "noc", need: "zbx_isp", title: "ISP live availability gauge (Zabbix)", desc: "Live reachability of Zabbix ISP-* hosts against 99% target", size: "c3",
+    html: () => { const A = V.zbx_isp.all; return vzGaugeCard("c3", "ISP live availability", A.avail, {lo: 0, hi: 1, target: 0.99, label: "ISP live availability", fmt: v => pc(v, 2), sub: fmt(A.online) + " / " + fmt(A.total) + " up", note: "Target 99% · Zabbix ISP-*"}); }},
+  {key: "viz-spark-zbxisp", grp: "Visual", mod: "noc", need: "zbx_isp", title: "ISP outages · trend (Zabbix)", desc: "Daily ISP-* outage incidents with sparkline and 7-day change", size: "c3",
+    html: () => { const H = V.zbx_isp.hist || {}; return vzSparkCard("c3", "ISP outages · trend", fmt(H.events || 0), fx(H.hours || 0, 1) + " h down · " + fmt(H.hosts || 0) + " links", (H.daily || []).map(x => x.events), VZC.crit, true); }},
+  {key: "viz-donut-zbxisp", grp: "Visual", mod: "noc", need: "zbx_isp", title: "ISP links by provider (Zabbix)", desc: "Distribution of monitored ISP-* hosts per provider", size: "c4",
+    html: () => panel("c4", "ISP links by provider", "", vzDonut((V.zbx_isp.byProvider || []).map((x, i) => ({k: x.k, v: x.total, c: vzPal[i % vzPal.length]})), {sub: "ISP links", label: "ISP links by provider"}))},
+  {key: "viz-zbxisp-providers", grp: "Visual", mod: "noc", need: "zbx_isp", title: "ISP status by provider (Zabbix)", desc: "Live reachability bar per ISP provider (Astinet, Lintasarta, etc.)", size: "c5",
+    html: () => zbxIspPanels(V.zbx_isp).providers()},
+  {key: "viz-zbxisp-matrix", grp: "Visual", mod: "noc", need: "zbx_isp", title: "Branch ISP redundancy matrix (Zabbix)", desc: "Dual-link status per branch showing each ISP provider live", size: "c12",
+    html: () => zbxIspPanels(V.zbx_isp).matrix()},
+  {key: "viz-zbxisp-timeline", grp: "Visual", mod: "noc", need: "zbx_isp", title: "ISP outage timeline (Zabbix)", desc: "7-day outage timeline for Zabbix ISP-* links", size: "c12",
+    html: () => zbxIspPanels(V.zbx_isp).timeline()},
+  {key: "viz-zbxisp-down", grp: "Visual", mod: "noc", need: "zbx_isp", title: "ISP links down now (Zabbix)", desc: "Currently unreachable ISP-* hosts from Zabbix", size: "c6",
+    html: () => zbxIspPanels(V.zbx_isp).down()},
 ];
 WIDGETS.push(...VIZ_WIDGETS);

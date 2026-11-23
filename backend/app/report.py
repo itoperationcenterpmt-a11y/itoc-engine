@@ -319,10 +319,26 @@ def _noc_links(db, cfg, f):
 
 
 def _noc(db, cfg, f, preset="standar"):
+    from .calc import zbx_isp as ZBXISP
     N = VW._net(db, cfg, f.d_from, f.d_to, f.shift, f.site)
-    s = {"key": "noc", "title": "Networking (PRTG)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    Z = ZBXISP.build(db, cfg, f.d_from, f.d_to, f.site)
+    has_z = bool(Z and Z["all"]["total"])
+    s = {"key": "noc", "title": "ISP & Network SLA (PRTG + Zabbix)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    if (not N or not N.get("links")) and not has_z:
+        s["notes"].append("No PRTG or Zabbix ISP data for this period and filter.")
+        return s
     if not N or not N.get("links"):
-        s["notes"].append("No PRTG data for this period and filter.")
+        Za, Zh = Z["all"], Z["hist"]
+        s["kpis"] = [
+            _kpi("ISP links live (Zabbix)", Za["total"], "n", f"{Za['online']} reachable, {Za['down']} down"),
+            _kpi("ISP live availability", Za["avail"], "p2", "Zabbix ISP-*"),
+            _kpi("Dual-link branches", Za["dualSites"], "n", f"{Za['singleRisk']} single-link risk" if Za["singleRisk"] else "full redundancy"),
+            _kpi("Zabbix ISP outages", Zh["events"], "n", f"{fmt_f(Zh['hours'], 1)} h down"),
+        ]
+        s["tables"].append(_table("ISP Live Status by Provider (Zabbix)", ["Provider", "Links", "Reachable", "Down", "Live Availability"], ["t", "n", "n", "n", "p2"],
+                                  [[r["k"], r["total"], r["online"], r["down"], r["avail"]] for r in Z["byProvider"]]))
+        s["tables"].append(_table("Branch ISP Redundancy Matrix (Zabbix)", ["Location", "Links", "Reachable", "Down", "Redundancy"], ["t", "n", "n", "n", "t"],
+                                  [[r["k"], r["total"], r["online"], r["down"], r["redundancy"]] for r in Z["byLoc"]]))
         return s
     P, st = N["P"], cfg.p("net.status_labels")
     w, lt = N.get("worst"), (N.get("lokasiTop") or [None])[0]
@@ -365,6 +381,24 @@ def _noc(db, cfg, f, preset="standar"):
         s["attention"].append(f"{N['nodata']} link{'s' if N['nodata'] != 1 else ''} with too little data (coverage below the limit)")
     if N.get("unmappedIsp"):
         s["attention"].append(f"{len(N['unmappedIsp'])} links do not match any ISP")
+    if has_z:
+        Za, Zh = Z["all"], Z["hist"]
+        s["kpis"].extend([
+            _kpi("ISP links live (Zabbix)", Za["online"], "n", f"of {Za['total']} ({Za['down']} down · {Za['providers']} providers)"),
+            _kpi("Dual-link branches (Zabbix)", Za["dualSites"], "n", f"{Za['singleRisk']} single-link risk" if Za["singleRisk"] else "full redundancy"),
+            _kpi("Zabbix ISP outages", Zh["events"], "n", f"{fmt_f(Zh['hours'], 1)} h down · {fmt_p(Zh['avail'], 2)} avail."),
+        ])
+        pm = {r["k"]: r for r in (Zh.get("byProvider") or [])}
+        s["tables"].append(_table("ISP Live Status by Provider (Zabbix ISP-*)", ["Provider", "Links", "Reachable", "Down", "Live Avail.", "Period Outages", "Downtime (h)"],
+                                  ["t", "n", "n", "n", "p2", "n", "f1"],
+                                  [[r["k"], r["total"], r["online"], r["down"], r["avail"], (pm.get(r["k"]) or {}).get("events", 0), (pm.get(r["k"]) or {}).get("hours", 0.0)] for r in Z["byProvider"]]))
+        s["tables"].append(_table("Branch ISP Redundancy Matrix (Zabbix ISP-*)", ["Location", "ISP Providers", "Reachable", "Down", "Redundancy"],
+                                  ["t", "t", "n", "n", "t"],
+                                  [[r["k"], ", ".join(x["provider"] + (" (DOWN)" if not x["reachable"] else "") for x in r["links"]), r["online"], r["down"], r["redundancy"]] for r in _cap(Z["byLoc"], preset, 30)]))
+        if Za["down"]:
+            s["attention"].append(f"{Za['down']} Zabbix ISP-* link{'s' if Za['down'] != 1 else ''} currently down")
+        if Za["singleRisk"]:
+            s["attention"].append(f"{Za['singleRisk']} dual-link branch{'es' if Za['singleRisk'] != 1 else ''} on single-link risk (Zabbix ISP)")
     return s
 
 
