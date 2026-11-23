@@ -40,7 +40,15 @@ function insArea(tab = S.tab) {
   const h = I.siteHealth, head = I.site ? `<div class="kpis k6">${kpi("Location", esc(I.site), "")}${kpi("Health score", h ? fmt(h.score) : "–", "")}${kpi("Link availability", h && h.link != null ? pc(h.link, 2) : "–", "")}${kpi("Devices down", h && h.devTotal ? fmt(h.devDown) + " / " + fmt(h.devTotal) : "–", "")}${kpi("Tickets past SLA", fmt(h ? h.overdue : 0), "", {cls: h && h.overdue ? "warnv" : ""})}</div>` : "";
   return `${head}<div class="grid">${insightPanel(I, 4, "c12", kinds, INS_ONLY[tab])}</div>`;
 }
-const sumFull = t => t + ((S.sumNote || "").trim() ? "\n\n📢 *CATATAN/INSTRUKSI*\n" + S.sumNote.trim() : "");
+const sumFull = t => {
+  let out = t || "";
+  if (out && !/Link Pendukung\s*:/i.test(out)) {
+    const sc = S.sumScope || "duty", k = S.sumKind || "full", br = SUM_SITE.includes(k) ? (CFG.me.site || S.sumSite || "") : "";
+    const u = `${location.origin}/#insight?ins=summary&scope=${encodeURIComponent(sc)}&kind=${encodeURIComponent(k)}` + (!["24h", "7d", "30d", "thismonth", "lastmonth"].includes(sc) && S.sumDay ? `&day=${encodeURIComponent(S.sumDay)}` : "") + (br ? `&site=${encodeURIComponent(br)}` : "");
+    out += "\n\nLink Pendukung : " + u;
+  }
+  return out + ((S.sumNote || "").trim() ? "\n\n📢 *CATATAN/INSTRUKSI*\n" + S.sumNote.trim() : "");
+};
 const SUM_SITE = ["eos", "cctv", "wifi", "device", "link", "isp"];                 /* summaries that can be limited to one branch */
 async function insSum() {
   const sc = S.sumScope || "duty", q = "scope=" + sc + (S.sumDay && !["24h", "7d", "30d"].includes(sc) ? "&day=" + S.sumDay : "") + "&kind=" + (S.sumKind || "full") + (SUM_SITE.includes(S.sumKind || "full") ? "&site=" + encodeURIComponent(CFG.me.site || S.sumSite || "") : "");
