@@ -765,7 +765,6 @@ async function boot() {
   if (!TABS.length) return showLogin("Your role has no access to any page yet.");
   $("login").hidden = true; $("app").hidden = false;
   const ini = CFG.me.name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase(), rlab = ROLES[CFG.me.role] || CFG.me.role;
-  $("me").textContent = CFG.me.name; $("av").textContent = ini; $("role").textContent = rlab;
   if ($("meH")) $("meH").textContent = CFG.me.name; if ($("avH")) $("avH").textContent = ini;
   if ($("mePop")) $("mePop").textContent = CFG.me.name; if ($("rolePop")) $("rolePop").textContent = rlab;
   applyBrand(); $("foot").textContent = footText();
