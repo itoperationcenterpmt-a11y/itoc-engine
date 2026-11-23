@@ -671,18 +671,19 @@ TXT = {
            "xdr": "XDR (Trend Micro): {n} alert baru", "xdr_open": ", {o} critical/high masih open", "xdr_model": "- model deteksi teratas: {x}",
            "al_noc": "Alert NOC : Kritis({c}) Peringatan({w}) Info({i})", "al_ndr": "Alert SOC (NDR) : C({c}) H({h}) M({m}) L({l}) N({n})", "al_xdr": "Alert SOC (XDR) : C({c}) H({h}) M({m}) L({l})",
            "find": "🔎 *TEMUAN OTOMATIS*", "crit": "KRITIS", "warn": "PERINGATAN", "link": "Link Pendukung : {u}",
-           "eos": "EOS", "n_cctv": "CCTV", "n_wifi": "WiFi", "n_device": "Perangkat", "n_link": "Link / Web", "branch": "Cabang: {x}", "all_branches": "Semua cabang", "st_net": "Status Jaringan : {s}", "st_dev": "Status Perangkat : {s}", "ok": "OK", "warn_n": "PERHATIAN ({n} link down)", "dev_warn": "PERHATIAN ({n} perangkat down)",
+           "eos": "EOS", "n_cctv": "CCTV", "n_wifi": "WiFi", "n_device": "Perangkat", "n_link": "Link / Web", "n_isp": "ISP", "branch": "Cabang: {x}", "all_branches": "Semua cabang", "st_net": "Status Jaringan : {s}", "st_dev": "Status Perangkat : {s}", "ok": "OK", "warn_n": "PERHATIAN ({n} link down)", "dev_warn": "PERHATIAN ({n} perangkat down)",
            "s_net": "🌐 *JARINGAN*", "s_dev": "🖥️ *PERANGKAT*", "dev_none": "Belum ada data perangkat dari Zabbix.", "dev_tot": "Perangkat: {t} unit, {d} down saat ini (ketersediaan {a}%).", "dev_ev": "Kejadian down {f}–{t}: {n} kejadian, total {h} jam.", "dev_line": "- {name} ({loc}): down {h}",
            "d_duty": "Hari tugas {d} ({h}.00–{h}.00 esok hari)",
-           "st_cctv": "Status CCTV : {s}", "st_device": "Status Perangkat : {s}", "st_wifi": "Status WiFi : {s}", "st_link": "Status Link / Web : {s}", "st_srv": "Status Server Milestone : {s}", "srv_warn": "PERHATIAN ({n} server tidak sinkron)",
+           "st_cctv": "Status CCTV : {s}", "st_device": "Status Perangkat : {s}", "st_wifi": "Status WiFi : {s}", "st_link": "Status Link / Web : {s}", "st_isp": "Status ISP (Zabbix) : {s}", "st_prtg": "Status Link (PRTG) : {s}", "st_srv": "Status Server Milestone : {s}", "srv_warn": "PERHATIAN ({n} server tidak sinkron)",
+           "isp_none": "Belum ada data host ISP-* dari Zabbix.", "isp_tot": "ISP Zabbix (ISP-*): {o} dari {t} link aktif (availability {a}%){dn}.", "isp_red": "Redundansi cabang: {dual} cabang dual-link{risk}.", "isp_prov": "Per provider (aktif/total): {x}", "isp_ev": "Riwayat gangguan {f}–{t}: {n} kejadian pada {h} link, total {hr} jam{mttr}.", "isp_down_hd": "Link sedang down saat ini:", "isp_line": "- {name} ({loc} · {prov}): down {h}", "isp_risk_hd": "Cabang berisiko / tanpa redundansi:", "isp_risk_line": "- {loc} ({red}): {links}", "isp_top_hd": "Link dengan gangguan terbanyak pada periode ini:", "isp_top_line": "- {name}: {n} kejadian ({hr} jam)",
            "ms_tot": "Milestone: {t} kamera ({r} merekam), server sinkron {s}/{n}", "ms_fail": ". Bermasalah: {x}", "ms_pa": "Public announcer: {t} unit, {d} down", "dev_loc": "Cabang dengan perangkat down terbanyak: {x}", "dev_kind": "Per kategori (down/total): {x}",
            "ap_warn": "PERHATIAN ({n} AP offline)", "wifi_none": "Belum ada data WiFi dari Ruckus.", "wifi_ap": "Access Point: {o} dari {t} online, {f} offline", "wifi_cl": "Client aktif: {c} ({u} pengguna), sinyal lemah (di bawah {r} dBm): {w}",
            "wifi_loc": "Cabang dengan AP offline: {x}", "wifi_line": "- {name} ({zone}): offline", "link_warn": "PERHATIAN ({n} link down, {w} monitor web down)",
            "kuma": "Web (Uptime Kuma): {t} monitor, {d} down, availability {a}%", "kuma_line": "- {name} ({loc}): down", "kuma_none": "Web (Uptime Kuma): belum ada data.",
            "d_full": "Hari penuh {d}", "d_h1": "Setengah hari pertama, {d} (00.00–12.00)", "d_h2": "Setengah hari kedua, {d} (12.00–24.00)", "d_shift": "Shift {n}, {d} ({s}–{e})", "d_24": "24 jam terakhir", "d_7": "7 hari terakhir", "d_30": "30 hari terakhir", "d_month": "Bulan {m} {y}", "d_range": "Hari tugas {a} – {b}", "d_thismonth": "Bulan ini ({m} {y})", "d_lastmonth": "Bulan lalu ({m} {y})"},
 }
-SUMMARY_KINDS = ("full", "noc", "soc", "eos", "cctv", "wifi", "device", "link")
-SITE_KINDS = ("eos", "cctv", "wifi", "device", "link")           # summaries that can be limited to one branch
+SUMMARY_KINDS = ("full", "noc", "soc", "eos", "cctv", "wifi", "device", "link", "isp")
+SITE_KINDS = ("eos", "cctv", "wifi", "device", "link", "isp")           # summaries that can be limited to one branch
 
 
 def _dt(d: datetime) -> str:
@@ -903,8 +904,8 @@ def _link_lines(cfg: Config, t: dict, scope: str, day: date | None, kind: str, s
     return ["", t["link"].format(u=url)]
 
 
-AREA_KINDS = ("cctv", "wifi", "device", "link")                  # one area each: status, key figures, the worst items, findings; all branches or one branch
-AREA_FINDINGS = {"cctv": {"cctv"}, "wifi": {"wifi"}, "device": {"devices"}, "link": {"links", "capacity"}}
+AREA_KINDS = ("cctv", "wifi", "device", "link", "isp")           # one area each: status, key figures, the worst items, findings; all branches or one branch
+AREA_FINDINGS = {"cctv": {"cctv"}, "wifi": {"wifi"}, "device": {"devices"}, "link": {"links", "capacity"}, "isp": {"links", "capacity"}}
 
 
 def _findings_lines(db: Session, t: dict, a: datetime, end: datetime, kinds: set, site: str, f_max: int) -> list[str]:
@@ -985,6 +986,60 @@ def _area_summary(db: Session, cfg: Config, scope: str, day: date | None, kind: 
                 body.append(t["wifi_line"].format(name=x["name"], zone=x["zone"] or "-"))
             if len(W["apDown"]) > n_dev:
                 body.append(t["tk_more"].format(n=len(W["apDown"]) - n_dev).replace("tiket", "AP"))
+    elif kind == "isp":
+        from .calc import zbx_isp as ZBXISP
+        Zi = ZBXISP.build(db, cfg, d1, d2, site)
+        Za, Zh = Zi["all"], Zi["hist"]
+        net, n_links = _net_lines(db, t, a, end, site)
+        if not Za["total"]:
+            status.append(t["st_isp"].format(s=t["ok"]))
+            body.append(t["isp_none"])
+        else:
+            dn, sr, sd = Za["down"], Za["singleRisk"], Za["siteDown"]
+            issues = []
+            if dn:
+                issues.append(f"{_f(dn)} link down")
+            if sd:
+                issues.append(f"{_f(sd)} lokasi down")
+            if sr:
+                issues.append(f"{_f(sr)} cabang tanpa redundansi")
+            status.append(t["st_isp"].format(s=f"PERHATIAN ({', '.join(issues)})" if issues else t["ok"]))
+            body.append(t["isp_tot"].format(
+                o=_f(Za["online"]), t=_f(Za["total"]),
+                a=_f((Za["avail"] or 0) * 100, 2) if Za["avail"] is not None else "-",
+                dn=f", {_f(dn)} down" if dn else "",
+            ))
+            if not site:
+                rparts = []
+                if sd:
+                    rparts.append(f"{_f(sd)} site down")
+                if sr:
+                    rparts.append(f"{_f(sr)} single-link risk")
+                body.append(t["isp_red"].format(dual=_f(Za["dualSites"]), risk=f" ({', '.join(rparts)})" if rparts else " (semua aman)"))
+            if Zi["byProvider"]:
+                body.append(t["isp_prov"].format(x=", ".join(f"{r['k']} {r['online']}/{r['total']}" for r in Zi["byProvider"])))
+            mttr = f", MTTR {_f(Zh['mttr'], 1)} jam" if Zh.get("mttr") is not None else ""
+            body.append(t["isp_ev"].format(f=f"{d1:%d/%m}", t=f"{d2:%d/%m}", n=_f(Zh["events"]), h=_f(Zh["hosts"]), hr=_f(Zh["hours"], 1), mttr=mttr))
+            if Zi["down"]:
+                body.append(t["isp_down_hd"])
+                for x in Zi["down"][:n_dev]:
+                    body.append(t["isp_line"].format(name=x["name"], loc=x["loc"], prov=x["provider"], h=_dur(x["ageH"] or 0)))
+                if len(Zi["down"]) > n_dev:
+                    body.append(t["tk_more"].format(n=len(Zi["down"]) - n_dev).replace("tiket", "link"))
+            if not site:
+                risks = [r for r in Zi["byLoc"] if r["rtone"] in ("crit", "warn")][:6]
+                if risks:
+                    body.append(t["isp_risk_hd"])
+                    for r in risks:
+                        ltxt = ", ".join(f"{l['provider']} ({'UP' if l['reachable'] else 'DOWN'})" for l in r["links"])
+                        body.append(t["isp_risk_line"].format(loc=r["k"], red=r["redundancy"], links=ltxt))
+            top_h = (Zh.get("byHost") or [])[:5]
+            if top_h:
+                body.append(t["isp_top_hd"])
+                for x in top_h:
+                    body.append(t["isp_top_line"].format(name=x["k"], n=_f(x["events"]), hr=_f(x["hours"], 1)))
+        status.append(t["st_prtg"].format(s=t["warn_n"].format(n=n_links) if n_links else t["ok"]))
+        body += net
     else:
         net, n_links = _net_lines(db, t, a, end, site)
         from .calc import zbx_isp as ZBXISP

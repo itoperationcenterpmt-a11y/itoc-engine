@@ -24,6 +24,7 @@ DEFAULT = {
         {"name": "wifi", "kind": "wifi", "scope": "duty", "branch_arg": True, "group": "area", "help": "status WiFi (Access Point dan client)"},
         {"name": "devices", "aliases": ["perangkat"], "kind": "device", "scope": "duty", "branch_arg": True, "group": "area", "help": "status perangkat Zabbix"},
         {"name": "link", "aliases": ["web"], "kind": "link", "scope": "duty", "branch_arg": True, "group": "area", "help": "status link ISP dan web (PRTG dan Uptime Kuma)"},
+        {"name": "isp", "kind": "isp", "scope": "duty", "branch_arg": True, "group": "area", "help": "status ISP per provider & cabang (Zabbix ISP-* dan PRTG)"},
         {"name": "7hari", "aliases": ["7d", "minggu"], "kind": "full", "scope": "7d", "help": "7 hari terakhir"},
         {"name": "thismonth", "aliases": ["bulanini"], "kind": "full", "scope": "thismonth", "group": "month", "line": "bulan ini / bulan lalu", "help": "laporan bulan ini"},
         {"name": "lastmonth", "aliases": ["bulanlalu"], "kind": "full", "scope": "lastmonth", "group": "month", "help": "laporan bulan lalu"},
@@ -33,12 +34,12 @@ DEFAULT = {
 }
 DATE_RE = re.compile(r"^(\d{8}|\d{6})$")            # YYYYMMDD; the short yymmdd form still works
 NAME_RE = re.compile(r"^[a-z0-9]{1,20}$")
-KINDS = ("full", "noc", "soc", "eos", "cctv", "wifi", "device", "link")
-SITE_KINDS = ("eos", "cctv", "wifi", "device", "link")           # these accept a branch
+KINDS = ("full", "noc", "soc", "eos", "cctv", "wifi", "device", "link", "isp")
+SITE_KINDS = ("eos", "cctv", "wifi", "device", "link", "isp")     # these accept a branch
 FIXED = ("duty", "day", "half1", "half2", "24h", "7d", "30d", "thismonth", "lastmonth", "month")
 DATED = ("duty", "day", "half1", "half2")                         # scopes that follow a typed date (two dates on "duty" make a range)
 MAX_RANGE_DAYS = 62
-KIND_MODULES = {"noc": ("noc",), "soc": ("soc",), "eos": ("servicedesk", "noc"), "cctv": ("cctv", "devices"), "wifi": ("wifi",), "device": ("devices",), "link": ("noc", "kuma")}   # a summary needs one of these menus; "full" is open to everyone who may open Insights
+KIND_MODULES = {"noc": ("noc",), "soc": ("soc",), "eos": ("servicedesk", "noc"), "cctv": ("cctv", "devices"), "wifi": ("wifi",), "device": ("devices",), "link": ("noc", "kuma"), "isp": ("noc",)}   # a summary needs one of these menus; "full" is open to everyone who may open Insights
 
 
 def kind_allowed(kind: str, can) -> bool:
