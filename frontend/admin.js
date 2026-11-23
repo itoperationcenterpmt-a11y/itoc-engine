@@ -23,10 +23,10 @@ function admEnsure() { if (!admVisible(S.adm) || !ADM.some(g => g[2].some(p => p
 
 function admNav() {
   const g = admGroup(S.adm), todo = INT.todo ? INT.todo.total : 0;
-  return `<div class="admnav"><div class="subtabs admgrp">${admPages().map(([k, t]) => `<button type="button" data-admgrp="${k}" aria-selected="${g[0] === k}">${t}</button>`).join("")}</div>
-    <div class="subtabs">${g[2].map(([k, t]) => `<button type="button" data-adm="${k}" aria-selected="${S.adm === k}">${t}${k === "dilengkapi" && todo ? ` <span class="tag warn">${todo}</span>` : ""}</button>`).join("")}</div></div>`;
+  return `<div class="admnav"><div class="admgrp" role="tablist" aria-label="Admin groups">${admPages().map(([k, t]) => `<button type="button" role="tab" data-admgrp="${k}" aria-selected="${g[0] === k}">${t}</button>`).join("")}</div>
+    <div class="admsubtabs" role="tablist" aria-label="Admin sections">${g[2].map(([k, t]) => `<button type="button" role="tab" data-adm="${k}" aria-selected="${S.adm === k}">${t}${k === "dilengkapi" && todo ? ` <span class="tag warn">${todo}</span>` : ""}</button>`).join("")}</div></div>`;
 }
-const admTitle = (t, d) => `<div class="admhead"><h3>${esc(t)}</h3>${d ? `<span class="sub">${esc(d)}</span>` : ""}</div>`;
+const admTitle = (t, d, act = "") => `<div class="admhead"><div class="admhead-t"><h3>${esc(t)}</h3>${d ? `<span class="sub">${esc(d)}</span>` : ""}</div>${act ? `<div class="acts">${act}</div>` : ""}</div>`;
 const admGo = (adm, mkey) => set({adm, mkey: mkey || "", mdata: null, medit: null, msg: "", addUser: false, editUser: "", params: adm === "parameter" ? null : S.params});
 
 /* ---------- Roles and access ---------- */
@@ -51,7 +51,7 @@ function vRoles() {
       <label class="chk"><input type="checkbox" id="rV" ${e.admin_view ? "checked" : ""}> Can open Admin, read-only (unlocked pages only)</label></div></div>
     <div class="fld wide"><label>Data types this role can upload</label><div class="chkgrid">${ROLE_UPLOAD.map(([v, l]) => `<label class="chk"><input type="checkbox" data-rup="${v}" ${(e.uploads || []).includes("*") || (e.uploads || []).includes(v) ? "checked" : ""}> ${l}</label>`).join("")}</div></div>
     <div class="acts wide"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-role="x">Cancel</button>${e.__new || e.key === "superadmin" ? "" : `<button class="btn ghost" type="button" data-role="del">Delete</button>`}<span class="msg err" id="rMsg"></span></div></form>`;
-  return intMsg() + admTitle("Roles & Access", "A role controls which menus are visible, whether data can be edited, and the location scope. Each user has one role.") + form + `<div class="toolbar">${can ? `<button class="btn" type="button" data-role="new">+ Add Role</button>` : ""}</div>
+  return intMsg() + admTitle("Roles & Access", "A role controls which menus are visible, whether data can be edited, and the location scope. Each user has one role.", can ? `<button class="btn" type="button" data-role="new">+ Add Role</button>` : "") + form + `
     <div class="rolecards">${rows.map(r => `<article class="rcard"><header><b>${esc(r.label)}</b><span class="sub">${esc(r.key)}</span>${can ? `<button class="btn ghost sm" type="button" data-role="edit" data-key="${esc(r.key)}">Edit</button>` : ""}</header>
       <p>${esc(r.description || "No description.")}</p>
       <div class="rflags"><span>Scope: <b>${esc((ROLE_SCOPE.find(x => x[0] === r.scope) || ["", r.scope])[1])}</b></span><span>Edit: ${flag(r, "can_write")}</span><span>Admin: ${r.is_admin ? `<span class="ok-t">Full</span>` : r.admin_view ? `<b>Read-only</b>` : `<span class="sub">–</span>`}</span></div></article>`).join("")}</div>
@@ -130,16 +130,19 @@ document.addEventListener("submit", async e => {
 /* Admin → System → Backup & Restore: download a .sql backup and restore from one (Super Admin only). */
 const BK = {msg: null, busy: false};
 function vBackup() {
-  if (!CFG.me.is_admin) return `<div class="empty"><b>Super Admin only</b><span>Database backup and restore are only for the Super Admin.</span></div>`;
+  if (!CFG.me.is_admin) return admTitle("Backup & Restore", "Database backup and restore (Super Admin only).") + `<div class="empty"><b>Super Admin only</b><span>Database backup and restore are only for the Super Admin.</span></div>`;
   const m = BK.msg ? `<div class="msg ${BK.msg.ok ? "ok" : "err"}">${esc(BK.msg.t)}</div>` : "";
-  return `${m}<p class="sub">A backup is a plain-text .sql file (pg_dump). Keep it somewhere safe: it contains personnel data and password hashes.</p>
-    <form class="form formbox intform"><div class="fld wide"><span class="lbl">Backup</span></div>
-      <div class="acts wide"><button class="btn" type="button" data-bk="backup" ${BK.busy ? "disabled" : ""}>Download backup .sql</button></div></form>
-    <form class="form formbox intform" data-bk-form="restore"><div class="fld wide"><span class="lbl">Restore</span></div>
-      <p class="sub">This replaces the ENTIRE database with the content of the file. A safety backup is made on the server before the restore. After the restore, restart the api and worker.</p>
-      <div class="fld wide"><label for="bkFile">File .sql</label><input id="bkFile" type="file" accept=".sql" required></div>
-      <div class="fld wide"><label for="bkConfirm">Type RESTORE to confirm</label><input id="bkConfirm" type="text" autocomplete="off" required></div>
-      <div class="acts wide"><button class="btn" type="submit" ${BK.busy ? "disabled" : ""}>Restore database</button></div></form>`;
+  return admTitle("Backup & Restore", "Download a plain-text PostgreSQL .sql backup or restore the database from a previous backup.") + m +
+    `<div class="grid" style="margin-top:4px">
+      <form class="panel c6 intform"><header><h2>Download Backup (.sql)</h2></header>
+        <p class="sub" style="margin:0">Generates a full pg_dump .sql file containing configuration, operational data, personnel, and password hashes. Keep it in a secure location.</p>
+        <div class="acts" style="margin-top:auto"><button class="btn" type="button" data-bk="backup" ${BK.busy ? "disabled" : ""}>Download backup .sql</button></div></form>
+      <form class="panel c6 intform" data-bk-form="restore"><header><h2>Restore Database</h2></header>
+        <p class="sub" style="margin:0">Replaces the <b>entire</b> database with the uploaded .sql file. A safety backup is created automatically on the server first. Restart api and worker after restore.</p>
+        <div class="fld"><label for="bkFile">Backup file (.sql)</label><input id="bkFile" type="file" accept=".sql" required></div>
+        <div class="fld"><label for="bkConfirm">Type RESTORE to confirm</label><input id="bkConfirm" type="text" autocomplete="off" placeholder="RESTORE" required></div>
+        <div class="acts"><button class="btn" type="submit" ${BK.busy ? "disabled" : ""}>Restore database</button></div></form>
+    </div>`;
 }
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-bk]"); if (!b) return;
@@ -173,9 +176,12 @@ function vAdmin() {
   admEnsure();
   let body = "";
   const eu = S.editUser ? (V.users || []).find(x => x.u === S.editUser) : null;
-  if (S.adm === "pengguna") body = `${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}<div class="toolbar"><button class="btn" data-adduser>+ Add User</button></div>
-    ${S.addUser || eu ? `<form id="uF" class="form formbox"><div class="fld"><label for="uU">Username *</label><input id="uU" type="text" value="${eu ? esc(eu.u) : ""}" ${eu ? "readonly" : ""}></div><div class="fld"><label for="uN">Name *</label><input id="uN" type="text" value="${eu ? esc(eu.name) : ""}"></div><div class="fld"><label for="uR">Role *</label><select id="uR" ${eu && eu.u === CFG.me.username ? "disabled" : ""}>${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${eu && eu.role === k ? "selected" : ""}>${v}</option>`).join("")}</select></div><div class="fld"><label for="uS">Branch (EOS only)</label><select id="uS"><option value="">–</option>${CFG.sites.map(x => `<option ${eu && eu.site === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div><div class="acts wide"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-adduser>Cancel</button>${eu ? "" : `<span class="sub">The initial password is random and must be changed at first login.</span>`}<span class="msg err" id="uMsg"></span></div></form>` : ""}
-    <div class="ucards">${V.users.map(u => `<article class="ucard ${u.active ? "" : "off"}"><span class="av">${esc((u.name || u.u).split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase())}</span><div class="ub"><b>${esc(u.name)}</b><span class="sub">@${esc(u.u)} · ${esc(ROLES[u.role] || u.role)}${u.site ? " · " + esc(u.site) : ""}</span><span class="sub" title="${esc(roleAccess(u.role))}">${u.active ? "Active" : "Inactive"} · last login ${esc(dtime(u.last))}</span></div><span class="acts"><button class="btn ghost" data-edit-user="${esc(u.u)}">Edit</button>${u.u === CFG.me.username ? "" : `<button class="btn ghost" data-toggle-user="${esc(u.u)}">${u.active ? "Disable" : "Enable"}</button><button class="btn ghost" data-reset-user="${esc(u.u)}">Reset</button>`}</span></article>`).join("")}</div>`;
+  if (S.adm === "pengguna") {
+    const actN = (V.users || []).filter(u => u.active).length;
+    body = admTitle("Users", `${fmt(V.users.length)} accounts (${fmt(actN)} active). Manage user accounts, assigned roles, and password resets.`, `<button class="btn" data-adduser>+ Add User</button>`) + `${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}
+    ${S.addUser || eu ? `<form id="uF" class="form formbox" style="margin-bottom:12px"><div class="fld"><label for="uU">Username *</label><input id="uU" type="text" value="${eu ? esc(eu.u) : ""}" ${eu ? "readonly" : ""}></div><div class="fld"><label for="uN">Name *</label><input id="uN" type="text" value="${eu ? esc(eu.name) : ""}"></div><div class="fld"><label for="uR">Role *</label><select id="uR" ${eu && eu.u === CFG.me.username ? "disabled" : ""}>${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${eu && eu.role === k ? "selected" : ""}>${v}</option>`).join("")}</select></div><div class="fld"><label for="uS">Branch (EOS only)</label><select id="uS"><option value="">–</option>${CFG.sites.map(x => `<option ${eu && eu.site === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div><div class="acts wide"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-adduser>Cancel</button>${eu ? "" : `<span class="sub">The initial password is random and must be changed at first login.</span>`}<span class="msg err" id="uMsg"></span></div></form>` : ""}
+    <div class="ucards">${V.users.map(u => `<article class="ucard ${u.active ? "" : "off"}"><span class="av">${esc((u.name || u.u).split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase())}</span><div class="ub"><b>${esc(u.name)}</b><span class="sub">@${esc(u.u)} · ${esc(ROLES[u.role] || u.role)}${u.site ? " · " + esc(u.site) : ""}</span><span class="sub" title="${esc(roleAccess(u.role))}">${u.active ? "Active" : "Inactive"} · last login ${esc(dtime(u.last))}</span></div><span class="acts"><button class="btn ghost sm" data-edit-user="${esc(u.u)}">Edit</button>${u.u === CFG.me.username ? "" : `<button class="btn ghost sm" data-toggle-user="${esc(u.u)}">${u.active ? "Disable" : "Enable"}</button><button class="btn ghost sm" data-reset-user="${esc(u.u)}">Reset</button>`}</span></article>`).join("")}</div>`;
+  }
   if (S.adm === "integrasi") body = vIntegrations();
   if (S.adm === "apikeys") body = vApiKeys();
   if (S.adm === "sharelinks") body = vShareLinks();

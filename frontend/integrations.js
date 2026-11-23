@@ -27,7 +27,8 @@ const intField = (id, label, inp, wide) => `<div class="fld ${wide ? "wide" : ""
 
 function vIntegrations() {
   if (!INT.integrations) { intLoad("integrations", "integrations"); return intLoading(); }
-  return intMsg() + `<div class="icards">${INT.integrations.rows.map(s => {
+  const actN = INT.integrations.rows.filter(s => s.enabled).length;
+  return admTitle("Integrations", `${INT.integrations.rows.length} data sources (${actN} active). Configure API credentials, sync schedules, and test connections.`) + intMsg() + `<div class="icards">${INT.integrations.rows.map(s => {
     const f = "i_" + s.key;
     const creds = s.creds.map(c => `<div class="fld"><label for="${f}_${c.name}">${esc(c.label)} ${c.set ? `<span class="tag">saved</span>` : c.env_set ? `<span class="tag">from .env (${esc(c.env)})</span>` : `<span class="tag warn">not set</span>`}</label>
       <input id="${f}_${c.name}" data-secret="${esc(c.name)}" type="password" autocomplete="new-password" placeholder="${c.set ? "•••••••• (leave empty = unchanged)" : "Fill in to save"}">${c.set ? `<button type="button" class="btn ghost sm" data-w data-int="clear" data-key="${esc(s.key)}" data-name="${esc(c.name)}">Remove saved</button>` : ""}</div>`).join("");
@@ -64,17 +65,17 @@ function vApiKeys(roles) {
       ${intField("k_site", "Limit to location", `<select id="k_site" data-f="site"><option value="">All allowed by role</option>${CFG.sites.map(x => `<option ${ek && ek.site === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`)}
       ${intField("k_days", ek ? "Expiry" : "Valid for", `<select id="k_days" data-f="days">${intOpt([...(ek ? [["keep", "Keep current" + (ek.expires_at ? " (" + intDt(ek.expires_at) + ")" : " (none)")]] : []), ["", "No expiry"], ["30", ek ? "30 days from now" : "30 days"], ["90", ek ? "90 days from now" : "90 days"], ["365", ek ? "1 year from now" : "1 year"]], ek ? "keep" : "90")}</select>`)}
       <div class="acts wide"><button class="btn" type="submit" data-w>${ek ? "Save" : "Generate"}</button><button class="btn ghost" type="button" data-int="keyform">Cancel</button></div></form>` : "";
-  return intMsg() + `<div class="toolbar"><span class="sub">API keys for other systems that read dashboard data.</span><button class="btn" type="button" data-w data-int="keyform">+ Generate key</button></div>${nk}${form}
+  return admTitle("API Keys", "API keys for external systems, bots, or scripts that read dashboard data.", `<button class="btn" type="button" data-w data-int="keyform">+ Generate key</button>`) + intMsg() + `${nk}${form}
     <div class="mcards">${INT.apikeys.rows.map(k => `<article class="mcard ${k.revoked ? "off" : ""}"><div class="mh"><b>${esc(k.name)}</b><span class="mid">${esc(k.prefix)}…</span></div>
       <div class="mchips"><span class="mchip"><i>role</i>${esc(CFG.roles[k.role_key] ? CFG.roles[k.role_key].label : k.role_key)}</span>${k.site ? `<span class="mchip"><i>location</i>${esc(k.site)}</span>` : ""}<span class="mchip"><i>last used</i>${esc(intDt(k.last_used_at))}</span><span class="mchip"><i>expires</i>${k.expires_at ? esc(intDt(k.expires_at)) : "never"}</span>${k.revoked ? `<span class="mchip">revoked</span>` : ""}</div>
-      ${k.revoked ? "" : `<span class="acts"><button class="btn ghost" type="button" data-int="keyedit" data-id="${k.id}">Edit</button><button class="btn ghost" type="button" data-w data-int="revoke" data-id="${k.id}">Revoke</button></span>`}</article>`).join("") || `<div class="empty sm">No API keys yet.</div>`}</div>
-    <details class="howto"><summary>How to use</summary><pre>curl -H "X-API-Key: itoc_xxx" "${esc(o)}/api/view/servicedesk?from=2026-10-01&amp;to=2026-10-19"</pre><span class="sub">The same read endpoints as the dashboard (/api/view/…, /api/report/…) follow the role rights on the key.</span></details>`;
+      ${k.revoked ? "" : `<span class="acts"><button class="btn ghost sm" type="button" data-int="keyedit" data-id="${k.id}">Edit</button><button class="btn ghost sm" type="button" data-w data-int="revoke" data-id="${k.id}">Revoke</button></span>`}</article>`).join("") || `<div class="empty sm">No API keys yet.</div>`}</div>
+    <details class="howto"><summary>How to use</summary><pre>curl -H "X-API-Key: itoc_xxx" "${esc(o)}/api/view/servicedesk?from=2026-10-01&amp;to=2026-10-19"</pre><span class="sub">The same read endpoints as the dashboard (/api/view/…, /api/report/…, /api/insights/command) follow the role rights on the key.</span></details>`;
 }
 
 function vSmtp() {
   if (!INT.smtp) { intLoad("smtp", "smtp"); return intLoading(); }
   const c = INT.smtp;
-  return intMsg() + `
+  return admTitle("Email (SMTP)", "Outgoing mail server used for scheduled reports, alerts, and account notifications.") + intMsg() + `
     <form class="form formbox intform" data-int-form="smtp">
       ${intField("m_host", "Host", `<input id="m_host" data-f="host" type="text" placeholder="smtp.pelindo.co.id" value="${esc(c.host)}">`)}
       ${intField("m_port", "Port", `<input id="m_port" data-f="port" type="number" value="${esc(c.port)}">`)}
@@ -84,7 +85,8 @@ function vSmtp() {
       ${intField("m_from", "Sender address", `<input id="m_from" data-f="sender" type="email" placeholder="itoc@pelindo.co.id" value="${esc(c.sender)}">`)}
       ${intField("m_fn", "Sender name", `<input id="m_fn" data-f="from_name" type="text" value="${esc(c.from_name)}">`)}
       <div class="acts wide"><button class="btn" type="submit" data-w>Save</button></div></form>
-    <form class="form intform smtptest" data-int-form="smtptest"><div class="fld"><label for="m_to">Send test email to</label><input id="m_to" data-f="to" type="email" placeholder="name@pelindo.co.id"></div><div class="acts"><button class="btn ghost" type="submit" data-w>Send test</button></div></form>`;
+    <h4 class="admsub">Test Email Delivery</h4>
+    <form class="form formbox intform smtptest" data-int-form="smtptest"><div class="fld"><label for="m_to">Send test email to</label><input id="m_to" data-f="to" type="email" placeholder="name@pelindo.co.id"></div><div class="acts" style="align-self:end"><button class="btn ghost" type="submit" data-w>Send test</button></div></form>`;
 }
 
 function vWebhooks() {
@@ -97,10 +99,10 @@ function vWebhooks() {
       <div class="fld wide"><span class="lbl">Send on</span><div class="evs">${ev.map(([k, l]) => `<label class="chk"><input type="checkbox" data-ev="${esc(k)}" ${(e.events || []).includes(k) ? "checked" : ""}> ${esc(l)}</label>`).join("")}</div></div>
       ${intField("w_en", "Status", `<select id="w_en" data-f="enabled">${intOpt([["true", "Active"], ["false", "Inactive"]], String(e.enabled !== false))}</select>`)}
       <div class="acts wide"><button class="btn" type="submit" data-w>Save</button><button class="btn ghost" type="button" data-int="hookform" data-id="x">Cancel</button><span class="sub">Telegram: …/sendMessage?chat_id=ID · WhatsApp: URL gateway/webhook (menerima JSON text &amp; message) · Teams/Slack: incoming webhook.</span></div></form>` : "";
-  return intMsg() + `<div class="toolbar"><span class="sub">Automatic notifications to chat or other systems.</span><button class="btn" type="button" data-w data-int="hookform" data-id="new">+ Add webhook</button></div>${form}
+  return admTitle("Webhooks", "Automatic event-driven notifications to WhatsApp, Telegram, Teams, Slack, or custom JSON endpoints.", `<button class="btn" type="button" data-w data-int="hookform" data-id="new">+ Add webhook</button>`) + intMsg() + `${form}
     <div class="mcards">${W.rows.map(w => `<article class="mcard"><div class="mh"><b>${esc(w.name)}</b><span class="mid">${esc((W.kinds || {})[w.kind] || w.kind)}</span></div>
       <div class="mchips"><span class="mchip"><i>url</i>${esc(w.url)}</span>${w.events.map(k => `<span class="mchip">${esc((W.events || {})[k] || k)}</span>`).join("")}${w.enabled ? "" : `<span class="mchip">disabled</span>`}<span class="mchip"><i>last</i>${esc(w.last_status || "never")}${w.last_at ? " · " + esc(intDt(w.last_at)) : ""}</span></div>
-      <span class="acts"><button class="btn ghost" type="button" data-w data-int="hookform" data-id="${w.id}">Edit</button><button class="btn ghost" type="button" data-w data-int="hooktest" data-id="${w.id}">Test</button><button class="btn ghost" type="button" data-w data-int="hookdel" data-id="${w.id}">Delete</button></span></article>`).join("") || `<div class="empty sm">No webhooks yet.</div>`}</div>`;
+      <span class="acts"><button class="btn ghost sm" type="button" data-w data-int="hookform" data-id="${w.id}">Edit</button><button class="btn ghost sm" type="button" data-w data-int="hooktest" data-id="${w.id}">Test</button><button class="btn ghost sm" type="button" data-w data-int="hookdel" data-id="${w.id}">Delete</button></span></article>`).join("") || `<div class="empty sm">No webhooks yet.</div>`}</div>`;
 }
 
 async function loadChatCmd() {
@@ -163,8 +165,7 @@ MSG=$(curl -sG "${base}/api/insights/summary" \\
     [{h: `<code class="num">/help</code>`}, "/, /bantuan, /start", "meta", {h: `<span class="sub num">/help</span>`}, "Menampilkan daftar seluruh perintah aktif", {h: `<span class="acts"><button type="button" class="btn ghost sm" data-int="cmdfill" data-key="/help">Test</button><button type="button" class="btn ghost sm" data-int="cmdcopy" data-key="/help">Copy</button></span>`}],
   ];
   const quick = ["/help", "/fullday", "/isp", "/noc", "/soc", "/eos", "/cabang"];
-  return intMsg() + admTitle("Bot & Notifier API (WhatsApp & Telegram)", "Template command dan endpoint API untuk integrasi bot WA/Telegram maupun notifier terjadwal mandiri. Gunakan API Key di Access → API Keys.") +
-    `<div class="toolbar"><div class="acts"><button type="button" class="btn ghost sm" data-adm="apikeys">Open API Keys</button><button type="button" class="btn ghost sm" data-adm="webhooks">Open Webhooks (Push WA/Telegram)</button><button type="button" class="btn ghost sm" data-adm="parameter">Edit chat.commands</button></div></div>` +
+  return admTitle("Bot & Notifier API (WhatsApp & Telegram)", "Command templates and API endpoints for WA/Telegram bot bridges or standalone scheduled notifiers. Authenticate with an API key from Access → API Keys.", `<button type="button" class="btn ghost sm" data-adm="apikeys">API Keys</button><button type="button" class="btn ghost sm" data-adm="webhooks">Webhooks</button><button type="button" class="btn ghost sm" data-adm="parameter">Edit chat.commands</button>`) + intMsg() +
     `<div class="formbox" style="margin-bottom:14px"><form class="toolbar" data-int-form="cmdtest" style="margin:0"><input id="cmdTestIn" type="text" data-f="cmd" value="${esc(INT.cmdIn)}" placeholder="Ketik command, mis. /isp atau /isp-belawan atau /fullday-20261123" style="flex:1;min-width:220px"><button class="btn" type="submit"${INT.cmdBusy ? " disabled" : ""}>${INT.cmdBusy ? "Testing…" : "Test Command"}</button>${INT.cmdOut ? `<button type="button" class="btn ghost" data-int="cmdcopy" data-id="cmdOutPre">Copy Output</button>` : ""}</form>` +
     `<div class="chips sm" style="margin-top:8px">${quick.map(q => `<button type="button" class="chip" data-int="cmdfill" data-key="${esc(q)}">${esc(q)}</button>`).join("")}</div>` +
     `${INT.cmdOut ? `<pre class="sumtxt" id="cmdOutPre" style="margin-top:10px;max-height:300px">${esc(INT.cmdOut)}</pre>` : `<p class="sub" style="margin:8px 0 0">Klik <b>Test Command</b> atau salah satu command di bawah untuk melihat preview pesan siap kirim ke WA/Telegram.</p>`}</div>` +
@@ -253,16 +254,14 @@ async function audLoad(more) {
 function vAudit() {
   if (!AUD.loaded) { audLoad(false); return intLoading(); }
   const f = AUD.f, rows = AUD.rows.map(a => [a.at.replace("T", " ").slice(0, 19), a.by, a.t]);
-  return `${AUD.err ? `<div class="msg err">${esc(AUD.err)}</div>` : ""}
+  return admTitle("Audit Log", `${fmt(AUD.total)} records${AUD.rows.length < AUD.total ? ` (showing ${fmt(AUD.rows.length)})` : ""}. Track sign-ins, configuration changes, uploads, and API/bot activity.`, `<button class="btn ghost sm" type="button" data-int="audexport">Export CSV</button>`) + `${AUD.err ? `<div class="msg err">${esc(AUD.err)}</div>` : ""}
     <form class="toolbar mbar" data-int-form="audit">
       <label class="sub">From <input type="date" data-f="frm" value="${esc(f.frm)}"></label><label class="sub">To <input type="date" data-f="to" value="${esc(f.to)}"></label>
       <label class="sub">User <select data-f="who"><option value="">All</option>${AUD.users.map(u => `<option ${u === f.who ? "selected" : ""}>${esc(u)}</option>`).join("")}</select></label>
       <input type="search" class="msearch" data-f="q" value="${esc(f.q)}" placeholder="Search activity or user" aria-label="Search">
-      <button class="btn" type="submit">Terapkan</button><button class="btn ghost" type="button" data-int="audreset">Reset</button>
-      <span class="mtools"><button class="btn" type="button" data-int="audexport">Ekspor CSV</button></span></form>
-    <p class="sub">${fmt(AUD.total)} catatan${AUD.rows.length < AUD.total ? `, menampilkan ${fmt(AUD.rows.length)}` : ""}</p>
+      <button class="btn" type="submit">Apply</button><button class="btn ghost" type="button" data-int="audreset">Reset</button></form>
     ${tbl(["Time (WIB)", "User", "Activity"], rows, {tall: true, empty: "No records for this filter."})}
-    ${AUD.rows.length < AUD.total ? `<div class="toolbar"><button class="btn ghost" type="button" data-int="audmore">Show more</button></div>` : ""}`;
+    ${AUD.rows.length < AUD.total ? `<div class="toolbar" style="margin-top:10px"><button class="btn ghost" type="button" data-int="audmore">Show more</button></div>` : ""}`;
 }
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-int]"); if (!b) return;
