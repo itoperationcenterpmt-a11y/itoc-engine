@@ -134,7 +134,8 @@ function renderShell(loading) {
   if (crumb) crumb.textContent = !cur ? "TERA" : grp ? (MODS[grp].label + " › " + (S.tab === grp ? SUBSUM[grp] : cur[1])).toUpperCase() : ("DASHBOARD › " + cur[1]).toUpperCase();
   $("ptitle").textContent = !cur ? "" : (S.tab === grp ? MODS[grp].label : cur[1]);
   $("subnav").innerHTML = subnav(curTop);
-  const apSub = APPLY[S.tab] && APPLY[S.tab].p ? ctxTxt() : ((MODS[S.tab] || {}).note || "");
+  const cmpOn = S.cmp && APPLY[S.tab] && APPLY[S.tab].p && APPLY[S.tab].c;
+  const apSub = APPLY[S.tab] && APPLY[S.tab].p ? ctxTxt() + (cmpOn ? " · vs " + dmon(prevRange().from) + " – " + dmon(prevRange().to) : "") : ((MODS[S.tab] || {}).note || "");
   $("psub").textContent = apSub; $("psub").hidden = !apSub;
   $("fPreset").innerHTML = PRESETS.map(([k, l]) => `<button type="button" data-p="${k}" aria-pressed="${S.preset === k}">${l}</button>`).join("");
   $("fShift").innerHTML = SN.map((l, i) => `<button type="button" data-s="${i}" aria-pressed="${S.sf === i}" ${i ? `title="${shiftHours(i)}"` : ""}>${l}</button>`).join("");
@@ -166,15 +167,19 @@ function renderShell(loading) {
   const exIds = ["gKind", "gStat", "gGrp", "gTyp"], exN = exIds.filter(id => !$(id).hidden).length, exUse = !!(ap.k && S.kind || ap.t && S.dstat || ap.g && S.grp || ap.y && S.dtype), exOpen = S.fMore || exUse;
   exIds.forEach(id => $(id).classList.toggle("fx", !exOpen));
   $("fMore").hidden = !exN; $("fMore").disabled = exUse; $("fMore").textContent = exOpen ? "Fewer filters" : "More filters · " + exN; $("fMore").setAttribute("aria-expanded", exOpen);
+  const isDevGroup = curTop === "devices";
   $("fwrap").hidden = !anyF;
+  $("fwrap").classList.toggle("f1row", anyF && !isDevGroup);
+  $("fwrap").classList.toggle("fmore-open", !!(exN && exOpen));
   $("fbar").classList.toggle("off", !anyF);
   [["gPeriode", ap.p], ["gShift", ap.s], ["gSite", ap.l], ["gCmp", ap.p && ap.c]].forEach(([id, on]) => { const el = $(id); el.hidden = !on; el.classList.toggle("na", !on); el.querySelectorAll("button,select,input").forEach(x => x.disabled = !on); });
   if (CFG.me.site) { $("fSite").disabled = true; $("gSite").classList.add("na"); }
-  const chips = [], active = [];
+  const chips = [], active = [], hasNa = anyF && (!ap.s && S.sf || !ap.l && S.site);
   if (ap.p) active.push(rangeTxt()); if (ap.s && S.sf) active.push("shift " + SN[S.sf] + " (" + shiftHours(S.sf) + ")"); if (ap.l && S.site) active.push(S.site); if (ap.k && S.kind) active.push(S.tab === "wifi" || S.tab === "xdr" ? S.kind : (KL[S.kind] || S.kind)); if (ap.g && S.grp) active.push(S.grp); if (ap.y && S.dtype) active.push(((V.dev && V.dev.byType.find(t => t.code === S.dtype)) || {k: S.dtype}).k); if (ap.t && S.dstat) active.push(SL.find(x => x[0] === S.dstat)[1]); if (S.cmp && $("gCmp").querySelector("input:not(:disabled)")) active.push("vs " + dmon(prevRange().from) + " – " + dmon(prevRange().to));
   if (anyF) { chips.push(`<span class="on">Active filter: <b>${esc(active.join(" · ") || "All")}</b></span>`);
-    if (!ap.s && S.sf || !ap.l && S.site) chips.push(`<span class="na-txt">${(!ap.s && S.sf ? "Shift" : "") + (!ap.s && S.sf && !ap.l && S.site ? " and " : "") + (!ap.l && S.site ? "location" : "")} does not apply on this page</span>`); }
+    if (hasNa) chips.push(`<span class="na-txt">${(!ap.s && S.sf ? "Shift" : "") + (!ap.s && S.sf && !ap.l && S.site ? " and " : "") + (!ap.l && S.site ? "location" : "")} does not apply on this page</span>`); }
   $("fApplies").innerHTML = chips.join("");
+  $("fApplies").hidden = !isDevGroup && !hasNa;
   renderDuty();
   $("fSum").textContent = anyF ? (active.join(" · ") || "All") : "Not applicable on this page";
 

@@ -602,6 +602,34 @@ footer{margin-top:28px;color:var(--muted);font-size:calc(12px*var(--fs));display
 }
 .fright{margin-left:auto;display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
 .fright .profsel{margin-left:0}.fright #layBtn{margin-left:0}
+/* Single-row compact filter bar on desktop for all non-Device menus (Devices keeps full multi-row filter bar) */
+@media (min-width:901px){
+  .fwrap.f1row{padding:7px 10px;gap:6px}
+  .fwrap.f1row #fbar{gap:6px;align-items:center;min-width:0}
+  .fwrap.f1row .fg{gap:4px;flex-wrap:nowrap;min-width:0}
+  .fwrap.f1row #gPeriode>.k,.fwrap.f1row #gShift>.k,.fwrap.f1row #gSite>.k{display:none}
+  .fwrap.f1row .seg{padding:2px;flex-wrap:nowrap}
+  .fwrap.f1row .seg button{padding:4px 7px;font-size:calc(12px*var(--fs));white-space:nowrap}
+  .fwrap.f1row .dates{gap:3px;font-size:calc(12px*var(--fs));white-space:nowrap}
+  .fwrap.f1row .dates input{padding:4px 5px;font-size:calc(12px*var(--fs));width:114px}
+  .fwrap.f1row #fSite{max-width:146px;padding:4px 20px 4px 8px;font-size:calc(12px*var(--fs))}
+  .fwrap.f1row #gCmp .chk{font-size:calc(12px*var(--fs));gap:4px;white-space:nowrap}
+  .fwrap.f1row #gCmp .cmp-full{display:none}
+  .fwrap.f1row .fright{flex-shrink:0}
+  .fwrap.f1row #fReset{padding:4px 9px;font-size:calc(12px*var(--fs))}
+}
+@media (min-width:1280px){
+  .fwrap.f1row:not(.fmore-open) #fbar{flex-wrap:nowrap}
+}
+@media (min-width:1280px) and (max-width:1520px){
+  .fwrap.f1row #fbar{gap:5px}
+  .fwrap.f1row .seg button{padding:3px 6px;font-size:calc(11.5px*var(--fs))}
+  .fwrap.f1row .dates{font-size:calc(11.5px*var(--fs))}
+  .fwrap.f1row .dates input{width:102px;padding:3px 4px;font-size:calc(11.5px*var(--fs))}
+  .fwrap.f1row #fSite{max-width:116px;padding:3px 18px 3px 6px;font-size:calc(11.5px*var(--fs))}
+  .fwrap.f1row #gCmp .chk,.fwrap.f1row #fReset{font-size:calc(11.5px*var(--fs))}
+  .fwrap.f1row #fReset{padding:3px 8px}
+}
 .vz-tile[data-filter-site]{cursor:pointer;transition:transform .12s,box-shadow .15s,border-color .15s}
 .vz-tile[data-filter-site]:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--accent)}
 .vz-tile[data-filter-site].active{background:var(--wash);border-color:var(--accent)}
@@ -849,7 +877,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
         <div class="fg" id="gGrp" hidden><span class="k">Group</span><select id="fGrp" aria-label="Group"></select></div>
         <div class="fg" id="gTyp" hidden><span class="k">Type</span><select id="fTyp" aria-label="Device type"></select></div>
         <div class="fg" id="gStat" hidden><span class="k">Status</span><div class="seg" id="fStat"></div></div>
-        <div class="fg" id="gCmp"><label class="chk"><input type="checkbox" id="fCmp"> Compare with previous period</label></div>
+        <div class="fg" id="gCmp"><label class="chk" title="Compare with previous period"><input type="checkbox" id="fCmp"> Compare<span class="cmp-full"> with previous period</span></label></div>
         <span class="fright"><button class="btn ghost" id="fReset" type="button">Reset</button></span>
       </div>
       <div id="fApplies"></div>
