@@ -134,7 +134,7 @@ def build(db: Session, cfg: Config, d_from: date, d_to: date, shift: int = 0, si
     if ids:
         for e in db.scalars(select(PrtgEvent).where(PrtgEvent.sensor_id.in_(ids), PrtgEvent.end_at > a, PrtgEvent.start_at < b)):
             st, en = max(e.start_at, a), min(e.end_at, b)
-            if st.replace(minute=0, second=0) in hset:
+            if st.replace(minute=0, second=0, microsecond=0) in hset:
                 kej.append([e.sensor_id, st, en, round((en - st).total_seconds() / 6) / 10])
     kej.sort(key=lambda k: -k[3])
     N = {"from": a, "to": b, "hours": len(hours), "P": cfg.net_params(), "sensors": out, "harian": harian, "kej": kej, "dayhit": dayhit}
