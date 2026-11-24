@@ -20,15 +20,23 @@ def _num(v):
     return float(m[0].replace(",", "")) if m else None
 
 
-def _dt(v: str) -> datetime | None:
-    # "10/14/2026 9:00:00 AM - 10:00:00 AM" → awal jam
-    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4}) (\d{1,2}):(\d{2}):\d{2}\s*([AP]M)?", v or "")
+def _dt(v: str, order: str = "auto") -> datetime | None:
+    """Awal jam dari kolom datetime PRTG. Mendukung "10/14/2026 9:00:00 AM - 10:00:00 AM" (bulan dulu, 12 jam)
+    dan "24/11/2026 06.00.00 - 07.00.00" (hari dulu, 24 jam, titik). order: auto | dmy | mdy."""
+    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4}) (\d{1,2})[:.](\d{2})[:.]\d{2}\s*([AP]M)?", v or "")
     if not m:
         return None
+    a, b = int(m[1]), int(m[2])
+    if order == "auto":
+        order = "dmy" if a > 12 else "mdy" if b > 12 else ("mdy" if m[6] else "dmy")
+    day, mon = (a, b) if order == "dmy" else (b, a)
     h = int(m[4])
     if m[6]:
         h = h % 12 + (12 if m[6] == "PM" else 0)
-    return datetime(int(m[3]), int(m[1]), int(m[2]), h, int(m[5]))
+    try:
+        return datetime(int(m[3]), mon, day, h, int(m[5]))
+    except ValueError:
+        return None
 
 
 def discover(cl: httpx.Client, db: Session, c: dict, auth: dict) -> int:
@@ -84,16 +92,21 @@ def sync_api(db: Session, cfg: Config, src: DataSource) -> tuple[int, str]:
                 gone.append(sen.id)
                 continue
             r.raise_for_status()
-            vals = []
-            for h in r.json().get("histdata", []):
-                ts = _dt(h.get("datetime", ""))
-                if ts is None or ts >= now:
+            vals, hist, bad = [], r.json().get("histdata", []), None
+            for h in hist:
+                ts = _dt(h.get("datetime", ""), c.get("date_order", "auto"))
+                if ts is None:
+                    bad = bad or h.get("datetime", "")
+                    continue
+                if ts >= now:
                     continue
                 down_pct = _num(h.get(ch["downtime"])) or 0
                 cov = _num(h.get(ch.get("coverage", "coverage")))
                 seen = cov is None or cov > 0
                 vals.append({"sensor_id": sen.id, "ts": ts, "in_mbps": (_num(h.get(ch["in"])) or 0) * factor if seen else None,
                              "out_mbps": (_num(h.get(ch["out"])) or 0) * factor if seen else None, "down_s": down_pct / 100 * 3600, "seen": seen})
+            if hist and bad is not None and not vals and all(_dt(h.get("datetime", ""), c.get("date_order", "auto")) is None for h in hist):
+                raise RuntimeError(f"PRTG sensor {sen.id}: {len(hist)} rows returned but none had a readable date, e.g. {bad!r}; check date_order in the PRTG data source config")
             if vals:
                 st = insert(PrtgHourly).values(vals)
                 db.execute(st.on_conflict_do_update(index_elements=["sensor_id", "ts"],
