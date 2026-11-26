@@ -184,7 +184,7 @@ document.addEventListener("submit", async e => {
   BK.busy = false; render(false);
 });
 /* ---------- Branding & Icons Manager (Light & Dark Assets, Colors, Sizing, Menu Icons) ---------- */
-const AP = {d: null, tab: "dark", pv: "dark", saving: false, pickMod: ""};
+const AP = {d: null, tab: "logos", pv: "dark", saving: false, pickMod: ""};
 const AP_SW_L = [["#1c5cab", "Pelindo Blue"], ["#0b3d7a", "Deep Navy"], ["#0891b2", "Cyan"], ["#059669", "Emerald"], ["#4f46e5", "Indigo"], ["#334155", "Slate"]];
 const AP_SW_D = [["#6da7ec", "Sky Blue"], ["#38bdf8", "Bright Cyan"], ["#34d399", "Mint"], ["#818cf8", "Soft Indigo"], ["#f59e0b", "Amber"], ["#94a3b8", "Cool Slate"]];
 const AP_SW_SB = [["#0f1b2d", "Pelindo Navy"], ["#0b1220", "Midnight"], ["#111827", "Charcoal"], ["#0a2540", "Ocean Dark"], ["#171c22", "Graphite"]];
@@ -334,38 +334,46 @@ function vAppearance() {
       <span class="sub num">${esc(d[key])}</span>
     </div>
   </div>`;
-  const tabBody = AP.tab === "dark" ? `
-    ${imgRow("apSideUp", "sideImg", "Dark Mode & Sidebar Icon (PNG / SVG / WebP)", "assets/tera-icon-rev.png", {dark: true, max: 512})}
-    <div class="fld"><label for="apSideIco">Sidebar Icon Size: <b class="num">${d.sideIco}px</b></label><input id="apSideIco" type="range" min="28" max="72" step="2" data-ap-f="sideIco" value="${d.sideIco}"></div>
-    ${imgRow("apWmDarkUp", "wmDark", "Dark Mode & Sidebar Wordmark (PNG / SVG)", "assets/tera-wordmark-rev.svg", {dark: true, wide: true, max: 600})}
-    <div class="fld"><label for="apSideWm">Sidebar Wordmark Height: <b class="num">${d.sideWm}px</b></label><input id="apSideWm" type="range" min="12" max="34" step="1" data-ap-f="sideWm" value="${d.sideWm}"></div>
+  const tabBody = AP.tab === "logos" ? `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+      ${imgRow("apLoginUp", "loginImg", "Brand Icon · Light Mode", "assets/tera-icon-col.png", {max: 512})}
+      ${imgRow("apSideUp", "sideImg", "Brand Icon · Dark & Sidebar", "assets/tera-icon-rev.png", {dark: true, max: 512})}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+      ${imgRow("apWmLightUp", "wmLight", "Wordmark · Light Mode", "assets/tera-wordmark-col.svg", {wide: true, max: 600})}
+      ${imgRow("apWmDarkUp", "wmDark", "Wordmark · Dark & Sidebar", "assets/tera-wordmark-rev.svg", {dark: true, wide: true, max: 600})}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+      ${imgRow("apFavUp", "favImg", "Browser Tab Favicon", "assets/tera-favicon.png", {max: 128})}
+      ${imgRow("apBgUp", "loginBg", "Login Page Background", "assets/belawan.jpg", {wide: true, max: 1600, jpg: true})}
+    </div>
+  ` : AP.tab === "colors" ? `
+    <div class="fld"><label for="apTh">Default Theme (New Sessions)</label><select id="apTh" data-ap-f="defTheme">${[["auto", "Auto (follow OS)"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => `<option value="${k}" ${d.defTheme === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+    ${swRow("accLight", "Accent Color · Light Mode", AP_SW_L)}
+    ${swRow("accDark", "Accent Color · Dark Mode", AP_SW_D)}
     ${swRow("sideBg", "Sidebar Background Color", AP_SW_SB)}
-    ${swRow("accDark", "Dark Mode Accent Color", AP_SW_D)}
-  ` : AP.tab === "light" ? `
-    ${imgRow("apLoginUp", "loginImg", "Light Mode & Login Logo (PNG / SVG / WebP)", "assets/tera-icon-col.png", {max: 512})}
-    <div class="fld"><label for="apLoginIco">Login Logo Size: <b class="num">${d.loginIco}px</b></label><input id="apLoginIco" type="range" min="40" max="110" step="2" data-ap-f="loginIco" value="${d.loginIco}"></div>
-    ${imgRow("apWmLightUp", "wmLight", "Light Mode Wordmark (PNG / SVG)", "assets/tera-wordmark-col.svg", {wide: true, max: 600})}
-    ${imgRow("apBgUp", "loginBg", "Login Page Background Photo (JPG / PNG / WebP)", "assets/belawan.jpg", {wide: true, max: 1600, jpg: true})}
-    ${swRow("accLight", "Light Mode Accent Color", AP_SW_L)}
   ` : `
-    <div class="fld"><label for="apBrand">Brand Name (Browser Title &amp; Reports)</label><input id="apBrand" type="text" data-ap-f="brand" value="${esc(d.brand)}"></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
+      <div class="fld"><label for="apScale">Global UI Scale</label><select id="apScale" data-ap-f="scale">${[[0.80, "80% · Extra Compact"], [0.85, "85% · Compact"], [0.90, "90% · Balanced"], [0.95, "95% · Comfortable"], [1.00, "100% · Standard"]].map(([k, l]) => `<option value="${k}" ${Math.abs((+d.scale || 0.9) - k) < 0.02 ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      <div class="fld"><label for="apRad">Card Radius: <b class="num">${d.radius}px</b></label><input id="apRad" type="range" min="6" max="22" step="2" data-ap-f="radius" value="${d.radius}"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
+      <div class="fld"><label for="apSideIco">Sidebar Icon Size: <b class="num">${d.sideIco}px</b></label><input id="apSideIco" type="range" min="28" max="72" step="2" data-ap-f="sideIco" value="${d.sideIco}"></div>
+      <div class="fld"><label for="apSideWm">Wordmark Height: <b class="num">${d.sideWm}px</b></label><input id="apSideWm" type="range" min="12" max="34" step="1" data-ap-f="sideWm" value="${d.sideWm}"></div>
+      <div class="fld"><label for="apLoginIco">Login Logo Size: <b class="num">${d.loginIco}px</b></label><input id="apLoginIco" type="range" min="40" max="110" step="2" data-ap-f="loginIco" value="${d.loginIco}"></div>
+    </div>
+    <div class="fld"><label for="apBrand">Brand Name (Title &amp; Reports)</label><input id="apBrand" type="text" data-ap-f="brand" value="${esc(d.brand)}"></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
       <div class="fld"><label for="apSub">Sidebar Subtitle</label><input id="apSub" type="text" data-ap-f="brandSub" value="${esc(d.brandSub)}"></div>
       <div class="fld"><label for="apBy">Sidebar Byline</label><input id="apBy" type="text" data-ap-f="brandBy" value="${esc(d.brandBy)}"></div>
     </div>
     <div class="fld"><label for="apFoot">Footer Text ({year} = current year)</label><input id="apFoot" type="text" data-ap-f="footer" value="${esc(d.footer)}"></div>
-    ${imgRow("apFavUp", "favImg", "Browser Tab Favicon (PNG / SVG / ICO)", "assets/tera-favicon.png", {max: 128})}
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
-      <div class="fld"><label for="apScale">Global UI Scale</label><select id="apScale" data-ap-f="scale">${[[0.80, "80% · Extra Compact"], [0.85, "85% · Compact"], [0.90, "90% · Balanced"], [0.95, "95% · Comfortable"], [1.00, "100% · Standard"]].map(([k, l]) => `<option value="${k}" ${Math.abs((+d.scale || 0.9) - k) < 0.02 ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-      <div class="fld"><label for="apTh">Default Theme</label><select id="apTh" data-ap-f="defTheme">${[["auto", "Auto (follow OS)"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => `<option value="${k}" ${d.defTheme === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-    </div>
-    <div class="fld"><label for="apRad">Card Corner Radius: <b class="num">${d.radius}px</b></label><input id="apRad" type="range" min="6" max="22" step="2" data-ap-f="radius" value="${d.radius}"></div>
   `;
-  return admTitle("Branding & Icons", "Customize Light & Dark mode logos, wordmarks, favicon, login background, colors, icon sizes, and sidebar menu icons. Changes preview live immediately.", `<button type="button" class="btn ghost sm" data-ap="reset">Reset All Defaults</button>`) + intMsg() +
+  return admTitle("Branding & Icons", "Manage Light & Dark logos, theme colors, shared icon sizes, and sidebar menu icons. All changes preview live.", `<button type="button" class="btn ghost sm" data-ap="reset">Reset All Defaults</button>`) + intMsg() +
     `<div class="grid" style="margin-top:4px">
       <form class="panel c6 intform" data-ap-form>
         <header><h2>Configuration</h2>
-          <div class="seg">${[["dark", "Dark & Sidebar"], ["light", "Light & Login"], ["gen", "General & Scale"]].map(([k, l]) => `<button type="button" data-ap-tab="${k}" aria-pressed="${AP.tab === k}">${l}</button>`).join("")}</div>
+          <div class="seg">${[["logos", "Logos & Icons"], ["colors", "Theme & Colors"], ["sizing", "Sizing & Text"]].map(([k, l]) => `<button type="button" data-ap-tab="${k}" aria-pressed="${AP.tab === k}">${l}</button>`).join("")}</div>
         </header>
         ${tabBody}
         <div class="acts" style="margin-top:6px"><button class="btn" type="submit"${AP.saving ? " disabled" : ""}>${AP.saving ? "Saving…" : "Save All Branding"}</button><span class="sub">Applies live to all users across Light &amp; Dark modes.</span></div>
