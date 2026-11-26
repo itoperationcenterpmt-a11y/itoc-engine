@@ -46,6 +46,24 @@ function applyConfig(c) {
   RUMUS = Object.fromEntries(c.formulas.map(f => [f.key, f.text]));
   GROUPS = (P.personel || {}).groups || []; BRAND = P["ui.brand_name"] || BRAND; BSPLIT = +P["ui.brand_split"] || BSPLIT; FOOT = P["ui.footer"] || FOOT;
   DIMS = P["sd.dims"]; NST = P["net.status_labels"]; UST = P["net.util_labels"];
+  applyAppearance(P);
+}
+function applyAppearance(P) {
+  if (!P) return;
+  const r = document.documentElement;
+  const acc = String(P["ui.accent_color"] || "").trim();
+  if (/^#[0-9a-f]{6}$/i.test(acc)) {
+    r.style.setProperty("--accent", acc);
+    r.style.setProperty("--wash", acc + "18");
+  }
+  const rad = +P["ui.card_radius"];
+  if (rad >= 4 && rad <= 24) r.style.setProperty("--rad", rad + "px");
+  const den = String(P["ui.density"] || "compact");
+  if (["compact", "comfortable", "spacious"].includes(den)) r.dataset.density = den;
+  const dt = String(P["ui.default_theme"] || "auto");
+  try {
+    if (!localStorage.getItem("itoc.theme") && (dt === "light" || dt === "dark")) r.dataset.theme = dt;
+  } catch (_) {}
 }
 const SHIFTS = () => [...CFG.shifts].sort((a, b) => a.start - b.start);
 const shiftOf = h => { const L = SHIFTS(); let cur = L[L.length - 1]; for (const s of L) if (h >= s.start) cur = s; return cur.no; };

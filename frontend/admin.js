@@ -5,7 +5,7 @@ const ADM = [
   ["sumber", "Data Sources", [["integrasi", "Integrations"], ["pemetaan", "Mapping"], ["dilengkapi", "Needs Completion"]]],
   ["operasional", "Operations", [["personel", "Personnel"], ["tim", "Teams & Shifts"], ["parameter", "Targets & Parameters"], ["rumus", "Formulas"]]],
   ["notifikasi", "Notifications", [["smtp", "Email"], ["webhooks", "Webhooks"], ["chatcmd", "Bot & Notifier API"]]],
-  ["sistem", "System", [["audit", "Audit Log"], ["sharelinks", "Share Links"], ["status", "Source Status"], ["menu", "Menus & Widgets"], ["akses", "Page Access"], ["backup", "Backup & Restore"]]]
+  ["sistem", "System", [["appearance", "Appearance"], ["audit", "Audit Log"], ["sharelinks", "Share Links"], ["status", "Source Status"], ["menu", "Menus & Widgets"], ["akses", "Page Access"], ["backup", "Backup & Restore"]]]
 ];
 const COLN = {id: "ID", name: "Name", kind: "Type", aliases: "Aliases", active: "Active", sort: "Order", lat: "Latitude", lon: "Longitude", sys_name: "System Name", unit: "Unit", job: "Job Title",
   team_code: "Team Code", branch: "Branch", phone: "Phone", is_coordinator: "Coordinator", is_shared: "Shared", exclude_rank: "Exclude from Ranking", code: "Code", label: "Label",
@@ -183,6 +183,135 @@ document.addEventListener("submit", async e => {
   } catch (er) { BK.msg = {ok: false, t: er.message}; }
   BK.busy = false; render(false);
 });
+/* ---------- Appearance Studio & Live Multi-Menu Preview ---------- */
+const AP_SW = [["#1c5cab", "Pelindo Blue"], ["#0b2f6b", "Pelindo Navy"], ["#0891b2", "Maritime Cyan"], ["#059669", "Emerald"], ["#4f46e5", "Indigo"], ["#334155", "Slate"]];
+const AP_MENUS = [["overview", "Overview"], ["ticketing", "Ticketing"], ["network", "Network / ISP"], ["cyber", "Cyber Security"], ["devices", "Devices"], ["personnel", "Personnel"], ["report", "Report"], ["admin", "Admin"], ["login", "Login Page"], ["wall", "TV / Wall Mode"]];
+const AP = {d: null, menu: "overview", theme: "light", vp: "desktop", saving: false};
+function apInit() {
+  const P = (CFG && CFG.params) || {};
+  AP.d = {
+    accent: P["ui.accent_color"] || "#1c5cab",
+    density: P["ui.density"] || "compact",
+    radius: +(P["ui.card_radius"] ?? 14),
+    defTheme: P["ui.default_theme"] || "auto",
+    brand: P["ui.brand_name"] || "TERA Dashboard",
+    footer: P["ui.footer"] || "© {year} IT Operation Center",
+    publicUrl: P["ui.public_url"] || "",
+    supportPhone: P["ui.support_phone"] || "",
+    eyebrow: P["ui.login_eyebrow"] || "PT Pelindo Multi Terminal",
+    headline: P["ui.login_headline"] || "Satu layar untuk seluruh terminal",
+    tagline: P["ui.login_tagline"] || "",
+    wallSlide: +(P["ui.wall_slide_sec"] || 15),
+    wallRef: +(P["ui.wall_refresh_sec"] || 60),
+    wallTabs: Array.isArray(P["ui.wall_rotate_tabs"]) ? [...P["ui.wall_rotate_tabs"]] : ["ringkasan", "noc", "devices", "cyber"],
+  };
+}
+function apPreviewHtml() {
+  const d = AP.d, m = AP.menu, pad = d.density === "spacious" ? "13px" : d.density === "comfortable" ? "10px" : "8px";
+  const st = `--p-acc:${esc(d.accent)};--p-rad:${Math.max(4, Math.min(22, +d.radius || 14))}px;--p-pad:${pad}`;
+  const cls = `ap-frame vp-${AP.vp} ${AP.theme === "dark" ? "th-dark" : ""}`;
+  const foot = (d.footer || "").replace("{year}", new Date().getFullYear());
+  if (m === "login") {
+    return `<div class="${cls}" style="${st};padding:18px;background:linear-gradient(135deg,#0f1b2d,#1c3b68)">
+      <div style="display:grid;grid-template-columns:${AP.vp === "mobile" ? "1fr" : "1.2fr 1fr"};gap:12px">
+        <div class="ap-card" style="padding:16px"><small style="color:var(--p-acc);font-weight:700">${esc(d.eyebrow)}</small><b style="font-size:16px;color:var(--p-ink);margin:4px 0">${esc(d.headline)}</b><span class="s">${esc(d.tagline || "Unified operational dashboard")}</span><div class="ap-bar" style="margin-top:8px"><i style="width:72%"></i></div></div>
+        <div class="ap-card" style="padding:16px;align-items:center;text-align:center"><img src="assets/tera-icon-col.png" alt="" style="width:42px;height:42px;object-fit:contain"><b style="font-size:13px">${esc(d.brand)}</b><div style="width:100%;height:22px;border-radius:6px;background:var(--p-sunk);border:1px solid var(--p-line)"></div><div style="width:100%;height:22px;border-radius:6px;background:var(--p-sunk);border:1px solid var(--p-line)"></div><div style="width:100%;padding:5px;border-radius:6px;background:var(--p-acc);color:#fff;font-size:10px;font-weight:700">Sign in</div></div>
+      </div></div>`;
+  }
+  const bodyByMenu = {
+    overview: `<div class="ap-grid"><div class="ap-card"><h5>Ticket SLA</h5><span class="v">87,0%</span><span class="s">within target</span></div><div class="ap-card"><h5>Link Availability</h5><span class="v">99,4%</span><span class="s">average</span></div><div class="ap-card"><h5>Infrastructure</h5><span class="v">82,8%</span><span class="s">devices up</span></div><div class="ap-card"><h5>Surveillance</h5><span class="v">91,7%</span><span class="s">servers syncing</span></div><div class="ap-card span2"><h5>Needs Attention</h5><span class="s">• 2 ISP links degraded · 15 XDR alerts open</span><div class="ap-bar"><i style="width:65%"></i></div></div><div class="ap-card span2"><h5>On Duty · Team 3</h5><span class="s">Shift Pagi · 08.00–15.00 WIB</span><div class="ap-bar"><i style="width:88%"></i></div></div></div>`,
+    ticketing: `<div class="ap-grid"><div class="ap-card"><h5>Total Tickets</h5><span class="v">1.482</span><span class="s">30 days</span></div><div class="ap-card"><h5>SLA Met</h5><span class="v">87,0%</span><span class="s">target 85%</span></div><div class="ap-card"><h5>Open Now</h5><span class="v">17</span><span class="s">2 overdue</span></div><div class="ap-card"><h5>Median Time</h5><span class="v">42 min</span><span class="s">resolution</span></div><div class="ap-card span4"><h5>Daily Tickets & Open Queue</h5><div class="ap-bar"><i style="width:78%"></i></div><span class="s">Paginated table · 50 rows/page</span></div></div>`,
+    network: `<div class="ap-grid"><div class="ap-card"><h5>ISP Links</h5><span class="v">54 / 54</span><span class="s">100% live</span></div><div class="ap-card"><h5>Dual-Link</h5><span class="v">21</span><span class="s">branches redundant</span></div><div class="ap-card"><h5>WiFi APs</h5><span class="v">169 / 186</span><span class="s">1.248 clients</span></div><div class="ap-card"><h5>Web Monitors</h5><span class="v">24 / 24</span><span class="s">all reachable</span></div><div class="ap-card span4"><h5>Branch ISP Redundancy Matrix</h5><span class="s">Astinet · Lintasarta · JLM · NEUVIZ — Dual OK / Single-Link Risk</span><div class="ap-bar"><i style="width:96%"></i></div></div></div>`,
+    cyber: `<div class="ap-grid"><div class="ap-card"><h5>NDR Events</h5><span class="v">2,47M</span><span class="s">firewall / NDR</span></div><div class="ap-card"><h5>Blocked C/H</h5><span class="v">94,2%</span><span class="s">policy active</span></div><div class="ap-card"><h5>XDR Alerts</h5><span class="v">12</span><span class="s">in period</span></div><div class="ap-card"><h5>Open C/H (all)</h5><span class="v">15</span><span class="s">endpoint backlog</span></div><div class="ap-card span4"><h5>Threat Trend & Investigation Queue</h5><div class="ap-bar"><i style="width:54%"></i></div><span class="s">NDR daily trend + XDR severity mix</span></div></div>`,
+    devices: `<div class="ap-grid"><div class="ap-card"><h5>Total Devices</h5><span class="v">1.803</span><span class="s">39 locations</span></div><div class="ap-card"><h5>Availability</h5><span class="v">82,8%</span><span class="s">live status</span></div><div class="ap-card"><h5>Cameras</h5><span class="v">1.203</span><span class="s">820 recording</span></div><div class="ap-card"><h5>PA Units</h5><span class="v">55</span><span class="s">2 offline</span></div><div class="ap-card span4"><h5>Interactive Site Map & Device Inventory</h5><div class="ap-bar"><i style="width:83%"></i></div><span class="s">Paginated table · 50 rows/page</span></div></div>`,
+    personnel: `<div class="ap-grid"><div class="ap-card span2"><h5>On Duty · Shift Pagi</h5><span class="v">Team 3</span><span class="s">5 analysts active</span></div><div class="ap-card span2"><h5>Open Handovers</h5><span class="v">3</span><span class="s">1 high priority</span></div><div class="ap-card span4"><h5>Monthly Shift Rotation Schedule</h5><span class="s">Auto-scrolled to today's date</span><div class="ap-bar"><i style="width:60%"></i></div></div></div>`,
+    report: `<div class="ap-grid"><div class="ap-card span2"><h5>Export Suite</h5><span class="v">XLSX · PDF · PPTX</span><span class="s">3-day Share Link ready</span></div><div class="ap-card span2"><h5>Shift Summary & Insights</h5><span class="v">9 Templates</span><span class="s">incl. ISP · WhatsApp ready</span></div><div class="ap-card span4"><h5>30-Day Data Completeness</h5><div class="ap-bar"><i style="width:92%"></i></div><span class="s">Validated batches & fallback uploader</span></div></div>`,
+    admin: `<div class="ap-grid"><div class="ap-card span4"><h5>Admin · Access / Data Sources / Operations / Notifications / System</h5><span class="s">Users table (search + pagination) · Source Status (% synced + Partial) · Bot & Notifier API (17 commands)</span><div class="ap-bar"><i style="width:100%"></i></div></div></div>`,
+    wall: `<div style="background:#0f1b2d;color:#fff;padding:7px 10px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;font-size:10px;margin-bottom:6px"><b>${esc(d.brand)} · NOC Wall</b><span>Slide 1/4 · ${d.wallSlide}s · Rotate (${d.wallTabs.length}) · Refresh ${d.wallRef}s</span></div><div class="ap-grid"><div class="ap-card"><h5>ISP Live</h5><span class="v">98,2%</span></div><div class="ap-card"><h5>Devices</h5><span class="v">82,8%</span></div><div class="ap-card"><h5>WiFi APs</h5><span class="v">90,9%</span></div><div class="ap-card"><h5>Surveillance</h5><span class="v">91,7%</span></div><div class="ap-card span4"><h5>Branch Dual-Link Redundancy & Health Wall</h5><div class="ap-bar"><i style="width:94%"></i></div></div></div>`,
+  };
+  const navs = AP_MENUS.slice(0, 8);
+  const title = (AP_MENUS.find(x => x[0] === m) || ["", "Overview"])[1];
+  return `<div class="${cls}" style="${st}"><div class="ap-shell">
+    ${m === "wall" ? "" : `<aside class="ap-side"><div class="ap-sbrand"><img src="assets/tera-icon-rev.png" alt=""><b>${esc(d.brand)}</b></div>${navs.map(([k, l]) => `<button type="button" class="ap-snav ${k === m ? "on" : ""}" data-ap-menu="${k}">${esc(l)}</button>`).join("")}</aside>`}
+    <div class="ap-main" style="${m === "wall" ? "grid-column:1/-1" : ""}">
+      ${m === "wall" ? "" : `<div class="ap-hd"><div><small>DASHBOARD › ${esc(title.toUpperCase())}</small><b>${esc(title)}</b></div><span class="ap-pill">● Team 3 · Pagi</span></div>`}
+      ${bodyByMenu[m] || bodyByMenu.overview}
+      <div class="ap-foot"><span>${esc(foot)}</span><span>${esc(d.density)} · ${d.radius}px</span></div>
+    </div></div></div>`;
+}
+function vAppearance() {
+  if (!AP.d) apInit();
+  const d = AP.d, rotTabs = [["ringkasan", "Overview"], ["servicedesk", "Ticketing"], ["network", "Network"], ["noc", "ISP"], ["wifi", "WiFi"], ["cyber", "Cyber Security"], ["devices", "Devices"], ["cctv", "Milestone"]];
+  return admTitle("Appearance & Theme Studio", "Configure brand identity, accent color, UI density, card radius, login copy, and TV/Wall slideshow settings with live multi-menu preview.", `<button type="button" class="btn ghost sm" data-ap="reset">Reset Defaults</button>`) + intMsg() +
+    `<div class="grid" style="margin-top:4px">
+      <form class="panel c5 intform" data-ap-form>
+        <header><h2>Visual &amp; Theme Settings</h2></header>
+        <div class="fld wide"><label>Accent Color</label><div class="ap-swatches">${AP_SW.map(([hex, nm]) => `<button type="button" class="ap-sw ${d.accent.toLowerCase() === hex ? "on" : ""}" style="background:${hex}" data-ap-color="${hex}" title="${esc(nm)}" aria-label="${esc(nm)}"></button>`).join("")}<input type="color" id="apColor" data-ap-f="accent" value="${esc(d.accent)}" style="width:36px;height:28px;padding:1px;border-radius:6px;cursor:pointer"><span class="sub num">${esc(d.accent)}</span></div></div>
+        <div class="fld"><label for="apDen">UI Density (All Menus)</label><select id="apDen" data-ap-f="density">${[["compact", "Compact (100% zoom ideal)"], ["comfortable", "Comfortable"], ["spacious", "Spacious"]].map(([k, l]) => `<option value="${k}" ${d.density === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <div class="fld"><label for="apRad">Card Corner Radius: <b class="num">${d.radius}px</b></label><input id="apRad" type="range" min="6" max="22" step="2" data-ap-f="radius" value="${d.radius}"></div>
+        <div class="fld"><label for="apTh">Default Theme (New Sessions)</label><select id="apTh" data-ap-f="defTheme">${[["auto", "Auto (follow OS)"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => `<option value="${k}" ${d.defTheme === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <h4 class="admsub" style="margin:8px 0 4px">Branding &amp; Login Page</h4>
+        <div class="fld"><label for="apBrand">Brand Name</label><input id="apBrand" type="text" data-ap-f="brand" value="${esc(d.brand)}"></div>
+        <div class="fld"><label for="apFoot">Footer Text ({year} = current year)</label><input id="apFoot" type="text" data-ap-f="footer" value="${esc(d.footer)}"></div>
+        <div class="fld"><label for="apUrl">Public URL (used in Shift Summary links)</label><input id="apUrl" type="url" data-ap-f="publicUrl" value="${esc(d.publicUrl)}"></div>
+        <div class="fld"><label for="apEye">Login Eyebrow</label><input id="apEye" type="text" data-ap-f="eyebrow" value="${esc(d.eyebrow)}"></div>
+        <div class="fld"><label for="apHl">Login Headline</label><input id="apHl" type="text" data-ap-f="headline" value="${esc(d.headline)}"></div>
+        <div class="fld"><label for="apTag">Login Tagline</label><input id="apTag" type="text" data-ap-f="tagline" value="${esc(d.tagline)}"></div>
+        <h4 class="admsub" style="margin:8px 0 4px">TV / Wall Slideshow Defaults</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="fld"><label for="apWs">Slide Duration (sec)</label><input id="apWs" type="number" min="5" max="120" data-ap-f="wallSlide" value="${d.wallSlide}"></div><div class="fld"><label for="apWr">Auto-Refresh (sec)</label><input id="apWr" type="number" min="15" max="600" data-ap-f="wallRef" value="${d.wallRef}"></div></div>
+        <div class="fld"><label>Rotating Menus in Wall Mode</label><div class="chkgrid">${rotTabs.map(([k, l]) => `<label class="chk"><input type="checkbox" data-ap-rot="${k}" ${d.wallTabs.includes(k) ? "checked" : ""}> ${esc(l)}</label>`).join("")}</div></div>
+        <div class="acts" style="margin-top:6px"><button class="btn" type="submit"${AP.saving ? " disabled" : ""}>${AP.saving ? "Saving…" : "Save Appearance"}</button></div>
+      </form>
+      <section class="panel c7">
+        <header><h2>Live Preview (All Menus)</h2>
+          <div class="acts"><div class="seg">${[["light", "Light"], ["dark", "Dark"]].map(([k, l]) => `<button type="button" data-ap-th="${k}" aria-pressed="${AP.theme === k}">${l}</button>`).join("")}</div><div class="seg">${[["desktop", "Desktop"], ["tablet", "Tablet"], ["mobile", "Mobile"]].map(([k, l]) => `<button type="button" data-ap-vp="${k}" aria-pressed="${AP.vp === k}">${l}</button>`).join("")}</div></div>
+        </header>
+        <div class="chips sm">${AP_MENUS.map(([k, l]) => `<button type="button" class="chip" data-ap-menu="${k}" aria-pressed="${AP.menu === k}">${esc(l)}</button>`).join("")}</div>
+        <div class="ap-stage" id="apStage">${apPreviewHtml()}</div>
+      </section>
+    </div>`;
+}
+document.addEventListener("click", async e => {
+  const m = e.target.closest("[data-ap-menu]"); if (m) { AP.menu = m.dataset.apMenu; render(false); return; }
+  const th = e.target.closest("[data-ap-th]"); if (th) { AP.theme = th.dataset.apTh; render(false); return; }
+  const vp = e.target.closest("[data-ap-vp]"); if (vp) { AP.vp = vp.dataset.apVp; render(false); return; }
+  const sw = e.target.closest("[data-ap-color]"); if (sw && AP.d) { AP.d.accent = sw.dataset.apColor; render(false); return; }
+  const rs = e.target.closest('[data-ap="reset"]');
+  if (rs && AP.d) { AP.d.accent = "#1c5cab"; AP.d.density = "compact"; AP.d.radius = 14; AP.d.defTheme = "auto"; AP.d.wallSlide = 15; AP.d.wallRef = 60; render(false); }
+});
+document.addEventListener("input", e => {
+  const f = e.target.dataset && e.target.dataset.apF; if (!f || !AP.d) return;
+  AP.d[f] = e.target.type === "range" || e.target.type === "number" ? +e.target.value : e.target.value;
+  const st = $("apStage"); if (st) st.innerHTML = apPreviewHtml();
+});
+document.addEventListener("change", e => {
+  if (e.target.dataset && e.target.dataset.apRot && AP.d) {
+    const k = e.target.dataset.apRot;
+    AP.d.wallTabs = e.target.checked ? [...new Set([...AP.d.wallTabs, k])] : AP.d.wallTabs.filter(x => x !== k);
+    const st = $("apStage"); if (st) st.innerHTML = apPreviewHtml();
+  } else if (e.target.dataset && e.target.dataset.apF && AP.d) {
+    AP.d[e.target.dataset.apF] = e.target.type === "number" ? +e.target.value : e.target.value;
+    render(false);
+  }
+});
+document.addEventListener("submit", async e => {
+  const f = e.target.closest("[data-ap-form]"); if (!f || !AP.d) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  AP.saving = true; render(false);
+  const d = AP.d, pairs = [
+    ["ui.accent_color", d.accent], ["ui.density", d.density], ["ui.card_radius", +d.radius || 14], ["ui.default_theme", d.defTheme],
+    ["ui.brand_name", d.brand.trim() || "TERA Dashboard"], ["ui.footer", d.footer.trim()], ["ui.public_url", d.publicUrl.trim()],
+    ["ui.login_eyebrow", d.eyebrow.trim()], ["ui.login_headline", d.headline.trim()], ["ui.login_tagline", d.tagline.trim()],
+    ["ui.wall_slide_sec", Math.max(5, +d.wallSlide || 15)], ["ui.wall_refresh_sec", Math.max(15, +d.wallRef || 60)], ["ui.wall_rotate_tabs", d.wallTabs],
+  ];
+  try {
+    for (const [k, v] of pairs) await send("/api/admin/params/" + encodeURIComponent(k), {value: v}, "PUT");
+    await reloadConfig(); applyBrand(); $("foot").textContent = footText();
+    AP.d = null; INT.msg = {ok: true, t: "Appearance settings saved and applied across all menus."};
+  } catch (er) { INT.msg = {ok: false, t: er.message || String(er)}; }
+  finally { AP.saving = false; render(false); }
+}, true);
+
 function vAdmin() {
   admEnsure();
   let body = "";
@@ -220,6 +349,7 @@ function vAdmin() {
   if (S.adm === "dilengkapi") body = vTodo();
   if (S.adm === "status") body = vSourceStatus();
   if (S.adm === "akses") body = vAccess();
+  if (S.adm === "appearance") body = vAppearance();
   if (S.adm === "audit") body = vAudit();
   if (S.adm === "backup") body = vBackup();
   return `<div class="grid"><section class="panel c12">${admNav()}${body}</section></div>`;
