@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <style>
 /* Fluid type & zoom scale: calibrated so 100% browser zoom on 1366–1920px feels cleanly zoomed-out, airy, and proportional; TV/Wall mode scales up for distance viewing. */
-:root{--ui-scale:.90;--side-ico:44px;--login-ico:56px;--fs:calc(.94 * var(--ui-scale))}
+:root{--ui-scale:.90;--side-ico:48px;--side-wm:19px;--login-ico:68px;--accent-light:#1c5cab;--accent-dark:#6da7ec;--fs:calc(.94 * var(--ui-scale))}
 @media (max-width:380px){:root{--fs:calc(.90 * var(--ui-scale))}}
 @media (min-width:901px){:root{--fs:calc(.90 * var(--ui-scale))}}
 @media (min-width:1480px){:root{--fs:calc(.94 * var(--ui-scale))}}
@@ -28,7 +28,7 @@ body.wall{--fs:1.00}
 /* One filter bar shared by every page; each page declares which filters apply. */
 :root{
   --bg:#eef2f7; --surface:#ffffff; --sunken:#eef1f6; --ink:#0f1a2a; --ink2:#47566a; --muted:#586879;
-  --line:#e1e7ef; --axis:#c3cdd9; --accent:#1c5cab; --accent-ink:#fff; --wash:rgba(28,92,171,.09);
+  --line:#e1e7ef; --axis:#c3cdd9; --accent:var(--accent-light,#1c5cab); --accent-ink:#fff; --wash:color-mix(in srgb,var(--accent) 11%,transparent);
   --grad:linear-gradient(135deg,#0f3d7a 0%,#1c5cab 55%,#2a8bd6 100%);
   --rad:14px; --shadow:0 1px 2px rgba(15,26,42,.05),0 6px 20px -8px rgba(15,26,42,.12);
   --side-bg:#0f1b2d; --side-ink:#c5d0de; --side-act:rgba(109,167,236,.16); --side-line:rgba(255,255,255,.08);
@@ -42,13 +42,13 @@ body.wall{--fs:1.00}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -10px rgba(0,0,0,.5); --side-bg:#0a1018;
   --bg:#0e1216; --surface:#171c22; --sunken:#1f262e; --ink:#f2f5f8; --ink2:#c5ced7; --muted:#9aa6b4;
-  --line:#2a323b; --axis:#3a444e; --accent:#6da7ec; --accent-ink:#0b1420; --wash:rgba(109,167,236,.13);
+  --line:#2a323b; --axis:#3a444e; --accent:var(--accent-dark,#6da7ec); --accent-ink:#0b1420; --wash:color-mix(in srgb,var(--accent) 16%,transparent);
   --s1:#4a90e8; --s2:#e8963f; --low:#5f7284; --good-text:#3fc23f; --warn-text:#f2b84b; --crit-text:#ee7b7b;
   --sp:#184f95; --ss:#256abf; --sm:#9ec5f4; --sm-ink:#0b1420; color-scheme:dark}}
 :root[data-theme="dark"]{
   --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -10px rgba(0,0,0,.5); --side-bg:#0a1018;
   --bg:#0e1216; --surface:#171c22; --sunken:#1f262e; --ink:#f2f5f8; --ink2:#c5ced7; --muted:#9aa6b4;
-  --line:#2a323b; --axis:#3a444e; --accent:#6da7ec; --accent-ink:#0b1420; --wash:rgba(109,167,236,.13);
+  --line:#2a323b; --axis:#3a444e; --accent:var(--accent-dark,#6da7ec); --accent-ink:#0b1420; --wash:color-mix(in srgb,var(--accent) 16%,transparent);
   --s1:#4a90e8; --s2:#e8963f; --low:#5f7284; --good-text:#3fc23f; --warn-text:#f2b84b; --crit-text:#ee7b7b;
   --sp:#184f95; --ss:#256abf; --sm:#9ec5f4; --sm-ink:#0b1420; color-scheme:dark}
 *{box-sizing:border-box}
@@ -369,7 +369,19 @@ textarea{min-height:76px;resize:vertical}
 .ico-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink2);cursor:pointer;font-size:calc(11px*var(--fs))}
 .ico-btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .ico-btn:hover,.ico-btn.on{border-color:var(--accent);background:var(--wash);color:var(--accent);font-weight:600}
-.lg-lock .lk-ic{width:var(--login-ico,56px)!important;height:var(--login-ico,56px)!important;object-fit:contain}
+.lg-lock .lk-ic{width:var(--login-ico,68px)!important;height:var(--login-ico,68px)!important;object-fit:contain;border-radius:10px}
+.ap-up{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--sunken)}
+.ap-thumb{width:42px;height:42px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:4px;background:var(--surface);flex:none}
+.ap-thumb.dark{background:#0f1b2d;border-color:rgba(255,255,255,.15)}
+.ap-thumb.wide{width:76px;height:38px}
+.ap-swatches{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.ap-sw{width:24px;height:24px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}
+.ap-sw.on{border-color:var(--ink);transform:scale(1.12)}
+.ap-pvbox{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg)}
+.ap-pvbox.pv-dark{--pv-bg:#0e1216;--pv-surf:#171c22;--pv-sunk:#1f262e;--pv-ink:#f2f5f8;--pv-muted:#9aa6b4;--pv-line:#2a323b}
+.ap-pvbox.pv-light{--pv-bg:#eef2f7;--pv-surf:#ffffff;--pv-sunk:#eef1f6;--pv-ink:#0f1a2a;--pv-muted:#586879;--pv-line:#e1e7ef}
+.ap-pvgrid{display:grid;grid-template-columns:180px minmax(0,1fr);min-height:210px;background:var(--pv-bg);color:var(--pv-ink)}
+@media (max-width:680px){.ap-pvgrid{grid-template-columns:1fr}}
 .wtools{position:relative;z-index:4;display:flex;flex-wrap:wrap;gap:5px;align-items:center;background:var(--sunken);border:1px solid var(--line);border-radius:9px;padding:5px 7px;margin:-4px -4px 6px}
 .wtools button,.wtools select,.wtools input{font-size:calc(11.5px*var(--fs));padding:3px 7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;cursor:pointer;width:auto;line-height:1.25}
 .wtools select{min-width:74px}
@@ -460,7 +472,7 @@ textarea.jsed{font:12px/1.45 var(--f-mono);min-height:120px;width:100%}
 .sh0,.sh1,.sh2{--sc:var(--accent);--sb:var(--wash);--st:var(--accent)}.sh-off{--sc:var(--axis);--sb:var(--sunken);--st:var(--muted)}
 :root[data-theme="dark"] .sh0,:root[data-theme="dark"] .sh1,:root[data-theme="dark"] .sh2{--st:var(--accent)}:root[data-theme="dark"] .sh-off{--st:var(--muted)}
 .sh2 .shb i{box-shadow:none}
-.panel{border-radius:16px}
+.panel{border-radius:var(--rad,14px)}
 .panel>header h2{position:relative;padding-left:11px}
 .panel>header h2:before{content:"";position:absolute;left:0;top:.28em;bottom:.28em;width:3px;border-radius:2px;background:var(--grad)}
 .dom>header h2:before{display:none}.dom>header h2{padding-left:0}
@@ -473,7 +485,7 @@ tbody tr:hover td{background:var(--wash)}
 .tag{background:var(--wash);color:var(--accent)}#layBtn{margin-left:auto}#layBtn[hidden]{display:none}.profsel{margin-left:auto;display:inline-flex;align-items:center;gap:6px}.profsel[hidden]{display:none}.profsel+#layBtn{margin-left:0}.profsel select{width:auto;min-width:130px}
 #login{display:block;place-items:stretch;padding:0;min-height:100vh;background:#dfe6f0;position:relative;overflow:hidden}
 .lg{position:relative;min-height:100vh;display:grid;place-items:center;padding:28px 18px}
-.lg-bg{position:absolute;inset:-12px;background:url(assets/belawan.jpg) center/cover no-repeat;filter:blur(3px) saturate(.9);transform:scale(1.03)}
+.lg-bg{position:absolute;inset:-12px;background-image:var(--login-bg,url(assets/belawan.jpg));background-position:center;background-size:cover;background-repeat:no-repeat;filter:blur(3px) saturate(.9);transform:scale(1.03)}
 .lg-bg:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(236,241,248,.80),rgba(226,234,244,.74))}
 :root[data-theme="dark"] .lg-bg:after{background:linear-gradient(180deg,rgba(8,16,30,.86),rgba(8,16,30,.8))}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lg-bg:after{background:linear-gradient(180deg,rgba(8,16,30,.86),rgba(8,16,30,.8))}}
@@ -535,7 +547,7 @@ tbody tr:hover td{background:var(--wash)}
 @media (max-width:700px){.vz-tlh,.vz-tlr{grid-template-columns:84px 1fr 48px;gap:6px}.vz-tlh em:not(:first-child):not(:last-child):not(:nth-child(4)){display:none}.vz-hl{font-size:calc(10px*var(--fs))}.vz-heat{gap:1px}}
 /* TERA brand: icon + wordmark in the sidebar, lockup on the login page. The wordmark is text (Montserrat 800) so it stays sharp at any size. */
 .wm{font-family:"Montserrat",var(--f-head,sans-serif);font-weight:800;letter-spacing:.09em}.wm .e{color:#5BB5E2}
-.brand-tera{flex-direction:row;align-items:center;gap:10px;padding:6px 14px 10px 4px;border-bottom:1px solid var(--side-line);margin-bottom:4px}.brand-tera .g2{width:calc(58px*var(--fs));height:calc(58px*var(--fs));max-width:none;flex:none;object-fit:contain}
+.brand-tera{flex-direction:row;align-items:center;gap:10px;padding:6px 14px 10px 4px;border-bottom:1px solid var(--side-line);margin-bottom:4px}.brand-tera .g2{width:calc(var(--side-ico,48px)*var(--fs));height:calc(var(--side-ico,48px)*var(--fs));max-width:none;flex:none;object-fit:contain;border-radius:8px}
 .brand-tera .bt{display:flex;flex-direction:column;min-width:0;line-height:1.15;gap:1px}
 .brand-tera h1{font-family:"Montserrat",var(--f-head,sans-serif);font-size:calc(19px*var(--fs));font-weight:800;letter-spacing:.08em;color:#fff;line-height:1}.brand-tera h1 .e{color:#5BB5E2}
 .brand-tera .bby{font-size:calc(9.5px*var(--fs));color:var(--side-ink);opacity:.72;margin-top:1px;line-height:1.2;white-space:normal}
@@ -547,7 +559,7 @@ tbody tr:hover td{background:var(--wash)}
 @media (max-width:420px){.lg-logo{width:min(250px,88%)}}
 /* TERA wordmark beside the ITOC icon: ITOC emblem is prominently taller than the wordmark + subtitle stack */
 .wm{display:block;width:auto;max-width:100%}.wm-r{display:none}.brand-tera .wm-c{display:none}.brand-tera .wm-r{display:block}
-.brand-tera h1 .wm{height:calc(19px*var(--fs));margin:0}
+.brand-tera h1 .wm{height:calc(var(--side-wm,19px)*var(--fs));width:auto;max-width:100%;object-fit:contain;margin:0}
 .brand-tera .bprod{font-family:var(--f-body);font-size:calc(11px*var(--fs));font-weight:600;letter-spacing:.01em;text-transform:none;color:#5BB5E2;margin-top:2px;line-height:1.15}
 .mtop .brand-tera h1 .wm{height:17px;margin:0}.mtop .brand-tera .bprod{font-size:11px;margin-top:1px}
 .lg-info h2 .wm{height:36px}

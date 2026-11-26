@@ -297,7 +297,8 @@ def param_set(key: str, body: ParamIn, db: Session = Depends(get_db), user: User
             raise HTTPException(422, f"Di luar batas {ui.get('min')}–{ui.get('max')}")
     old = p.value
     p.value, p.updated_by = v, user.username
-    audit(db, user.username, f"Mengubah parameter {p.label}", {"key": key, "old": old, "new": v})
+    _aud = lambda x: "(custom image)" if isinstance(x, str) and x.startswith("data:image/") else x
+    audit(db, user.username, f"Updated parameter {p.label}", {"key": key, "old": _aud(old), "new": _aud(v)})
     db.commit()
     bump_config()
     return {"ok": True}
