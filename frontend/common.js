@@ -17,7 +17,9 @@ function bars(B, series, o = {}) {
     else series.forEach((s, j) => { const v = s.v[i], x = cx - (k * bw + (k - 1) * 2) / 2 + j * (bw + 2); if (v) m += `<rect x="${x}" y="${y(v)}" width="${bw}" height="${Math.max(v / mx * ph, 1)}" rx="2" fill="var(${s.c})"/>`; });
     m += `<rect x="${L + gw * i}" y="${T}" width="${gw}" height="${ph}" fill="transparent" data-tip="${tip}"/>`; });
   if (refV) { const ry = y(refV), rc = o.ref.c || "--warn"; m += `<line x1="${L}" x2="${W - R}" y1="${ry}" y2="${ry}" stroke="var(${rc})" stroke-width="1.5" stroke-dasharray="5 4"/>${o.ref.label ? `<text x="${W - R}" y="${Math.max(T + 10, ry - 4)}" text-anchor="end" fill="var(${rc})" font-weight="600">${esc(o.ref.label)}</text>` : ""}`; }
-  return `<svg class="chart" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="${esc(o.label || "")}">${g}${m}${xl(B.map(b => b.label), i => L + gw * i + gw / 2, Hh - 8)}</svg>`;
+  const totals = B.map((_, i) => series.reduce((a, s) => a + (s.v[i] || 0), 0)), sumAll = totals.reduce((a, b) => a + b, 0), peakV = Math.max(...totals), peakI = totals.indexOf(peakV);
+  const sumBar = n > 1 ? `<div class="csum"><span>Total <b>${ff(sumAll)}${esc(o.unit || "")}</b></span><span>Avg <b>${ff(sumAll / n)}${esc(o.unit || "")}</b></span><span>Peak <b>${ff(peakV)}${esc(o.unit || "")}</b>${B[peakI] && B[peakI].label ? " (" + esc(B[peakI].label) + ")" : ""}</span></div>` : "";
+  return sumBar + `<svg class="chart" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="${esc(o.label || "")}">${g}${m}${xl(B.map(b => b.label), i => L + gw * i + gw / 2, Hh - 8)}</svg>`;
 }
 function lines(B, series, o = {}) {
   const W = o.w || 720, Hh = o.h || 230, L = 52, R = 26, T = 10, Bm = 26, pw = W - L - R, ph = Hh - T - Bm, n = B.length;
@@ -34,8 +36,8 @@ function lines(B, series, o = {}) {
 }
 function hbars(rows, o = {}) {
   const e = rows.filter(x => x[1] > 0 || (x[2] || 0) > 0); if (!e.length) return empty();
-  const mx = Math.max(...e.map(x => Math.max(x[1], x[2] || 0)));
-  return `<div class="hb ${o.two ? "two" : ""}">` + e.map(r => `<div class="t" title="${esc(r[0])}">${esc(r[0])}</div><div class="tracks"><div class="track"><div class="fill" style="width:${Math.max(1, r[1] / mx * 100)}%"></div></div>${o.two ? `<div class="track"><div class="fill b" style="width:${Math.max(1, (r[2] || 0) / mx * 100)}%"></div></div>` : ""}</div><div class="num">${esc(r[3] != null ? r[3] : fmt(r[1]))}</div>`).join("") + `</div>`;
+  const mx = Math.max(...e.map(x => Math.max(x[1], x[2] || 0))), tot = e.reduce((a, x) => a + (x[1] || 0), 0) || 1;
+  return `<div class="hb ${o.two ? "two" : ""}">` + e.map((r, idx) => `<div class="t" title="${esc(r[0])}"><i class="hbrk">${idx + 1}</i>${esc(r[0])}</div><div class="tracks"><div class="track"><div class="fill" style="width:${Math.max(1, r[1] / mx * 100)}%"></div></div>${o.two ? `<div class="track"><div class="fill b" style="width:${Math.max(1, (r[2] || 0) / mx * 100)}%"></div></div>` : ""}</div><div class="num">${esc(r[3] != null ? r[3] : fmt(r[1]))}${!o.two && e.length > 1 ? `<span class="sub"> · ${Math.round(r[1] / tot * 100)}%</span>` : ""}</div>`).join("") + `</div>`;
 }
 const legend = s => `<div class="legend">` + s.map(x => `<span><b style="background:var(${x.c})"></b>${esc(x.name)}</span>`).join("") + `</div>`;
 const pill = (k, t) => `<span class="pill ${k}"><i>${{good: "✓", warn: "!", crit: "✕", idle: "–"}[k]}</i>${esc(t)}</span>`;

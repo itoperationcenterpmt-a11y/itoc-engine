@@ -83,13 +83,13 @@ function buildWallSlides(keepIdx) {
     if (last && Math.abs(r.top - last.top) < 18) { last.els.push(el); last.h = Math.max(last.h, r.height); }
     else rows.push({top: r.top, h: r.height, els: [el]});
   });
-  const barH = ($("wallBar") ? $("wallBar").offsetHeight : 62) + 42;
-  const avail = Math.max(360, window.innerHeight - barH);
+  const barH = ($("wallBar") ? $("wallBar").offsetHeight : 54) + 24;
+  const avail = Math.max(420, window.innerHeight - barH);
   const slides = [];
   let cur = [], curH = 0;
   rows.forEach(row => {
-    const addH = row.h + (cur.length ? 14 : 0);
-    if (cur.length && curH + addH > avail) { slides.push(cur); cur = [...row.els]; curH = row.h; }
+    const addH = row.h + (cur.length ? 10 : 0);
+    if (cur.length && curH + addH > avail * 1.08) { slides.push(cur); cur = [...row.els]; curH = row.h; }
     else { cur.push(...row.els); curH += addH; }
   });
   if (cur.length) slides.push(cur);
