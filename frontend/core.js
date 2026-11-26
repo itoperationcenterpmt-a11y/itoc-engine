@@ -57,6 +57,11 @@ function applyAppearance(P) {
   if (si >= 28 && si <= 64) r.style.setProperty("--side-ico", si + "px");
   const li = +P["ui.login_icon_px"];
   if (li >= 36 && li <= 96) r.style.setProperty("--login-ico", li + "px");
+  const sideImg = String(P["ui.side_icon_img"] || "").trim();
+  document.querySelectorAll(".brand .g2, #wallBar .wbrand img").forEach(img => { img.src = sideImg || "assets/tera-icon-rev.png"; });
+  const favImg = String(P["ui.favicon_img"] || "").trim();
+  const fav = document.querySelector('link[rel="icon"]');
+  if (fav) fav.href = favImg || "assets/tera-favicon.png";
   const dt = String(P["ui.default_theme"] || "auto");
   try {
     if (!localStorage.getItem("itoc.theme") && (dt === "light" || dt === "dark")) r.dataset.theme = dt;

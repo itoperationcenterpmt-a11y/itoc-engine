@@ -336,8 +336,9 @@ function applyLayout() {
 const LAYBAR = () => `<div class="laybar"><b>Customize</b><label>Profile <select id="layProf">${(CFG.profiles || []).map(p => `<option value="${esc(p.key)}" ${p.key === (S.layProfile || curProfile()) ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="profNew" title="Create a new profile as a copy of the selected one">New</button><button class="btn ghost" type="button" id="profRename">Rename</button><button class="btn ghost" type="button" id="profDel">Delete</button><label>Apply to <select id="layRole"><option value="">All roles</option>${Object.values(CFG.roles).map(r => `<option value="${esc(r.key)}" ${r.key === S.layRole ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="layAdd">+ Add widget</button><button class="btn" type="button" id="laySave">Save</button><button class="btn ghost" type="button" id="layReset">Reset</button><button class="btn ghost" type="button" id="layCancel">Cancel</button></div><div class="layoff" id="layoff"></div><div class="laycat" id="laycat" hidden></div>`;
 function addTools(blk) {
     const t = document.createElement("div"), cur = nearest(blk.dataset.size || blk.dataset.dsize); t.className = "wtools";
-    t.innerHTML = `<button type="button" data-lay="up" title="Move up / left">▲</button><button type="button" data-lay="down" title="Move down / right">▼</button><select data-lay-size aria-label="Size" title="Widget width">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Custom title" value="${esc(blk.dataset.title || "")}" aria-label="Title">${blk.dataset.wkey.startsWith("w-dev-map") ? `<select data-wgroup aria-label="Filter group" title="Filter group"><option value="">All groups</option>${((V.dev && V.dev.groups) || []).map(g => `<option value="${esc(g.name)}" ${blk.dataset.wkey === "w-dev-map:" + encodeURIComponent(g.name) ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>` : ""}<button type="button" data-lay="eye">${blk.classList.contains("off") ? "Show" : "Hide"}</button><button type="button" data-lay="rm" title="${blk.dataset.added ? "Remove widget" : "Remove from dashboard (can be added again)"}">Remove</button>`;
+    t.innerHTML = `<span class="wdrag" title="Drag card to reorder">⠿ Drag</span><button type="button" data-lay="up" title="Move up / left">▲</button><button type="button" data-lay="down" title="Move down / right">▼</button><select data-lay-size aria-label="Size" title="Widget width">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Custom title" value="${esc(blk.dataset.title || "")}" aria-label="Title">${blk.dataset.wkey.startsWith("w-dev-map") ? `<select data-wgroup aria-label="Filter group" title="Filter group"><option value="">All groups</option>${((V.dev && V.dev.groups) || []).map(g => `<option value="${esc(g.name)}" ${blk.dataset.wkey === "w-dev-map:" + encodeURIComponent(g.name) ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>` : ""}<button type="button" data-lay="eye">${blk.classList.contains("off") ? "Show" : "Hide"}</button><button type="button" data-lay="rm" title="${blk.dataset.added ? "Remove widget" : "Remove from dashboard (can be added again)"}">Remove</button>`;
     blk.prepend(t);
+    blk.draggable = true;
     const rz = document.createElement("span"); rz.className = "wresize"; rz.title = "Drag sideways to resize"; blk.appendChild(rz);
 }
 function toggleCatalog() { const c = $("laycat"); if (!c) return; c.hidden = !c.hidden; if (!c.hidden) c.innerHTML = catalogHtml(); }
@@ -365,8 +366,43 @@ function moveBlock(b, dir) {
     if (next) blk.parentNode.insertBefore(blk, next.nextElementSibling);
   }
 }
-// Customize: drag the bottom-right corner handle to resize widget width
-let LDRAG = null;
+// Customize: native HTML5 drag-and-drop to reorder cards + pointer resize on bottom-right handle
+let LDRAG = null, DND_BLK = null;
+const clearDropMarks = () => document.querySelectorAll(".grid.lay > .wblock").forEach(x => x.classList.remove("drop-before", "drop-after"));
+document.addEventListener("dragstart", e => {
+  if (LDRAG) { e.preventDefault(); return; }
+  const blk = e.target.closest && e.target.closest(".grid.lay-edit > .wblock");
+  if (!blk || !S.layEdit) return;
+  if (e.target.closest("input,select,button,.wresize")) { e.preventDefault(); return; }
+  DND_BLK = blk;
+  blk.classList.add("lifting");
+  e.dataTransfer.effectAllowed = "move";
+  try { e.dataTransfer.setData("text/plain", blk.dataset.wkey || "block"); } catch (_) {}
+});
+document.addEventListener("dragover", e => {
+  if (!DND_BLK || !S.layEdit) return;
+  const over = e.target.closest && e.target.closest(".grid.lay-edit > .wblock");
+  if (!over || over === DND_BLK) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  clearDropMarks();
+  const r = over.getBoundingClientRect(), after = e.clientX > r.left + r.width / 2 || e.clientY > r.top + r.height * 0.65;
+  over.classList.add(after ? "drop-after" : "drop-before");
+});
+document.addEventListener("drop", e => {
+  if (!DND_BLK || !S.layEdit) return;
+  const over = e.target.closest && e.target.closest(".grid.lay-edit > .wblock");
+  if (!over || over === DND_BLK) { clearDropMarks(); return; }
+  e.preventDefault();
+  const after = over.classList.contains("drop-after");
+  over.parentNode.insertBefore(DND_BLK, after ? over.nextElementSibling : over);
+  clearDropMarks();
+});
+document.addEventListener("dragend", () => {
+  if (DND_BLK) DND_BLK.classList.remove("lifting");
+  DND_BLK = null;
+  clearDropMarks();
+});
 document.addEventListener("pointerdown", e => {
   const t = e.target.closest && e.target.closest(".wresize"); if (!t || !S.layEdit) return;
   const blk = t.closest(".wblock"); LDRAG = {mode: "size", blk}; blk.classList.add("lifting"); document.body.classList.add("dragging"); e.preventDefault();
@@ -381,7 +417,6 @@ document.addEventListener("pointermove", e => {
 });
 const endDrag = () => { if (LDRAG) { LDRAG.blk.classList.remove("lifting"); LDRAG = null; } document.body.classList.remove("dragging"); };
 document.addEventListener("pointerup", endDrag); document.addEventListener("pointercancel", endDrag); document.addEventListener("lostpointercapture", endDrag); window.addEventListener("blur", endDrag);
-document.addEventListener("dragstart", e => { if (LDRAG) e.preventDefault(); });
 async function saveLayout() {
   const blocks = [...$("view").querySelectorAll(".grid.lay > .wblock")].map(b => { const t = (b.dataset.title || "").trim(); return {key: b.dataset.wkey, title: t === (b.dataset.dtitle || "") ? "" : t, size: b.dataset.size || "", enabled: !b.classList.contains("off")}; });
   const r = await send("/api/admin/layout", {page: S.tab, role: S.layRole, profile: S.layProfile || curProfile(), blocks}, "PUT");
@@ -755,7 +790,7 @@ function showLogin(msg, change) {
       <div class="lg-top">${LOGIN.eyebrow ? `<span class="lg-eyebrow">${esc(LOGIN.eyebrow)}</span>` : ""}${LOGIN.badge ? `<span class="lg-prod">${esc(LOGIN.badge)}</span>` : ""}</div>
       ${LOGIN.headline ? `<h2 class="lg-title">${esc(LOGIN.headline)}</h2>` : `<h2 class="brandName">${brandHtml()}</h2>`}${LOGIN.tagline ? `<p>${esc(LOGIN.tagline)}</p>` : ""}${LOGIN.acronym.length ? `<ul class="lg-acr" aria-label="What TERA stands for">${LOGIN.acronym.map(([l, w, d]) => `<li><b>${esc(l)}</b><span><strong>${esc(w)}</strong>${d ? ` ${esc(d)}` : ""}</span></li>`).join("")}</ul>` : ""}
       ${LOGIN.points.length && !LOGIN.acronym.length ? `<ul class="lg-pts">${LOGIN.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</section>
-    <section class="lg-card lg-form"><div class="lg-lock"><img class="lk-ic lg-l" src="assets/tera-icon-col.png" alt=""><img class="lk-ic lg-d" src="assets/tera-icon-rev.png" alt=""><div class="lk-tx"><img class="lk-wm lg-l" src="assets/tera-wordmark-col.svg" alt="TERA"><img class="lk-wm lg-d" src="assets/tera-wordmark-rev.svg" alt="TERA"><b>Divisi Teknologi Informasi</b><span>Pelindo Multi Terminal</span></div></div>${form}<div class="loginfoot">${esc(footText().replace(/ · build .*$/, "").split(" · ").slice(0, 2).join(" · "))}</div></section></div></div>`;
+    <section class="lg-card lg-form"><div class="lg-lock"><img class="lk-ic lg-l" src="${esc(LOGIN.login_icon_img || "assets/tera-icon-col.png")}" alt=""><img class="lk-ic lg-d" src="${esc(LOGIN.login_icon_img || "assets/tera-icon-rev.png")}" alt=""><div class="lk-tx"><img class="lk-wm lg-l" src="assets/tera-wordmark-col.svg" alt="TERA"><img class="lk-wm lg-d" src="assets/tera-wordmark-rev.svg" alt="TERA"><b>Divisi Teknologi Informasi</b><span>Pelindo Multi Terminal</span></div></div>${form}<div class="loginfoot">${esc(footText().replace(/ · build .*$/, "").split(" · ").slice(0, 2).join(" · "))}</div></section></div></div>`;
   const first = $("login").querySelector("input"); if (first) first.focus();
 }function logout(msg) { fetch("/api/auth/logout", {method: "POST", credentials: "same-origin", headers: {"X-Requested-With": "itoc"}}).catch(() => {}); CFG = null; showLogin(typeof msg === "string" ? msg : ""); }
 const footText = () => FOOT.replace("{year}", new Date().getFullYear()) + (CFG && CFG.build ? " · build " + CFG.build : "");
@@ -763,8 +798,8 @@ const footText = () => FOOT.replace("{year}", new Date().getFullYear()) + (CFG &
 /* The name shown in the sidebar and login page is the first BSPLIT words ("Dashboard IT"); the full name is used in the tab title, reports, and email. */
 const brandHtml = () => { const w = BRAND.trim().split(/\s+/), n = Math.max(1, Math.min(typeof BSPLIT === "number" ? BSPLIT : 2, w.length)), t = w.slice(0, n).join(" "); return `<span class="b1">${/^tera$/i.test(t) ? `<img class="wm wm-c" src="assets/tera-wordmark-col.svg" alt="TERA"><img class="wm wm-r" src="assets/tera-wordmark-rev.svg" alt="TERA">` : esc(t)}</span>`; };
 function applyBrand() { document.title = BRAND; document.querySelectorAll(".brandName").forEach(e => e.innerHTML = brandHtml()); }
-let LOGIN = {tagline: "", points: [], place: "", eyebrow: "", acronym: [], headline: "", badge: "", support_phone: "", turnstile: ""};
-async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || "", acronym: r.acronym || [], headline: r.headline || "", badge: r.badge || "", support_phone: r.support_phone || "", turnstile: r.turnstile || ""}; } catch (_) {} applyBrand(); }
+let LOGIN = {tagline: "", points: [], place: "", eyebrow: "", acronym: [], headline: "", badge: "", support_phone: "", turnstile: "", login_icon_img: "", side_icon_img: "", favicon_img: ""};
+async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || "", acronym: r.acronym || [], headline: r.headline || "", badge: r.badge || "", support_phone: r.support_phone || "", turnstile: r.turnstile || "", login_icon_img: r.login_icon_img || "", side_icon_img: r.side_icon_img || "", favicon_img: r.favicon_img || ""}; applyAppearance({"ui.scale": r.scale, "ui.side_icon_px": r.side_icon_px, "ui.login_icon_px": r.login_icon_px, "ui.side_icon_img": r.side_icon_img, "ui.favicon_img": r.favicon_img}); } catch (_) {} applyBrand(); }
 async function boot() {
   await loadPublic();
   try { if ((await fetch("/api/auth/me", {credentials: "same-origin"})).status === 401) return showLogin(); } catch (_) { return showLogin(); }

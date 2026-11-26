@@ -2,10 +2,10 @@
 "use strict";
 const ADM = [
   ["akses", "Access", [["pengguna", "Users"], ["roles", "Roles"], ["apikeys", "API Keys"]]],
-  ["sumber", "Data Sources", [["integrasi", "Integrations"], ["pemetaan", "Mapping"], ["dilengkapi", "Needs Completion"]]],
+  ["sumber", "Data Sources", [["integrasi", "Integrations"], ["status", "Source Status"], ["pemetaan", "Mapping"], ["dilengkapi", "Needs Completion"]]],
   ["operasional", "Operations", [["personel", "Personnel"], ["tim", "Teams & Shifts"], ["parameter", "Targets & Parameters"], ["rumus", "Formulas"]]],
   ["notifikasi", "Notifications", [["smtp", "Email"], ["webhooks", "Webhooks"], ["chatcmd", "Bot & Notifier API"]]],
-  ["sistem", "System", [["appearance", "Appearance"], ["audit", "Audit Log"], ["sharelinks", "Share Links"], ["status", "Source Status"], ["menu", "Menus & Widgets"], ["akses", "Page Access"], ["backup", "Backup & Restore"]]]
+  ["sistem", "System", [["appearance", "Branding & Icons"], ["menu", "Menus & Widgets"], ["audit", "Audit Log"], ["sharelinks", "Share Links"], ["akses", "Page Access"], ["backup", "Backup & Restore"]]]
 ];
 const COLN = {id: "ID", name: "Name", kind: "Type", aliases: "Aliases", active: "Active", sort: "Order", lat: "Latitude", lon: "Longitude", sys_name: "System Name", unit: "Unit", job: "Job Title",
   team_code: "Team Code", branch: "Branch", phone: "Phone", is_coordinator: "Coordinator", is_shared: "Shared", exclude_rank: "Exclude from Ranking", code: "Code", label: "Label",
@@ -183,39 +183,46 @@ document.addEventListener("submit", async e => {
   } catch (er) { BK.msg = {ok: false, t: er.message}; }
   BK.busy = false; render(false);
 });
-/* ---------- Appearance: Icons & Sizing ---------- */
-const AP = {d: null, saving: false};
+/* ---------- Branding & Icons Manager (Upload Icons, Resize, Menu Icons) ---------- */
+const AP = {d: null, saving: false, pickMod: ""};
 function apInit() {
   const P = (CFG && CFG.params) || {};
   AP.d = {
+    brand: P["ui.brand_name"] || "TERA Dashboard",
     scale: +(P["ui.scale"] ?? 0.90),
     sideIco: +(P["ui.side_icon_px"] ?? 44),
     loginIco: +(P["ui.login_icon_px"] ?? 56),
+    sideImg: String(P["ui.side_icon_img"] || ""),
+    loginImg: String(P["ui.login_icon_img"] || ""),
+    favImg: String(P["ui.favicon_img"] || ""),
     defTheme: P["ui.default_theme"] || "auto",
   };
 }
 function apPreviewHtml() {
   const d = AP.d, pct = Math.round((+d.scale || 0.9) * 100);
-  const si = Math.max(28, Math.min(60, +d.sideIco || 44));
-  const li = Math.max(36, Math.min(88, +d.loginIco || 56));
+  const si = Math.max(28, Math.min(64, +d.sideIco || 44));
+  const li = Math.max(36, Math.min(96, +d.loginIco || 56));
+  const sSrc = d.sideImg || "assets/tera-icon-rev.png";
+  const lSrc = d.loginImg || "assets/tera-icon-col.png";
+  const fSrc = d.favImg || "assets/tera-favicon.png";
   const fs = (13.5 * (+d.scale || 0.9)).toFixed(1);
   return `<div class="grid" style="gap:12px">
     <div class="panel c6" style="background:var(--side-bg);color:#fff;border-color:rgba(255,255,255,.1)">
-      <span class="lbl" style="color:rgba(255,255,255,.6)">Sidebar Icon Preview (${si}px)</span>
+      <span class="lbl" style="color:rgba(255,255,255,.6)">Sidebar Icon (${si}px)</span>
       <div style="display:flex;align-items:center;gap:10px;padding:6px 4px">
-        <img src="assets/tera-icon-rev.png" alt="TERA" style="width:${si}px;height:${si}px;object-fit:contain;flex:none">
-        <div><b style="font-size:${Math.round(si * 0.42)}px;letter-spacing:.04em;display:block;line-height:1.1">TERA</b><span style="font-size:11px;opacity:.75">Dashboard · IT Operation Center</span></div>
+        <img src="${esc(sSrc)}" alt="Sidebar Icon" style="width:${si}px;height:${si}px;object-fit:contain;flex:none;border-radius:8px">
+        <div><b style="font-size:${Math.round(si * 0.4)}px;letter-spacing:.03em;display:block;line-height:1.1">${esc(d.brand)}</b><span style="font-size:11px;opacity:.75">IT Operation Center</span></div>
       </div>
     </div>
     <div class="panel c6" style="align-items:center;text-align:center;justify-content:center">
-      <span class="lbl">Login Logo Preview (${li}px)</span>
+      <span class="lbl">Login Logo (${li}px) &amp; Favicon</span>
       <div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:6px 0">
-        <img src="assets/tera-icon-col.png" alt="TERA" style="width:${li}px;height:${li}px;object-fit:contain">
-        <div style="text-align:left"><b style="font-size:${Math.round(li * 0.36)}px;letter-spacing:.03em;display:block;line-height:1.1">TERA</b><span class="sub">Dashboard</span></div>
+        <img src="${esc(lSrc)}" alt="Login Logo" style="width:${li}px;height:${li}px;object-fit:contain;border-radius:10px">
+        <div style="text-align:left"><b style="font-size:${Math.round(li * 0.34)}px;display:block;line-height:1.1">${esc(d.brand)}</b><span class="sub" style="display:inline-flex;align-items:center;gap:5px;margin-top:4px"><img src="${esc(fSrc)}" alt="" style="width:16px;height:16px;object-fit:contain;border-radius:3px"> Browser tab icon</span></div>
       </div>
     </div>
     <div class="panel c12">
-      <span class="lbl">UI Scale Preview (${pct}% · Base text ${fs}px)</span>
+      <span class="lbl">Global UI Scale (${pct}% · Base text ${fs}px)</span>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;font-size:${fs}px">
         <div style="padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--sunken)"><small class="sub" style="display:block">TICKET SLA</small><b class="num" style="font-size:1.5em">87,0%</b></div>
         <div style="padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--sunken)"><small class="sub" style="display:block">LINK AVAILABILITY</small><b class="num" style="font-size:1.5em">99,93%</b></div>
@@ -224,28 +231,70 @@ function apPreviewHtml() {
     </div>
   </div>`;
 }
+function apMenuIconsHtml() {
+  const mods = (CFG && CFG.modules) || [];
+  const icoKeys = typeof ICO !== "undefined" ? Object.keys(ICO) : [];
+  const curMod = AP.pickMod ? mods.find(m => m.key === AP.pickMod) : null;
+  return `<section class="panel c12" style="margin-top:4px">
+    <header><h2>Sidebar Menu Icons</h2><span class="sub">Click any menu to change its icon</span></header>
+    <div class="mico-list">${mods.map(m => {
+      const svg = (typeof ICO !== "undefined" && ICO[m.icon]) || "";
+      const p = m.parent ? mods.find(x => x.key === m.parent) : null;
+      return `<button type="button" class="mico-item ${AP.pickMod === m.key ? "on" : ""}" data-ap-mod="${esc(m.key)}"><svg viewBox="0 0 24 24" aria-hidden="true">${svg}</svg><span><b>${esc(m.label)}</b>${p ? `<small class="sub">${esc(p.label)}</small>` : `<small class="sub">Main menu</small>`}</span></button>`;
+    }).join("")}</div>
+    ${curMod ? `<div class="formbox" style="margin-top:8px"><div class="admhead" style="margin-bottom:8px"><b>Pick icon for "${esc(curMod.label)}"</b><button type="button" class="btn ghost sm" data-ap-mod="">Close</button></div>
+      <div class="ico-grid">${icoKeys.map(k => `<button type="button" class="ico-btn ${curMod.icon === k ? "on" : ""}" data-ap-setico="${esc(k)}" title="${esc(k)}"><svg viewBox="0 0 24 24" aria-hidden="true">${ICO[k]}</svg><span>${esc(k)}</span></button>`).join("")}</div></div>` : ""}
+  </section>`;
+}
 function vAppearance() {
   if (!AP.d) apInit();
   const d = AP.d;
-  return admTitle("Appearance (Icons & Sizing)", "Adjust brand icon sizes and global UI zoom scale across all menus.", `<button type="button" class="btn ghost sm" data-ap="reset">Reset Defaults</button>`) + intMsg() +
+  const imgRow = (id, key, label, defSrc) => `<div class="fld">
+    <label for="${id}">${label}</label>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <img src="${esc(d[key] || defSrc)}" alt="" style="width:34px;height:34px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:3px;background:var(--sunken)">
+      <label class="btn ghost sm" style="cursor:pointer;margin:0">Upload / Change<input id="${id}" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp,image/x-icon" data-ap-upload="${key}" hidden></label>
+      ${d[key] ? `<button type="button" class="btn ghost sm" data-ap-clear="${key}">Reset Default</button>` : `<span class="sub">Default TERA icon</span>`}
+    </div>
+  </div>`;
+  return admTitle("Branding & Icons", "Upload custom brand icons (sidebar, login, favicon), adjust icon & UI sizes, and customize sidebar menu icons.", `<button type="button" class="btn ghost sm" data-ap="reset">Reset All Defaults</button>`) + intMsg() +
     `<div class="grid" style="margin-top:4px">
       <form class="panel c5 intform" data-ap-form>
-        <header><h2>Icons &amp; UI Size</h2></header>
-        <div class="fld"><label for="apScale">Global UI Scale (Zoom Level)</label><select id="apScale" data-ap-f="scale">${[[0.80, "80% · Extra Compact"], [0.85, "85% · Compact"], [0.90, "90% · Balanced (Recommended)"], [0.95, "95% · Comfortable"], [1.00, "100% · Standard"]].map(([k, l]) => `<option value="${k}" ${Math.abs((+d.scale || 0.9) - k) < 0.02 ? "selected" : ""}>${l}</option>`).join("")}</select><span class="sub">Controls overall typography and card density at 100% browser zoom.</span></div>
-        <div class="fld"><label for="apSideIco">Sidebar Icon Size: <b class="num">${d.sideIco}px</b></label><input id="apSideIco" type="range" min="28" max="60" step="2" data-ap-f="sideIco" value="${d.sideIco}"></div>
-        <div class="fld"><label for="apLoginIco">Login Logo Size: <b class="num">${d.loginIco}px</b></label><input id="apLoginIco" type="range" min="36" max="88" step="4" data-ap-f="loginIco" value="${d.loginIco}"></div>
+        <header><h2>Brand Logos &amp; Sizing</h2></header>
+        <div class="fld"><label for="apBrand">Brand Name</label><input id="apBrand" type="text" data-ap-f="brand" value="${esc(d.brand)}"></div>
+        ${imgRow("apSideUp", "sideImg", "Sidebar Icon (PNG / SVG / WebP, max 256 KB)", "assets/tera-icon-rev.png")}
+        <div class="fld"><label for="apSideIco">Sidebar Icon Size: <b class="num">${d.sideIco}px</b></label><input id="apSideIco" type="range" min="28" max="64" step="2" data-ap-f="sideIco" value="${d.sideIco}"></div>
+        ${imgRow("apLoginUp", "loginImg", "Login Page Logo (PNG / SVG / WebP, max 256 KB)", "assets/tera-icon-col.png")}
+        <div class="fld"><label for="apLoginIco">Login Logo Size: <b class="num">${d.loginIco}px</b></label><input id="apLoginIco" type="range" min="36" max="96" step="4" data-ap-f="loginIco" value="${d.loginIco}"></div>
+        ${imgRow("apFavUp", "favImg", "Browser Tab Favicon (PNG / SVG / ICO)", "assets/tera-favicon.png")}
+        <div class="fld"><label for="apScale">Global UI Scale (Zoom Level)</label><select id="apScale" data-ap-f="scale">${[[0.80, "80% · Extra Compact"], [0.85, "85% · Compact"], [0.90, "90% · Balanced (Recommended)"], [0.95, "95% · Comfortable"], [1.00, "100% · Standard"]].map(([k, l]) => `<option value="${k}" ${Math.abs((+d.scale || 0.9) - k) < 0.02 ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <div class="fld"><label for="apTh">Default Theme (New Sessions)</label><select id="apTh" data-ap-f="defTheme">${[["auto", "Auto (follow OS)"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => `<option value="${k}" ${d.defTheme === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-        <div class="acts" style="margin-top:6px"><button class="btn" type="submit"${AP.saving ? " disabled" : ""}>${AP.saving ? "Saving…" : "Save Appearance"}</button></div>
+        <div class="acts" style="margin-top:6px"><button class="btn" type="submit"${AP.saving ? " disabled" : ""}>${AP.saving ? "Saving…" : "Save Branding & Icons"}</button></div>
       </form>
       <section class="panel c7">
         <header><h2>Live Preview</h2></header>
         <div id="apStage">${apPreviewHtml()}</div>
       </section>
+      ${apMenuIconsHtml()}
     </div>`;
 }
 document.addEventListener("click", async e => {
   const rs = e.target.closest('[data-ap="reset"]');
-  if (rs && AP.d) { AP.d.scale = 0.90; AP.d.sideIco = 44; AP.d.loginIco = 56; AP.d.defTheme = "auto"; render(false); }
+  if (rs && AP.d) { AP.d.brand = "TERA Dashboard"; AP.d.scale = 0.90; AP.d.sideIco = 44; AP.d.loginIco = 56; AP.d.sideImg = ""; AP.d.loginImg = ""; AP.d.favImg = ""; AP.d.defTheme = "auto"; render(false); return; }
+  const clr = e.target.closest("[data-ap-clear]");
+  if (clr && AP.d) { AP.d[clr.dataset.apClear] = ""; render(false); return; }
+  const mod = e.target.closest("[data-ap-mod]");
+  if (mod) { AP.pickMod = AP.pickMod === mod.dataset.apMod ? "" : mod.dataset.apMod; render(false); return; }
+  const seti = e.target.closest("[data-ap-setico]");
+  if (seti && AP.pickMod) {
+    const m = (CFG.modules || []).find(x => x.key === AP.pickMod); if (!m) return;
+    try {
+      await send("/api/admin/master/module/" + encodeURIComponent(m.key), {label: m.label, icon: seti.dataset.apSetico, parent: m.parent || null, enabled: true}, "PUT");
+      await reloadConfig(); renderShell();
+      INT.msg = {ok: true, t: `Icon for "${m.label}" updated to "${seti.dataset.apSetico}".`};
+    } catch (er) { INT.msg = {ok: false, t: er.message || String(er)}; }
+    render(false);
+  }
 });
 document.addEventListener("input", e => {
   const f = e.target.dataset && e.target.dataset.apF; if (!f || !AP.d) return;
@@ -255,6 +304,15 @@ document.addEventListener("input", e => {
   if (lbl && e.target.type === "range") lbl.textContent = AP.d[f] + "px";
 });
 document.addEventListener("change", e => {
+  if (e.target.dataset && e.target.dataset.apUpload && AP.d) {
+    const file = e.target.files && e.target.files[0], key = e.target.dataset.apUpload;
+    if (!file) return;
+    if (file.size > 262144) { INT.msg = {ok: false, t: "Image too large (max 256 KB). Please use a smaller PNG/SVG/WebP icon."}; render(false); return; }
+    const rd = new FileReader();
+    rd.onload = () => { AP.d[key] = String(rd.result || ""); INT.msg = null; render(false); };
+    rd.readAsDataURL(file);
+    return;
+  }
   if (e.target.dataset && e.target.dataset.apF && AP.d) {
     AP.d[e.target.dataset.apF] = ["scale", "sideIco", "loginIco"].includes(e.target.dataset.apF) ? +e.target.value : e.target.value;
     const st = $("apStage"); if (st) st.innerHTML = apPreviewHtml();
@@ -265,12 +323,15 @@ document.addEventListener("submit", async e => {
   e.preventDefault(); e.stopImmediatePropagation();
   AP.saving = true; render(false);
   const d = AP.d, pairs = [
-    ["ui.scale", +d.scale || 0.90], ["ui.side_icon_px", +d.sideIco || 44], ["ui.login_icon_px", +d.loginIco || 56], ["ui.default_theme", d.defTheme || "auto"],
+    ["ui.brand_name", d.brand.trim() || "TERA Dashboard"],
+    ["ui.scale", +d.scale || 0.90], ["ui.side_icon_px", +d.sideIco || 44], ["ui.login_icon_px", +d.loginIco || 56],
+    ["ui.side_icon_img", d.sideImg || ""], ["ui.login_icon_img", d.loginImg || ""], ["ui.favicon_img", d.favImg || ""],
+    ["ui.default_theme", d.defTheme || "auto"],
   ];
   try {
     for (const [k, v] of pairs) await send("/api/admin/params/" + encodeURIComponent(k), {value: v}, "PUT");
-    await reloadConfig(); applyAppearance(CFG.params);
-    AP.d = null; INT.msg = {ok: true, t: "Appearance settings saved and applied."};
+    await reloadConfig(); applyBrand(); applyAppearance(CFG.params);
+    AP.d = null; INT.msg = {ok: true, t: "Branding & icon settings saved and applied."};
   } catch (er) { INT.msg = {ok: false, t: er.message || String(er)}; }
   finally { AP.saving = false; render(false); }
 }, true);

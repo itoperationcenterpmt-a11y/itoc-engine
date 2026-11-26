@@ -354,10 +354,22 @@ textarea{min-height:76px;resize:vertical}
 .rkind.on{border-color:var(--accent);background:var(--wash);box-shadow:0 0 0 1px var(--accent) inset}
 .rkind:focus-within{outline:2px solid var(--accent);outline-offset:2px}
 .grid.lay>.wblock{position:relative;min-width:0}.grid.lay>.wblock>.kpis{margin-top:0}
-.grid.lay-edit>.wblock{outline:2px dashed var(--accent);outline-offset:3px;border-radius:14px}.wblock.off{opacity:.38}
-.wdrag{cursor:grab;font-size:calc(12px*var(--fs));padding:3px 7px;border-radius:6px;background:var(--wash);border:1px solid var(--line);user-select:none;touch-action:none;white-space:nowrap}
+.grid.lay-edit>.wblock{outline:2px dashed var(--accent);outline-offset:3px;border-radius:14px;cursor:grab}.grid.lay-edit>.wblock:active{cursor:grabbing}.wblock.off{opacity:.38}
+.wblock.drop-before{box-shadow:-4px 0 0 0 var(--accent),0 -3px 0 0 var(--accent);background:var(--wash)}
+.wblock.drop-after{box-shadow:4px 0 0 0 var(--accent),0 3px 0 0 var(--accent);background:var(--wash)}
+.wdrag{cursor:grab;font-size:calc(11.5px*var(--fs));font-weight:600;padding:3px 7px;border-radius:6px;background:var(--wash);color:var(--accent);border:1px solid var(--accent);user-select:none;white-space:nowrap}
 .wresize{position:absolute;right:-5px;bottom:-5px;width:22px;height:22px;border-radius:6px;background:var(--accent);cursor:ew-resize;z-index:4;touch-action:none;opacity:.9}.wresize:after{content:"↔";color:#fff;font-size:calc(13px*var(--fs));display:block;text-align:center;line-height:22px}
-.wblock.lifting{opacity:.7;outline-style:solid;user-select:none}
+.wblock.lifting{opacity:.5;outline-style:solid;user-select:none}
+.mico-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.mico-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--sunken);color:var(--ink);cursor:pointer;text-align:left;transition:border-color .15s,background .15s}
+.mico-item:hover,.mico-item.on{border-color:var(--accent);background:var(--wash)}
+.mico-item svg{width:18px;height:18px;flex:none;fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mico-item span{display:flex;flex-direction:column;min-width:0;line-height:1.25}.mico-item b{font-size:calc(12.5px*var(--fs));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ico-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:6px}
+.ico-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink2);cursor:pointer;font-size:calc(11px*var(--fs))}
+.ico-btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ico-btn:hover,.ico-btn.on{border-color:var(--accent);background:var(--wash);color:var(--accent);font-weight:600}
+.lg-lock .lk-ic{width:var(--login-ico,56px)!important;height:var(--login-ico,56px)!important;object-fit:contain}
 .wtools{position:relative;z-index:4;display:flex;flex-wrap:wrap;gap:5px;align-items:center;background:var(--sunken);border:1px solid var(--line);border-radius:9px;padding:5px 7px;margin:-4px -4px 6px}
 .wtools button,.wtools select,.wtools input{font-size:calc(11.5px*var(--fs));padding:3px 7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;cursor:pointer;width:auto;line-height:1.25}
 .wtools select{min-width:74px}

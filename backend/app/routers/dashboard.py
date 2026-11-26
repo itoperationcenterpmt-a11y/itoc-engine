@@ -31,7 +31,7 @@ router = APIRouter(prefix="/api", tags=["dashboard"])
 def public(db: Session = Depends(get_db)):
     """Tanpa login: hanya teks tampilan halaman login (nama, footer, kalimat, poin, keterangan lokasi). Nilainya dari parameter ui.* (Admin → Operasional → Target dan Parameter)."""
     c = load_config(db)
-    return {"build": BUILD, "brand": c.p("ui.brand_name", ""), "brand_split": c.p("ui.brand_split", 2), "footer": c.p("ui.footer", ""), "tagline": c.p("ui.login_tagline", ""), "points": c.p("ui.login_points", []), "place": c.p("ui.login_place", ""), "eyebrow": c.p("ui.login_eyebrow", ""), "acronym": c.p("ui.login_acronym", []), "headline": c.p("ui.login_headline", ""), "badge": c.p("ui.login_badge", ""), "support_phone": c.p("ui.support_phone", ""), "turnstile": c.p("security.turnstile_site_key", "")}
+    return {"build": BUILD, "brand": c.p("ui.brand_name", ""), "brand_split": c.p("ui.brand_split", 2), "footer": c.p("ui.footer", ""), "tagline": c.p("ui.login_tagline", ""), "points": c.p("ui.login_points", []), "place": c.p("ui.login_place", ""), "eyebrow": c.p("ui.login_eyebrow", ""), "acronym": c.p("ui.login_acronym", []), "headline": c.p("ui.login_headline", ""), "badge": c.p("ui.login_badge", ""), "support_phone": c.p("ui.support_phone", ""), "turnstile": c.p("security.turnstile_site_key", ""), "side_icon_img": c.p("ui.side_icon_img", ""), "login_icon_img": c.p("ui.login_icon_img", ""), "favicon_img": c.p("ui.favicon_img", ""), "side_icon_px": c.p("ui.side_icon_px", 44), "login_icon_px": c.p("ui.login_icon_px", 56), "scale": c.p("ui.scale", 0.90)}
 
 
 PARAM_MODULE = (("soc.", "soc"), ("net.", "noc"), ("sd.", "servicedesk"))
