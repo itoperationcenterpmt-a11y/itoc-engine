@@ -710,11 +710,23 @@ footer{margin-top:28px;color:var(--muted);font-size:calc(12px*var(--fs));display
 .wallbar .wprog i{display:block;height:100%;background:#5BB5E2;width:100%;transition:width .9s linear}
 body.wall .shell{display:block}
 body.wall .side,body.wall .mtop,body.wall .fwrap,body.wall .pagehead,body.wall #subnav,body.wall footer,body.wall .secjump,body.wall .sechd,body.wall .rowlbl{display:none!important}
-body.wall .wrap{max-width:none;margin:0;padding:12px 18px 18px;min-height:100vh}
-body.wall .wallbar{display:flex}
-body.wall .grid{margin-top:8px;gap:14px;align-items:stretch}
-body.wall .panel{padding:15px 18px}
-body.wall .tall{max-height:calc(100vh - 210px)}
+body.wall .wrap{max-width:none;margin:0;padding:8px 14px 12px;min-height:100vh}
+body.wall .wallbar{display:flex;padding:7px 14px 10px;margin-bottom:8px;gap:10px}
+body.wall .grid{margin-top:6px;gap:10px;align-items:stretch}
+body.wall .panel{padding:11px 14px;gap:7px}
+body.wall .tall{max-height:calc(100vh - 185px)}
+.stiles.s4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:1080px){.stiles.s4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.stiles.s4{grid-template-columns:1fr}}
+.scroll.tall{padding-right:6px}
+.scroll table.rt td:last-child,.scroll table.rt th:last-child{padding-right:14px}
+.tpag{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:6px;border-top:1px dashed var(--line)}
+.sprog{display:inline-flex;align-items:center;gap:8px;min-width:130px}
+.sprog-bar{flex:1;height:7px;background:var(--sunken);border-radius:99px;overflow:hidden;min-width:64px}
+.sprog-bar i{display:block;height:100%;border-radius:99px;background:var(--good)}
+.sprog-bar i.warn{background:var(--warn)}.sprog-bar i.crit{background:var(--crit)}
+.mbar{max-width:100%;min-width:0;flex-wrap:wrap}.mbar .mtools{margin-left:auto;display:inline-flex;gap:6px;flex-wrap:wrap}
+.lay-edit .wtools{position:static!important;order:-1;margin:-4px -4px 8px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);padding:5px 8px}
 .wslide-hide{display:none!important}
 body.wall .wslide-in{animation:wallfade .35s ease}
 @keyframes wallfade{from{opacity:.25;transform:translateY(4px)}to{opacity:1;transform:none}}
@@ -852,6 +864,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
       <span id="dutyW" class="dutychip"></span>
       <span class="wacts">
         <span class="wctrl" aria-label="Slideshow controls"><button id="wallPrev" type="button" title="Previous slide (←)">‹</button><button id="wallPlay" type="button" title="Pause / Resume (Space)">⏸</button><button id="wallNext" type="button" title="Next slide (→)">›</button><span class="wsl" id="wallSl">1 / 1</span><span class="wdots" id="wallDots"></span></span>
+        <select class="wsec" id="wallProfSel" aria-label="Wall profile" title="Switch dashboard profile" hidden></select>
         <select class="wsec" id="wallSecSel" aria-label="Slide duration" title="Slide duration"><option value="10">10s / slide</option><option value="15">15s / slide</option><option value="20">20s / slide</option><option value="30">30s / slide</option><option value="45">45s / slide</option><option value="60">60s / slide</option></select>
         <button class="btn ghost sm" id="wallRotBtn" type="button" title="Toggle rotating across configured menus or looping this page">Rotate menus</button>
         <span class="wcd" id="wallCd">Refresh 60s</span>

@@ -65,7 +65,7 @@ def login(body: Login, request: Request, response: Response, db: Session = Depen
     u = db.query(User).filter_by(username=name).one_or_none()
     ok = check_pw(body.password, u.password_hash if u else _DUMMY)   # waktu proses sama untuk akun yang tidak ada
     if not u or not u.active or not ok:
-        audit(db, name, "Login failed", {"ip": ip}, cfg.p("tz_offset_hours", 7))
+        audit(db, u.username if u else "(unknown)", "Login failed", {"ip": ip, **({} if u else {"tried": name[:40]})}, cfg.p("tz_offset_hours", 7))
         db.commit()
         raise HTTPException(401, "Wrong username or password")
     u.last_login = cfg.now()

@@ -1,9 +1,9 @@
 /* Insights (under Report): automatic findings, rankings, location health, shift summary, and history. Calculated from stored data, no AI. */
 "use strict";
 const INS_SEV = {crit: ["crit", "Critical"], warn: ["warn", "Warning"], info: ["idle", "Info"]};
-const INS_KIND = {tickets: "Tickets", links: "Links", capacity: "Capacity", security: "Security", devices: "Devices", wifi: "WiFi", cctv: "Milestone", correlation: "Cross-source", data: "Data quality"};
+const INS_KIND = {tickets: "Tickets", links: "Links", capacity: "Capacity", security: "Security", devices: "Devices", wifi: "WiFi", cctv: "Surveillance", correlation: "Cross-source", data: "Data quality"};
 const INS_GROUP = {tickets: "Service Desk", links: "NOC", capacity: "NOC", devices: "NOC", wifi: "NOC", cctv: "NOC", correlation: "NOC", security: "SOC", data: "Data quality"};
-const INS_SRC = {soc: "NDR (Palo Alto)", xdr: "XDR (Trend Micro)"};
+const INS_SRC = {soc: "NDR (Firewall)", xdr: "XDR (Endpoint)"};
 const insKindLabel = r => r.kind === "security" && INS_SRC[r.tab] ? "Security · " + INS_SRC[r.tab] : INS_KIND[r.kind] || r.kind;
 const INS_M = {value: "Value", normal: "Normal", z: "z-score", count: "Count", links: "Links", longest_downtime_min: "Longest downtime (min)", window_days: "Window (days)", days_to_target: "Days to target", days_to_90pct: "Days to 90%",
   oldest_days: "Oldest (days)", open_alerts: "Open alerts", without_ticket: "Without ticket", with_ticket: "With ticket", alerts: "Alerts", hosts: "Hosts", tickets: "Tickets", events: "Events", new_categories: "New categories", servers: "Servers", alerts_7_days: "Alerts (7 days)", events_7_days: "Events (7 days)", offline: "Offline", total: "Total", now: "Now", slope_per_day: "Slope per day", target: "Target", devices: "Devices", signals: "Signals",

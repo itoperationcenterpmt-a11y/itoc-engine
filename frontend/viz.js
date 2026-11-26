@@ -37,11 +37,12 @@ function vzGauge(pct, o = {}) {
 const vzGaugeCard = (size, title, pct, o) => panel(size, title, "", vzGauge(pct, o) + (o.note ? `<div class="vz-note">${o.note}</div>` : ""));
 
 /* Donut with a legend. parts: [{k, v, c}] */
+const vzShort = n => n >= 1e6 ? fx(n / 1e6, 2) + "M" : n >= 1e5 ? fx(n / 1e3, 0) + "K" : fmt(n);
 function vzDonut(parts, o = {}) {
   const tot = vzSum(parts.map(p => p.v)); if (!tot) return `<div class="empty sm">No data.</div>`;
   let off = 0; const C = 2 * Math.PI * 15.9155;
   const seg = parts.filter(p => p.v > 0).map(p => { const len = p.v / tot * C, s = `<circle r="15.9155" cx="21" cy="21" fill="none" stroke="${p.c}" stroke-width="6" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 21 21)"><title>${esc(p.k)}: ${fmt(p.v)}</title></circle>`; off += len; return s; }).join("");
-  return `<div class="vz-donut"><div class="vz-dwrap"><svg viewBox="0 0 42 42" role="img" aria-label="${esc(o.label || "Distribution")}"><circle r="15.9155" cx="21" cy="21" fill="none" stroke="var(--sunken)" stroke-width="6"/>${seg}</svg><div class="vz-gv"><b>${o.center != null ? o.center : fmt(tot)}</b>${o.sub ? `<span>${o.sub}</span>` : ""}</div></div>
+  return `<div class="vz-donut"><div class="vz-dwrap"><svg viewBox="0 0 42 42" role="img" aria-label="${esc(o.label || "Distribution")}"><circle r="15.9155" cx="21" cy="21" fill="none" stroke="var(--sunken)" stroke-width="6"/>${seg}</svg><div class="vz-gv" title="${esc(fmt(tot))}"><b>${o.center != null ? o.center : vzShort(tot)}</b>${o.sub ? `<span>${o.sub}</span>` : ""}</div></div>
     <ul class="vz-leg">${parts.map(p => `<li><i style="background:${p.c}"></i><span>${esc(p.k)}</span><b>${fmt(p.v)}</b></li>`).join("")}</ul></div>`;
 }
 
@@ -91,21 +92,21 @@ const VIZ_WIDGETS = [
   {key: "viz-spark-xdr", grp: "Visual", mod: "xdr", need: "xdr", title: "XDR alerts · trend", desc: "XDR alerts per day", size: "c3",
     html: () => vzSparkCard("c3", "XDR alerts · trend", fmt(V.xdr.total), fmt(V.xdr.open) + " still open", (V.xdr.daily || []).map(x => ["critical", "high", "medium", "low"].reduce((a, k) => a + (x[k] || 0), 0)), VZC.s2, true)},
   {key: "viz-gauge-sla", grp: "Visual", mod: "servicedesk", need: "tk", title: "Ticket SLA gauge", desc: "Tickets within SLA target against the warning level", size: "c3",
-    html: () => { const w = +CFG.params["sd.sla_warn"] || 0.9; return vzGaugeCard("c3", "Ticket SLA", V.tk.slaPct, {lo: 0, hi: 1, target: w, label: "Ticket SLA", sub: "within target", note: "Marker = warning level " + pc(w, 0)}); }},
+    html: () => { const w = +CFG.params["sd.sla_warn"] || 0.9, v = V.tk.slaPct; return vzGaugeCard("c3", "Ticket SLA", v, {lo: 0, hi: 1, target: w, label: "Ticket SLA", sub: v == null ? "no data" : v >= w ? "within target" : "below warning", note: "Marker = warning level " + pc(w, 0)}); }},
   {key: "viz-gauge-link", grp: "Visual", mod: "noc", need: "net", title: "Link availability gauge", desc: "Average link availability against the SLA target", size: "c3",
     html: () => vzGaugeCard("c3", "Link availability", V.net.avail, {lo: 0, hi: 1, target: V.net.P.target, label: "Link availability", fmt: v => pc(v, 2), sub: "average", note: "Marker = target " + pc(V.net.P.target, 1)})},
   {key: "viz-gauge-devices", grp: "Visual", mod: "devices", need: "dev", title: "Device availability gauge", desc: "Online devices out of online + down", size: "c3",
     html: () => vzGaugeCard("c3", "Device availability", V.dev.all.avail, {lo: 0, hi: 1, target: 0.95, label: "Device availability", sub: fmt(V.dev.all.down) + " down", note: "Marker = 95%"})},
-  {key: "viz-gauge-ms-servers", grp: "Visual", mod: "cctv", need: "cctv", title: "Milestone servers gauge", desc: "Milestone servers that synced without error", size: "c3",
-    html: () => vzGaugeCard("c3", "Milestone servers", V.cctv.srv.total ? V.cctv.srv.ok / V.cctv.srv.total : null, {lo: 0, hi: 1, target: 1, label: "Servers syncing", sub: fmt(V.cctv.srv.ok) + " of " + fmt(V.cctv.srv.total), note: "Marker = all servers" + (V.cctv.srv.failed.length ? "<br>Not syncing: " + V.cctv.srv.failed.map(esc).join(", ") : "")})},
-  {key: "viz-gauge-cameras", grp: "Visual", mod: "cctv", need: "cctv", title: "Cameras online gauge", desc: "Cameras online out of online + offline (Zabbix status)", size: "c3",
+  {key: "viz-gauge-ms-servers", grp: "Visual", mod: "cctv", need: "cctv", title: "Surveillance servers gauge", desc: "Video surveillance servers that synced without error", size: "c3",
+    html: () => vzGaugeCard("c3", "Video Surveillance", V.cctv.srv.total ? V.cctv.srv.ok / V.cctv.srv.total : null, {lo: 0, hi: 1, target: 1, label: "Servers syncing", sub: fmt(V.cctv.srv.ok) + " of " + fmt(V.cctv.srv.total), note: "Marker = all servers" + (V.cctv.srv.failed.length ? "<br>Not syncing: " + V.cctv.srv.failed.map(esc).join(", ") : "")})},
+  {key: "viz-gauge-cameras", grp: "Visual", mod: "cctv", need: "cctv", title: "Cameras online gauge", desc: "Cameras online out of online + offline", size: "c3",
     html: () => { const z = V.cctv.zbx, on = z.up + z.other; return vzGaugeCard("c3", "Cameras online", on + z.down ? on / (on + z.down) : null, {lo: 0, hi: 1, target: 0.95, label: "Cameras online", sub: fmt(on) + " online · " + fmt(z.down) + " offline", note: "Marker = 95%"}); }},
-  {key: "viz-gauge-recording", grp: "Visual", mod: "cctv", need: "cctv", title: "Milestone recording gauge", desc: "Cameras recording centrally out of enabled cameras", size: "c3",
-    html: () => vzGaugeCard("c3", "Milestone recording", V.cctv.camEnabled ? V.cctv.recording / V.cctv.camEnabled : null, {lo: 0, hi: 1, label: "Recording centrally", sub: fmt(V.cctv.recording) + " of " + fmt(V.cctv.camEnabled), note: "Interconnect cameras record on their own site"})},
+  {key: "viz-gauge-recording", grp: "Visual", mod: "cctv", need: "cctv", title: "Camera recording gauge", desc: "Cameras recording centrally out of enabled cameras", size: "c3",
+    html: () => vzGaugeCard("c3", "Camera recording", V.cctv.camEnabled ? V.cctv.recording / V.cctv.camEnabled : null, {lo: 0, hi: 1, label: "Recording centrally", sub: fmt(V.cctv.recording) + " of " + fmt(V.cctv.camEnabled), note: "Interconnect cameras record on their own site"})},
   {key: "viz-donut-devices", grp: "Visual", mod: "devices", need: "dev", title: "Device status mix", desc: "Online, down, interface issue, maintenance, disabled", size: "c4",
     html: () => { const A = V.dev.all; return panel("c4", "Device status mix", "", vzDonut([{k: "Online", v: A.up, c: VZC.good}, {k: "Down", v: A.down, c: VZC.crit}, {k: "Interface issue", v: A.deg || 0, c: VZC.warn}, {k: "Maintenance", v: A.maint || 0, c: VZC.s1}, {k: "Disabled", v: A.off || 0, c: VZC.low}], {center: A.avail != null ? pc(A.avail, 0) : "–", sub: "online", label: "Device status"})); }},
-  {key: "viz-donut-cameras", grp: "Visual", mod: "cctv", need: "cctv", title: "Camera status (Zabbix)", desc: "Cameras online, offline, or not in Zabbix", size: "c4",
-    html: () => { const z = V.cctv.zbx; return panel("c4", "Camera status (Zabbix)", "", vzDonut([{k: "Online", v: z.up + z.other, c: VZC.good}, {k: "Offline", v: z.down, c: VZC.crit}, {k: "No status", v: z.none, c: VZC.low}], {sub: "cameras", label: "Camera status"})); }},
+  {key: "viz-donut-cameras", grp: "Visual", mod: "cctv", need: "cctv", title: "Camera status", desc: "Cameras online, offline, or unmonitored", size: "c4",
+    html: () => { const z = V.cctv.zbx; return panel("c4", "Camera status", "", vzDonut([{k: "Online", v: z.up + z.other, c: VZC.good}, {k: "Offline", v: z.down, c: VZC.crit}, {k: "No status", v: z.none, c: VZC.low}], {sub: "cameras", label: "Camera status"})); }},
   {key: "viz-donut-xdr", grp: "Visual", mod: "xdr", need: "xdr", title: "XDR alerts by severity", desc: "Share of XDR alerts per severity", size: "c4",
     html: () => panel("c4", "XDR alerts by severity", "", vzDonut((V.xdr.bySev || []).map(x => ({k: (XSEV[x.k] || [x.k])[0], v: x.n, c: {critical: VZC.crit, high: VZC.sev, medium: VZC.warn, low: VZC.low}[x.k] || VZC.low})), {sub: "alerts", label: "XDR severity"}))},
   {key: "viz-donut-tickets", grp: "Visual", mod: "servicedesk", need: "tk", title: "Ticket status", desc: "Closed against still open", size: "c4",

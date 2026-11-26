@@ -382,7 +382,7 @@ AUDIT_MAX_EXPORT = 200000
 _SECRET_KEY = ("pass", "token", "secret", "key", "hash", "url")
 
 
-def _audit_where(frm: date | None, to: date | None, who: str, q: str):
+def _audit_where(frm: date | None, to: date | None, who: str, q: str, known_users: set[str] | None = None):
     from datetime import time, timedelta
     from sqlalchemy import or_
     from ..models import AuditLog
@@ -392,7 +392,10 @@ def _audit_where(frm: date | None, to: date | None, who: str, q: str):
     if to:
         w.append(AuditLog.at < datetime.combine(to + timedelta(days=1), time.min))
     if who:
-        w.append(AuditLog.username == who)
+        if who == "(unknown)" and known_users is not None:
+            w.append(AuditLog.username.not_in(sorted(known_users)))
+        else:
+            w.append(AuditLog.username == who)
     if q.strip():
         like = "%" + q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         w.append(or_(AuditLog.action.ilike(like, escape="\\"), AuditLog.username.ilike(like, escape="\\")))
@@ -412,11 +415,15 @@ def _mask(d):
 def audit_list(frm: date | None = None, to: date | None = None, who: str = "", q: str = "", limit: int = 100, offset: int = 0, db: Session = Depends(get_db)):
     from sqlalchemy import func
     from ..models import AuditLog
-    w = _audit_where(frm, to, who, q)
+    known = {u for (u,) in db.execute(select(User.username))} | {"system"}
+    w = _audit_where(frm, to, who, q, known)
     total = db.scalar(select(func.count()).select_from(AuditLog).where(*w)) or 0
     rows = db.scalars(select(AuditLog).where(*w).order_by(AuditLog.at.desc(), AuditLog.id.desc()).limit(max(1, min(limit, 500))).offset(max(0, offset)))
-    users = [u for (u,) in db.execute(select(AuditLog.username).distinct().order_by(AuditLog.username))]
-    return {"total": total, "users": users, "rows": [{"id": r.id, "at": r.at.isoformat(), "by": r.username, "t": r.action, "ip": (r.detail or {}).get("ip") if isinstance(r.detail, dict) else None} for r in rows]}
+    raw_u = {u for (u,) in db.execute(select(AuditLog.username).distinct())}
+    users = sorted(u for u in raw_u if u in known)
+    if any(u not in known for u in raw_u):
+        users.append("(unknown)")
+    return {"total": total, "users": users, "rows": [{"id": r.id, "at": r.at.isoformat(), "by": r.username if r.username in known else "(unknown)", "t": r.action, "ip": (r.detail or {}).get("ip") if isinstance(r.detail, dict) else None} for r in rows]}
 
 
 @router.get("/audit/export")
@@ -429,7 +436,8 @@ def audit_export(frm: date | None = None, to: date | None = None, who: str = "",
     from sqlalchemy import func
     from ..models import AuditLog
     cfg = load_config(db)
-    w = _audit_where(frm, to, who, q)
+    known = {u for (u,) in db.execute(select(User.username))} | {"system"}
+    w = _audit_where(frm, to, who, q, known)
     cell = lambda v: ("'" + v) if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
     n = db.scalar(select(func.count()).select_from(AuditLog).where(*w)) or 0
     audit(db, user.username, f"Mengekspor audit log ({min(n, AUDIT_MAX_EXPORT)} baris)", {"from": str(frm or ""), "to": str(to or ""), "user": who, "q": q}, cfg.p("tz_offset_hours", 7))
@@ -491,18 +499,50 @@ def admin_todo(db: Session = Depends(get_db)):
 
 @router.get("/status")
 def admin_status(db: Session = Depends(get_db)):
-    from ..models import DataSource, SyncLog
+    from datetime import timedelta
+    from sqlalchemy import func
+    from ..models import DataSource, SyncLog, PrtgHourly, SocDay
+    from ..ingest import milestone as MS_ING
     cfg = load_config(db)
     now, rows = cfg.now(), []
+    d30 = now.date() - timedelta(days=29)
+    prtg_days = db.scalar(select(func.count(func.distinct(func.date(PrtgHourly.ts)))).where(PrtgHourly.ts >= datetime.combine(d30, datetime.min.time()))) or 0
+    soc_days = db.scalar(select(func.count(func.distinct(SocDay.day))).where(SocDay.day >= d30)) or 0
     for s in db.scalars(select(DataSource).order_by(DataSource.label)):
         age = int((now - s.last_ok_at).total_seconds() / 60) if s.last_ok_at else None
-        sched = bool((s.config or {}).get("schedule"))
-        limit = 13 * 60 if sched else (s.interval_min or 60) * 3 + 5
-        state = "off" if not s.enabled or s.mode != "api" else "crit" if s.last_error else "warn" if age is None or age > limit else "ok"
+        sched = (s.config or {}).get("schedule") or []
+        limit = int((24 / max(1, len(sched)) + 1) * 60) if sched else (s.interval_min or 60) * 3 + 5
         last = db.scalar(select(SyncLog).where(SyncLog.source == s.label).order_by(SyncLog.id.desc()).limit(1))
-        rows.append({"key": s.key, "label": s.label, "mode": s.mode, "enabled": s.enabled, "interval": s.interval_min, "schedule": (s.config or {}).get("schedule") or [], "last_ok": s.last_ok_at.isoformat() if s.last_ok_at else None,
-                     "age_min": age, "error": s.last_error, "state": state, "last_msg": last.message[:200] if last else "", "last_rows": last.rows if last else 0})
-    logs = [{"at": x.at.isoformat(), "source": x.source, "ok": x.ok, "rows": x.rows, "ms": x.ms, "msg": x.message[:160]} for x in db.scalars(select(SyncLog).order_by(SyncLog.id.desc()).limit(30))]
+        last_msg = last.message[:200] if last else ""
+        sync_pct, sync_detail = None, ""
+        partial = False
+        if s.enabled and s.mode == "api":
+            if s.key == "milestone":
+                srvs = MS_ING.servers(s.config or {})
+                if srvs:
+                    err_map = (s.config or {}).get("server_errors") or (s.config or {}).get("server_status") or {}
+                    ok_n = sum(1 for n, _ in srvs if not (err_map.get(n) if isinstance(err_map.get(n), str) else (err_map.get(n) or {}).get("error")))
+                    sync_pct = round(ok_n / len(srvs) * 100)
+                    sync_detail = f"{ok_n}/{len(srvs)} servers"
+                    if 0 < ok_n < len(srvs):
+                        partial = True
+            elif s.key == "prtg":
+                sync_pct = min(100, round(prtg_days / 30 * 100))
+                sync_detail = f"{min(30, prtg_days)}/30 days"
+                if sync_pct < 90 or any(w in last_msg.lower() for w in ("fail", "error", "timeout", "gagal")):
+                    partial = True
+            elif s.key == "panorama":
+                sync_pct = min(100, round(soc_days / 30 * 100))
+                sync_detail = f"{min(30, soc_days)}/30 days"
+                if sync_pct < 90 or any(w in last_msg.lower() for w in ("fail", "error", "timeout", "gagal")):
+                    partial = True
+            else:
+                sync_pct = 0 if s.last_error else (100 if s.last_ok_at else 0)
+                sync_detail = "synced" if sync_pct == 100 else "pending"
+        state = "off" if not s.enabled or s.mode != "api" else "crit" if s.last_error else "partial" if partial else "warn" if age is None or age > limit else "ok"
+        rows.append({"key": s.key, "label": s.label, "mode": s.mode, "enabled": s.enabled, "interval": s.interval_min, "schedule": sched, "last_ok": s.last_ok_at.isoformat() if s.last_ok_at else None,
+                     "age_min": age, "error": s.last_error, "state": state, "sync_pct": sync_pct, "sync_detail": sync_detail, "last_msg": last_msg, "last_rows": last.rows if last else 0})
+    logs = [{"at": x.at.isoformat(), "source": x.source, "ok": x.ok, "partial": bool(x.ok and any(w in (x.message or "").lower() for w in ("fail", "error", "timeout", "gagal"))), "rows": x.rows, "ms": x.ms, "msg": x.message[:160]} for x in db.scalars(select(SyncLog).order_by(SyncLog.id.desc()).limit(30))]
     return {"sources": rows, "log": logs}
 
 

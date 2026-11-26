@@ -48,6 +48,24 @@ function delta(cur, prev, o = {}) {
   return `<span class="dl ${good == null ? "flat" : good ? "good" : "bad"}">${d > 0 ? "▲" : "▼"} ${txt}</span>`;
 }
 const kpi = (l, v, d, o = {}) => `<div class="kpi ${o.cls || ""}"><span class="lbl">${l}${o.tip ? info(o.tip) : ""}</span><span class="v">${v}</span><span class="d">${o.dl || ""}${d || ""}</span></div>`;
+const _TBLP = {};
+let _TBLSEQ = 0;
+function _tblRender(id) {
+  const st = _TBLP[id]; if (!st) return "";
+  const {H, R, isN, cell, ps, tall, auto} = st, pages = Math.max(1, Math.ceil(R.length / ps));
+  st.p = Math.max(0, Math.min(st.p, pages - 1));
+  const a = st.p * ps, b = Math.min(R.length, a + ps), slice = R.slice(a, b);
+  const body = slice.map(r => `<tr>${r.map((c, i) => typeof c === "string" && !isN[i] && c.length > 48 ? `<td class="t cut" data-l="${esc(H[i])}" title="${esc(c)}">${esc(c)}</td>` : `<td class="${isN[i] ? "r num" : "t" + (typeof c === "string" && c.length <= 28 ? " nw" : "")}" data-l="${esc(H[i])}">${cell(c)}</td>`).join("")}</tr>`).join("");
+  const pag = pages > 1 ? `<div class="tpag"><span class="sub">Showing ${fmt(a + 1)}–${fmt(b)} of ${fmt(R.length)} rows</span><span class="acts"><button type="button" class="btn ghost sm" data-tpag="${id}" data-tp="${st.p - 1}"${st.p <= 0 ? " disabled" : ""}>‹ Prev</button><span class="sub num">Page ${st.p + 1} / ${pages}</span><button type="button" class="btn ghost sm" data-tpag="${id}" data-tp="${st.p + 1}"${st.p >= pages - 1 ? " disabled" : ""}>Next ›</button></span></div>` : (auto ? `<div class="sub tcount">${fmt(R.length)} rows · scroll inside the table to see more</div>` : "");
+  return `<div class="scroll ${tall || auto ? "tall" : ""}"><table class="rt"><thead><tr>${H.map((h, i) => `<th class="${isN[i] ? "r" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>${pag}`;
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-tpag]"); if (!b) return;
+  const id = b.dataset.tpag, st = _TBLP[id]; if (!st) return;
+  st.p = +b.dataset.tp || 0;
+  const w = document.querySelector(`[data-twrap="${id}"]`);
+  if (w) w.innerHTML = _tblRender(id);
+});
 function tbl(heads, rows, o = {}) {
   if (!rows.length) return `<div class="empty sm">${o.empty || "No data for this filter."}</div>`;
   const blank = c => c == null || c === "" || c === "-" || c === "–" || (typeof c === "object" && c.h != null && /^<span[^>]*>[-–\s]*<\/span>$/.test(String(c.h).trim()));
@@ -63,7 +81,13 @@ function tbl(heads, rows, o = {}) {
   }
   const isN = H.map((h, i) => R.some(r => typeof r[i] === "number") || rSet.has(i));
   const cell = c => blank(c) ? `<span class="sub">–</span>` : typeof c === "number" ? (Number.isInteger(c) ? fmt(c) : fx(c, 2)) : c.h != null ? c.h : esc(c);
-  const auto = R.length > (o.max || 12) && o.tall !== false;      // long tables scroll inside their own box instead of stretching the page
+  const auto = R.length > (o.max || 12) && o.tall !== false;
+  const ps = o.pageSize || (R.length > 100 ? 50 : R.length);
+  if (R.length > ps) {
+    const id = "t" + (++_TBLSEQ);
+    _TBLP[id] = {H, R, isN, cell, ps, p: 0, tall: !!o.tall, auto};
+    return `<div data-twrap="${id}">${_tblRender(id)}</div>`;
+  }
   return `<div class="scroll ${o.tall || auto ? "tall" : ""}"><table class="rt"><thead><tr>${H.map((h, i) => `<th class="${isN[i] ? "r" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>` + R.map(r => `<tr>${r.map((c, i) => typeof c === "string" && !isN[i] && c.length > 48 ? `<td class="t cut" data-l="${esc(H[i])}" title="${esc(c)}">${esc(c)}</td>` : `<td class="${isN[i] ? "r num" : "t" + (typeof c === "string" && c.length <= 28 ? " nw" : "")}" data-l="${esc(H[i])}">${cell(c)}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>` + (auto ? `<div class="sub tcount">${fmt(R.length)} rows · scroll inside the table to see more</div>` : "");
 }
 const dayB = arr => arr.map(x => ({label: dmon(x.date), full: dlong(x.date)}));

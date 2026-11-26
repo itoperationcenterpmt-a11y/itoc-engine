@@ -10,28 +10,28 @@ function vRingkasan() {
   const att = [], dq = [];
   if (openOld.length) att.push(["crit", `<b>${pl(openOld.length, "ticket")} open for more than ${oldD} days</b>, oldest: ${esc(openOld[0].subject)} (#${esc(openOld[0].id)}, ${fx(openOld[0].age, 0)} days).`, "servicedesk"]);
   if (badLinks.length) att.push(["crit", `<b>${badLinks.length} links below the ${pc(PAR.target, 1)} target</b>: ${badLinks.slice(0, 3).map(s => esc(s.link) + " (" + pc(s.av, 2) + ")").join(", ")}${badLinks.length > 3 ? ", …" : ""}.`, "noc"]);
-  if (hasZ && Zi.all.down) att.push(["crit", `<b>${pl(Zi.all.down, "ISP link")} down in Zabbix</b>: ${Zi.down.slice(0, 3).map(x => esc(x.loc + " · " + x.provider)).join(", ")}${Zi.down.length > 3 ? ", …" : ""}.`, "noc"]);
+  if (hasZ && Zi.all.down) att.push(["crit", `<b>${pl(Zi.all.down, "ISP link")} down</b>: ${Zi.down.slice(0, 3).map(x => esc(x.loc + " · " + x.provider)).join(", ")}${Zi.down.length > 3 ? ", …" : ""}.`, "noc"]);
   if (hiCrit) att.push(["crit", `<b>${hiCrit} high-priority handovers</b> are still open.`, "serahterima"]);
   if (R && R.chAlert) att.push(["warn", `<b>${fmt(R.chAlert)} critical/high events were alert-only</b>, not blocked by the firewall.`, "soc"]);
   if (hasD && D.all.down) att.push(["warn", `<b>${fmt(D.all.down)} devices down</b> (CCTV and Gate System), ${fmt(D.chronic)} of them for more than 30 days.`, "devices"]);
-  if (hasX && Xd.backlogCH) att.push(["warn", `<b>${Xd.backlogCH} critical/high XDR alerts</b> are still open.`, "xdr"]);
+  if (hasX && Xd.backlogCH) att.push(["warn", `<b>${Xd.backlogCH} critical/high XDR alerts</b> are still open (all periods).`, "xdr"]);
   if (hasK && Ku.down) att.push(["warn", `<b>${pl(Ku.down, "monitor")} down in Link / Web Availability</b>: ${Ku.mons.filter(m => m.status === 0).slice(0, 3).map(m => esc(m.name)).join(", ")}${Ku.down > 3 ? ", …" : ""}.`, "kuma"]);
   if (apOff > 0) att.push(["warn", `<b>${apOff} of ${Wf.apTotal} WiFi Access Points</b> are offline.`, "wifi"]);
   if (N && N.nodata) dq.push(["dq", `<b>${pl(N.nodata, "link")} with insufficient data</b> (monitoring coverage below ${pc(PAR.minCov, 0)}), not assessed against SLA.`, "noc"]);
   if (R && R.unknown && Object.keys(R.unknown).length) dq.push(["dq", `<b>Cyber Security: new values outside the parameter list</b> (${Object.entries(R.unknown).map(([k, r]) => ({type: "type", action: "action", severity: "severity"}[k]) + ": " + r.map(x => esc(x[0])).join(", ")).join("; ")})`, "soc"]);
   if (N && (N.unmappedIsp || []).length) dq.push(["dq", `<b>${N.unmappedIsp.length} links do not match any ISP</b>: ${N.unmappedIsp.slice(0, 3).map(esc).join(", ")}`, "noc"]);
-  if (hasD && (D.error || D.stale)) dq.push(["dq", `<b>Zabbix data ${D.error ? "failed to sync" : "is not up to date"}</b>. Check the connector in Admin.`, "devices"]);
+  if (hasD && (D.error || D.stale)) dq.push(["dq", `<b>Infrastructure device data ${D.error ? "failed to sync" : "is not up to date"}</b>. Check Data Sources in Admin.`, "devices"]);
   const bad = chk.filter(x => x.s === "bad" || x.s === "miss"); if (bad.length) dq.push(["dq", `<b>SOC data is incomplete</b>: ${bad.length} of ${chk.length} days unreadable or not uploaded.`, "kelengkapan"]);
   const attBody = (att.length ? `<ul class="att">${att.map(attRow).join("")}</ul>` : `<div class="empty sm">Nothing needs follow-up.</div>`) + (dq.length ? (isExec() ? `<p class="sub dqnote">Some figures are still being validated by IT Operation.</p>` : `<div class="dhead">Data health</div><ul class="att dq">${dq.map(attRow).join("")}</ul>`) : "");
   const attP = panel("c8", "Needs Attention", ctxTxt(), attBody);
 
   /* Right now (live state) and This period (follows the date filter) */
   const nowTiles = [
-    hasZ ? stile("noc", "ISP Live (Zabbix)", Zi.all.siteDown ? "crit" : Zi.all.down ? "warn" : "good", Zi.all.down ? pl(Zi.all.down, "ISP link") + " down" : "All ISP reachable", fmt(Zi.all.online) + " / " + fmt(Zi.all.total) + " up · " + fmt(Zi.all.providers) + " providers", {tip: Zi.all.dualSites ? fmt(Zi.all.dualSites) + " dual-link branches" + (Zi.all.singleRisk ? " · " + fmt(Zi.all.singleRisk) + " single-link risk" : "") : ""}) : "",
-    hasD ? stile("devices", "Devices", D.all.down ? "warn" : "good", D.all.down ? fmt(D.all.down) + " devices down" : "All online", "Availability " + (D.all.avail != null ? pc(D.all.avail, 1) : "-") + " · " + fmt(D.all.total) + " devices", {tip: D.chronic ? fmt(D.chronic) + " down for more than 30 days" : ""}) : "",
-    hasW ? stile("wifi", "WiFi", apOff ? "warn" : "good", Wf.apTotal ? (apOff ? apOff + " APs offline" : "All APs online") : "No AP data", fmt(Wf.total) + " clients connected" + (Wf.weak ? " · " + fmt(Wf.weak) + " weak signal" : ""), {tip: Wf.apTotal ? fmt(Wf.apOnline) + " of " + fmt(Wf.apTotal) + " access points online" : ""}) : "",
-    hasK ? stile("kuma", "Link / Web Availability", Ku.down ? "warn" : "good", Ku.down ? pl(Ku.down, "monitor") + " down" : "All monitors up", fmt(Ku.up) + " of " + fmt(Ku.total) + " up · availability " + (Ku.avail != null ? pc(Ku.avail, 2) : "–")) : "",
-    hasC ? stile("cctv", "Milestone", Cc.srv.failed.length ? "warn" : "good", Cc.srv.ok + " of " + Cc.srv.total + " servers syncing", fmt(Cc.zbx.up + Cc.zbx.other) + " cameras online" + (Cc.zbx.down ? " · " + fmt(Cc.zbx.down) + " offline" : "") + " · " + fmt(Cc.total) + " cameras") : "",
+    hasZ ? stile("noc", "ISP Live", Zi.all.siteDown ? "crit" : Zi.all.down ? "warn" : "good", Zi.all.down ? pl(Zi.all.down, "ISP link") + " down" : "All ISP reachable", fmt(Zi.all.online) + " / " + fmt(Zi.all.total) + " up · " + fmt(Zi.all.providers) + " providers", {tip: Zi.all.dualSites ? fmt(Zi.all.dualSites) + " dual-link branches" + (Zi.all.singleRisk ? " · " + fmt(Zi.all.singleRisk) + " single-link risk" : "") : ""}) : "",
+    hasD ? stile("devices", "Infrastructure", D.all.down ? "warn" : "good", D.all.down ? fmt(D.all.down) + " devices down" : "All online", "Availability " + (D.all.avail != null ? pc(D.all.avail, 1) : "-") + " · " + fmt(D.all.total) + " devices", {tip: D.chronic ? fmt(D.chronic) + " down for more than 30 days" : ""}) : "",
+    hasW ? stile("wifi", "Wireless / WiFi", apOff ? "warn" : "good", Wf.apTotal ? (apOff ? apOff + " APs offline" : "All APs online") : "No AP data", fmt(Wf.total) + " clients connected" + (Wf.weak ? " · " + fmt(Wf.weak) + " weak signal" : ""), {tip: Wf.apTotal ? fmt(Wf.apOnline) + " of " + fmt(Wf.apTotal) + " access points online" : ""}) : "",
+    hasK ? stile("kuma", "Web Availability", Ku.down ? "warn" : "good", Ku.down ? pl(Ku.down, "monitor") + " down" : "All monitors up", fmt(Ku.up) + " of " + fmt(Ku.total) + " up · availability " + (Ku.avail != null ? pc(Ku.avail, 2) : "–")) : "",
+    hasC ? stile("cctv", "Video Surveillance", Cc.srv.failed.length ? "warn" : "good", Cc.srv.ok + " of " + Cc.srv.total + " servers syncing", fmt(Cc.zbx.up + Cc.zbx.other) + " cameras online" + (Cc.zbx.down ? " · " + fmt(Cc.zbx.down) + " offline" : "") + " · " + fmt(Cc.total) + " cameras") : "",
     hasH ? stile("serahterima", "Handover", hiCrit ? "crit" : hoOpen.length ? "warn" : "good", hoOpen.length ? hoOpen.length + " open handovers" : "None open", hiCrit ? hiCrit + " high priority" : "all under control") : ""
   ].filter(Boolean);
   const periodTiles = [
@@ -41,7 +41,7 @@ function vRingkasan() {
     hasS || hasX ? stile("cyber", "Cyber Security", xCrit ? "crit" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "warn" : "good", xCrit ? xCrit + " critical XDR alerts" : (R && R.chAlert) || (hasX && Xd.backlogCH) ? "Needs follow-up" : "No issues", (R ? fmt(R.total) + " NDR events" : "") + (R && hasX ? " · " : "") + (hasX ? fmt(Xd.total) + " XDR alerts" : ""), {dl: R && R.ch && Rp && Rp.ch ? "Blocked " + pc(R.chBlkPct) + " " + delta(R.chBlkPct, Rp.chBlkPct, {up: true, pct: 1}) : "", spark: R ? spark(R.daily.map(x => x.critical + x.high), "--serious") : "", tip: R ? "Critical/high blocked " + (R.ch ? pc(R.chBlkPct) : "–") + " · " + fmt(R.chAlert) + " alert-only · " + okDays + "/" + chk.length + " days validated" : ""}) : ""
   ].filter(Boolean);
   const nowP = nowTiles.length ? panel("c12", "Right Now", "Live status", `<div class="stiles">${nowTiles.join("")}</div>`) : "";
-  const perP = periodTiles.length ? panel("c12", "This Period", ctxTxt(), `<div class="stiles">${periodTiles.join("")}</div>`) : "";
+  const perP = periodTiles.length ? panel("c12", "This Period", ctxTxt(), `<div class="stiles s4">${periodTiles.join("")}</div>`) : "";
   const dutyP = panel("c4", "On Duty", dlong(now.date) + " · " + shiftHours(now.shift), onDuty(now));
 
   /* Contacts change rarely, so they sit folded at the bottom */
@@ -64,7 +64,7 @@ function vRingkasan() {
   ${hasZ ? zbxIspPanels(Zi).providers() + zbxIspPanels(Zi).down().replace("panel c6", "panel c7") : ""}
   ${N ? panel("c8", "Link Downtime per Day", "Minutes per day", bars(dayB(N.daily), [{name: "Downtime (min)", c: "--crit", v: N.daily.map(x => x.down)}], {dec: 1, unit: " min", label: "Daily downtime"})) : ""}
   ${hasW ? wifiPanels(Wf).apdown() + wifiPanels(Wf).trend() : ""}
-  ${R && R.hasData ? panel("c8", "NDR · Critical and High per Day", "Palo Alto events", legend([{name: "Critical", c: "--crit"}, {name: "High", c: "--serious"}]) + bars(dayB(R.daily), [{name: "Critical", c: "--crit", v: R.daily.map(x => x.critical)}, {name: "High", c: "--serious", v: R.daily.map(x => x.high)}], {stack: true, label: "Critical and high"})) : ""}
+  ${R && R.hasData ? panel("c8", "NDR · Critical and High per Day", "Firewall / NDR events", legend([{name: "Critical", c: "--crit"}, {name: "High", c: "--serious"}]) + bars(dayB(R.daily), [{name: "Critical", c: "--crit", v: R.daily.map(x => x.critical)}, {name: "High", c: "--serious", v: R.daily.map(x => x.high)}], {stack: true, label: "Critical and high"})) : ""}
   ${R && R.hasData ? panel("c4", "NDR · Severity", "", tbl(["Severity", "Events", "Blocked"], R.sev.map(x => [x.k, x.n, pc(x.blkPct, 0)]), {r: [1, 2]})) : ""}
   ${hasX ? xdrPanels(Xd).daily() + xdrPanels(Xd).sev() : ""}
   ${!hasH ? "" : panel("c6", "Open Handovers", hoOpen.length + " items", hoList(hoOpen.slice(0, 3), true) + go("serahterima", "All handovers"))}

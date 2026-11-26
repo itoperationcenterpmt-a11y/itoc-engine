@@ -27,7 +27,7 @@ const basemapPath = (B, X, Y) => (BASEMAP || []).filter(r => r.some(([lo, la]) =
 /* The device location map uses Leaflet + OpenStreetMap. The markup only prepares a container; initDevMaps() builds the map after the page renders. */
 const DMAPS = {};
 function mapSvg(D) {
-  if (!D.map.length) return empty("No locations with coordinates yet. Add Location latitude and longitude to the host inventory in Zabbix, or fill in lat and lon in Admin → Master Data → Locations.");
+  if (!D.map.length) return empty("No locations with coordinates yet. Fill in lat and lon in Admin → Data Sources → Mapping → Locations.");
   const id = "dmap" + Object.keys(DMAPS).length + "x" + Math.random().toString(36).slice(2, 8);
   DMAPS[id] = D.map;
   return `<div class="dmapbox" id="${id}" role="img" aria-label="Device location map"></div>` + (D.noCoord.length ? `<span class="sub">No coordinates yet: ${esc(D.noCoord.slice(0, 8).join(", "))}${D.noCoord.length > 8 ? ", …" : ""}</span>` : "");
@@ -82,11 +82,11 @@ function vDevices() {
   const A = D.all, kt = S.tab !== "devices";
   if (!D.configured || !(A.total || D.byKind.length)) return grid(panel("c12", "Devices", "", `<div class="empty"><b>No device data yet</b><span>${D.error ? "Last sync failed: " + esc(D.error) : "Enter the Zabbix URL and token in Admin → Integrations → Zabbix, enable it, then click Sync now."}</span></div>`));
   const warns = [];
-  if (D.error) warns.push(`<li class="crit"><span><b>Zabbix sync failed:</b> ${esc(D.error)}</span></li>`);
-  else if (D.stale) warns.push(`<li class="warn"><span><b>Data not updated</b> since ${esc(dtime(D.updated))}. Check the Zabbix connector.</span></li>`);
-  if (D.unmapped.length) warns.push(`<li class="warn"><span><b>${D.unmapped.length} Zabbix location codes not mapped</b> (${esc(D.unmapped.slice(0, 6).map(u => u.code + " " + u.n).join(", "))}${D.unmapped.length > 6 ? ", …" : ""}). Set their locations in Admin → Master Data → Zabbix: code to location.</span></li>`);
+  if (D.error) warns.push(`<li class="crit"><span><b>Device sync failed:</b> ${esc(D.error)}</span></li>`);
+  else if (D.stale) warns.push(`<li class="warn"><span><b>Data not updated</b> since ${esc(dtime(D.updated))}. Check Data Sources in Admin.</span></li>`);
+  if (D.unmapped.length) warns.push(`<li class="warn"><span><b>${D.unmapped.length} location codes not mapped</b> (${esc(D.unmapped.slice(0, 6).map(u => u.code + " " + u.n).join(", "))}${D.unmapped.length > 6 ? ", …" : ""}). Set their locations in Admin → Data Sources → Mapping.</span></li>`);
   const oldest = D.down.find(x => x.ageH != null);
-  const kp = `<div class="kpis k6">${kpi("Devices", fmt(A.total), "")}${kpi("Online", fmt(A.up), A.avail != null ? pc(A.avail, 1) + " of the active ones" : "")}${kpi("Down", fmt(A.down), oldest ? "oldest " + durTxt(oldest.ageH) + " · " + fmt(D.chronic) + " over " + D.chronicDays + " days" : "none", {cls: A.down ? "warnv" : ""})}${kpi("Availability Now", A.avail != null ? pc(A.avail, 2) : "-", "")}${kpi("Interface Issue", fmt(A.deg || 0), "")}${kpi("Maintenance", fmt(A.maint), "disabled in Zabbix: " + fmt(A.off))}</div>`;
+  const kp = `<div class="kpis k6">${kpi("Devices", fmt(A.total), "")}${kpi("Online", fmt(A.up), A.avail != null ? pc(A.avail, 1) + " of the active ones" : "")}${kpi("Down", fmt(A.down), oldest ? "oldest " + durTxt(oldest.ageH) + " · " + fmt(D.chronic) + " over " + D.chronicDays + " days" : "none", {cls: A.down ? "warnv" : ""})}${kpi("Availability Now", A.avail != null ? pc(A.avail, 2) : "-", "")}${kpi("Interface Issue", fmt(A.deg || 0), "")}${kpi("Maintenance", fmt(A.maint), "disabled: " + fmt(A.off))}</div>`;
   const kinds = D.byKind.map(r => `<div class="strow"><b>${esc(r.k)}</b>${stBar(r)}<span class="num">${fmt(r.up)} / ${fmt(r.total)} · <span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span></span></div>`).join("");
   const locs = D.byLoc.map(r => [r.k, r.total, {h: r.down ? `<b class="crit-t">${r.down}</b>` : "0"}, r.deg || 0, r.maint, {h: `<span class="${availTone(r.avail)}">${r.avail != null ? pc(r.avail, 1) : "-"}</span>`}, {h: stBar(r)}]);
   const downByLoc = D.byLoc.filter(r => r.down).slice(0, 12).map(r => [r.k, r.down, 0, r.down + " / " + r.total]);

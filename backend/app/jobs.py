@@ -122,7 +122,7 @@ def _catch_up():
     with session_scope() as db:
         cfg = load_config(db)
         late = [s.key for s in db.query(DataSource).filter_by(enabled=True, mode="api")
-                if s.key in SYNCERS and (s.config or {}).get("schedule") and (s.last_ok_at is None or cfg.now() - s.last_ok_at > timedelta(hours=12, minutes=30))]
+                if s.key in SYNCERS and (s.config or {}).get("schedule") and (s.last_ok_at is None or cfg.now() - s.last_ok_at > timedelta(hours=24 / max(1, len((s.config or {}).get("schedule") or [])) + 0.5))]
     for key in late:
         _sched.add_job(run_source, args=[key], id="catchup:" + key, replace_existing=True)
 

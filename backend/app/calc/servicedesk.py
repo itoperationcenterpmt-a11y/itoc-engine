@@ -30,7 +30,7 @@ def derive(t, cfg: Config):
         pola = "open"
     elif T < S:
         pola = "neg"
-    elif T == S:
+    elif T == S or dur == 0:
         pola = "zero"
     else:
         pola = "x24" if round((T - S).total_seconds() / 60) % 1440 == 0 else "ok"
@@ -239,7 +239,7 @@ def calc(rows: list[list], cfg: Config, d_from: date, d_to: date, shift: int = 0
     def row(d):
         t = d["t"]
         return {"subj": t[6], "id": t[0], "loc": t[3], "cat": t[4], "tech": t[7], "prio": t[10], "status": t[15], "created": ms(t[12])}
-    R["openList"] = [{**row(d), "age": round((now - d["t"][12]).total_seconds() / 8640) / 10} for d in D if d["open"]][:15]
+    R["openList"] = [{**row(d), "age": round((now - d["t"][12]).total_seconds() / 8640) / 10} for d in D if d["open"]][:50]
     R["longest"] = [{**row(d), "days": d["dur"] / 24, "pola": polas.get(d["pola"], "")}
                     for d in sorted((d for d in D if d["dur"] is not None), key=lambda d: -d["dur"])[:25]]
     if with_list:                                               # every ticket of the selection, newest first, for the downloadable report

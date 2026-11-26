@@ -617,10 +617,18 @@ def rankings(db: Session, cfg: Config) -> dict:
 
 def site_health(db: Session, cfg: Config) -> list[dict]:
     """Health score 0 to 100 per location: link availability 45%, device availability 35%, ticket load 20% (open tickets past SLA). Worst first."""
+    from .calc.devices import _alias_map
+    from .calc import zbx_isp as ZBXISP
     today, now = cfg.now().date(), cfg.now()
     site_of = _site_of(db)
+    amap = _alias_map(db)
     sites = [s.name for s in db.scalars(select(M.Site).where(M.Site.active.is_(True)))]
-    dev = {s.id: s.device for s in db.scalars(select(M.PrtgSensor).where(M.PrtgSensor.active.is_(True)))}
+    norm_site = lambda raw: amap.get((raw or "").strip().lower()) or next((s for s in sites if s.lower() == (raw or "").strip().lower()), None)
+    dev = {}
+    for s in db.scalars(select(M.PrtgSensor).where(M.PrtgSensor.active.is_(True))):
+        ns = norm_site(s.device) or s.device
+        if ns:
+            dev[s.id] = ns
     nsens: dict = {}
     for d in dev.values():
         nsens[d] = nsens.get(d, 0) + 1
@@ -628,6 +636,9 @@ def site_health(db: Session, cfg: Config) -> list[dict]:
     for sid, s in _daily_down(db, today - timedelta(days=7), today + timedelta(days=1)).items():
         if sid in dev:
             down[dev[sid]] = down.get(dev[sid], 0) + sum(s.values())
+    # Supplement with live Zabbix ISP-* availability per location when PRTG has no mapped sensor
+    zisp = ZBXISP.build(db, cfg, today - timedelta(days=6), today)
+    zisp_avail = {r["k"]: r["avail"] for r in zisp.get("byLoc", []) if r.get("avail") is not None}
     tot: dict = {}
     dn: dict = {}
     for code, status in db.execute(select(M.ZbxHost.code, M.ZbxHost.status)):
@@ -637,15 +648,16 @@ def site_health(db: Session, cfg: Config) -> list[dict]:
             dn[s] = dn.get(s, 0) + (1 if status == "down" else 0)
     over: dict = {}
     for site, sn, cre, hold in db.execute(select(M.Ticket.site, M.Ticket.sla_name, M.Ticket.created_at, M.Ticket.onhold_h).where(M.Ticket.resolved_at.is_(None), func.lower(func.coalesce(M.Ticket.status, "")).not_in(CLOSED + holding(cfg)))):
+        ns = norm_site(site) or site
         t = cfg.sla.get(sn)
-        if t and (now - cre).total_seconds() / 3600 - (hold or 0) > t:
-            over[site] = over.get(site, 0) + 1
+        if ns and t and (now - cre).total_seconds() / 3600 - (hold or 0) > t:
+            over[ns] = over.get(ns, 0) + 1
     clip = lambda v: max(0.0, min(100.0, v))
     out = []
     for s in sites:
-        if s not in nsens and s not in tot and s not in over:
+        if s not in nsens and s not in zisp_avail and s not in tot and s not in over:
             continue
-        la = 1 - down.get(s, 0) * 60 / (nsens[s] * 7 * 86400) if s in nsens else None
+        la = (1 - down.get(s, 0) * 60 / (nsens[s] * 7 * 86400)) if s in nsens else zisp_avail.get(s)
         da = 1 - dn.get(s, 0) / tot[s] if tot.get(s) else None
         parts = [(clip((la - 0.95) / 0.05 * 100) if la is not None else None, 45), (clip((da - 0.7) / 0.3 * 100) if da is not None else None, 35), (clip(100 - over.get(s, 0) * 10), 20)]
         w = sum(p[1] for p in parts if p[0] is not None)
@@ -1116,7 +1128,8 @@ def _summary(db: Session, cfg: Config, scope: str, day: date | None, kind: str, 
     noc, soc = kind in ("full", "noc"), kind in ("full", "soc")
     L = _head_lines(cfg, t, head, a, b, end, now, label, live, scope)
 
-    rows = db.scalars(select(M.Insight).where(M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a), M.Insight.status != "dismissed")
+    ins_cond = (M.Insight.resolved_at.is_(None),) if live else (M.Insight.first_seen < end, or_(M.Insight.resolved_at.is_(None), M.Insight.resolved_at > a))
+    rows = db.scalars(select(M.Insight).where(*ins_cond, M.Insight.status != "dismissed")
                       .order_by(M.Insight.severity, M.Insight.last_seen.desc()).limit(120)).all()
     seen, pick = set(), []
     for r in rows:                                              # the same title can appear for more than one key

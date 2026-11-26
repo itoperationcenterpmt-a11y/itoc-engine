@@ -139,6 +139,11 @@ function updateWallBar() {
     if (![...sel.options].some(o => +o.value === curSec)) sel.insertAdjacentHTML("afterbegin", `<option value="${curSec}">${curSec}s / slide</option>`);
     sel.value = String(curSec);
   }
+  const wp = $("wallProfSel"), P = (CFG && CFG.profiles) || [];
+  if (wp) {
+    wp.hidden = P.length < 2;
+    if (!wp.hidden) wp.innerHTML = P.map(p => `<option value="${esc(p.key)}" ${p.key === curProfile() ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+  }
   if (cd) cd.textContent = "Refresh " + WALL.refLeft + "s";
   if (prog) prog.style.width = Math.max(0, Math.min(100, (WALL.slideLeft / curSec) * 100)).toFixed(1) + "%";
 }
@@ -239,7 +244,7 @@ async function render(reload) {
   try {
     await ensurePage(tab);
     if (S.tab !== tab) return;                                   // the user moved to another page while the script loaded
-    $("view").innerHTML = VIEWS[S.tab](); $("view").dataset.tab = S.tab; if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); kpiCols(); groupSections(); devMaps(); if (WALL.on) requestAnimationFrame(() => buildWallSlides(WALL._keepIdx)); WALL._keepIdx = false;
+    $("view").innerHTML = VIEWS[S.tab](); $("view").dataset.tab = S.tab; if (S.tab === "admin" && !CFG.me.is_admin) lockAdmin(); applyLayout(); kpiCols(); groupSections(); devMaps(); if (S.tab === "jadwal") { const td = $("view").querySelector(".sched .h.today"); if (td && td.scrollIntoView) td.scrollIntoView({inline: "center", block: "nearest"}); } if (WALL.on) requestAnimationFrame(() => buildWallSlides(WALL._keepIdx)); WALL._keepIdx = false;
   } catch (e) { console.error(e); $("view").innerHTML = `<div class="grid"><section class="panel c12">${empty("Could not display the page: " + esc(e.message))}</section></div>`; }
 }
 /* Read-only Admin (role with admin_view but not is_admin): every edit control is hidden; the server still rejects changes. */
@@ -605,7 +610,7 @@ document.addEventListener("change", async e => {
   else if (t.dataset.rsec) set({rsecs: [...document.querySelectorAll("[data-rsec]:checked")].map(x => x.dataset.rsec)});
   else if (t.id === "layRole") set({layRole: t.value});
   else if (t.id === "layProf") set({layProfile: t.value});
-  else if (t.id === "profSel") { await send("/api/me/profile", {profile: t.value}, "PUT"); CFG.me.profile = t.value; render(false); }
+  else if (t.id === "profSel" || t.id === "wallProfSel") { await send("/api/me/profile", {profile: t.value}, "PUT"); CFG.me.profile = t.value; render(false); }
   else if (t.id === "wallSecSel") { WALL.customSlideSec = +t.value || 15; WALL.slideLeft = wallCfgSlide(); updateWallBar(); }
   else if (t.dataset.wf !== undefined) applyWF();
   else if (t.dataset.wp !== undefined) applyWP();

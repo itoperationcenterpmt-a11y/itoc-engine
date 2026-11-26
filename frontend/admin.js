@@ -51,8 +51,9 @@ function vRoles() {
       <label class="chk"><input type="checkbox" id="rV" ${e.admin_view ? "checked" : ""}> Can open Admin, read-only (unlocked pages only)</label></div></div>
     <div class="fld wide"><label>Data types this role can upload</label><div class="chkgrid">${ROLE_UPLOAD.map(([v, l]) => `<label class="chk"><input type="checkbox" data-rup="${v}" ${(e.uploads || []).includes("*") || (e.uploads || []).includes(v) ? "checked" : ""}> ${l}</label>`).join("")}</div></div>
     <div class="acts wide"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-role="x">Cancel</button>${e.__new || e.key === "superadmin" ? "" : `<button class="btn ghost" type="button" data-role="del">Delete</button>`}<span class="msg err" id="rMsg"></span></div></form>`;
+  const uCnt = {}; (V.users || []).forEach(u => { uCnt[u.role] = (uCnt[u.role] || 0) + 1; });
   return intMsg() + admTitle("Roles & Access", "A role controls which menus are visible, whether data can be edited, and the location scope. Each user has one role.", can ? `<button class="btn" type="button" data-role="new">+ Add Role</button>` : "") + form + `
-    <div class="rolecards">${rows.map(r => `<article class="rcard"><header><b>${esc(r.label)}</b><span class="sub">${esc(r.key)}</span>${can ? `<button class="btn ghost sm" type="button" data-role="edit" data-key="${esc(r.key)}">Edit</button>` : ""}</header>
+    <div class="rolecards">${rows.map(r => `<article class="rcard"><header><b>${esc(r.label)}</b><span class="tag">${fmt(uCnt[r.key] || 0)} users</span><span class="sub">${esc(r.key)}</span>${can ? `<button class="btn ghost sm" type="button" data-role="edit" data-key="${esc(r.key)}">Edit</button>` : ""}</header>
       <p>${esc(r.description || "No description.")}</p>
       <div class="rflags"><span>Scope: <b>${esc((ROLE_SCOPE.find(x => x[0] === r.scope) || ["", r.scope])[1])}</b></span><span>Edit: ${flag(r, "can_write")}</span><span>Admin: ${r.is_admin ? `<span class="ok-t">Full</span>` : r.admin_view ? `<b>Read-only</b>` : `<span class="sub">–</span>`}</span></div></article>`).join("")}</div>
     <h4 class="admsub">Menus per role</h4><div class="scroll"><table class="matrix"><thead><tr><th>Role</th>${mods.map(m => `<th title="${esc(modName(m.key))}">${esc(m.label)}</th>`).join("")}</tr></thead><tbody>
@@ -81,12 +82,17 @@ function vTodo() {
 /* ---------- Source status ---------- */
 function vSourceStatus() {
   if (!INT.status) { intLoad("status", "status"); return intLoading(); }
-  const S_ = INT.status, tone = {ok: ["good", "Normal"], warn: ["warn", "Stale"], crit: ["crit", "Failed"], off: ["idle", "Disabled"]};
-  const when = s => s.schedule.length ? "Daily at " + s.schedule.join(" and ") : s.mode === "api" ? "Every " + s.interval + " min" : "Manual import";
+  const S_ = INT.status, tone = {ok: ["good", "Normal"], partial: ["warn", "Partial"], warn: ["warn", "Stale"], crit: ["crit", "Failed"], off: ["idle", "Disabled"]};
+  const when = s => s.schedule.length ? (s.schedule.length === 4 ? "Every 6h (" + s.schedule.join(", ") + ")" : "Daily at " + s.schedule.join(" and ")) : s.mode === "api" ? "Every " + s.interval + " min" : "Manual import";
   const ago = m => m == null ? "–" : m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.floor(m / 60) + " h ago" : Math.floor(m / 1440) + " d ago";
-  return admTitle("Source Status", "Sync state of each source and the last 30 sync records.") + tbl(["Source", "Schedule", "Last success", "Last result", "Status"],
-    S_.sources.map(s => [s.label, when(s), ago(s.age_min), s.error ? {h: `<span class="errtx">${esc(String(s.error).slice(0, 140))}</span>`} : (s.last_msg || "–"), {h: pill(tone[s.state][0], tone[s.state][1])}]), {empty: "No sources."})
-    + `<h4 class="admsub">Sync Records</h4>` + tbl(["Time", "Source", "Result", "Rows", "Duration", "Message"], S_.log.map(l => [l.at.replace("T", " ").slice(0, 19), l.source, {h: l.ok ? pill("good", "Success") : pill("crit", "Failed")}, l.rows, (l.ms / 1000).toFixed(1) + " s", l.msg]), {r: [3, 4], tall: true, empty: "No records."});
+  const prog = s => {
+    if (s.sync_pct == null) return "–";
+    const cls = s.state === "crit" ? "crit" : s.state === "partial" || s.sync_pct < 90 ? "warn" : "";
+    return {h: `<span class="sprog" title="${esc(s.sync_detail || "")}"><span class="sprog-bar"><i class="${cls}" style="width:${Math.max(4, s.sync_pct)}%"></i></span><b class="num">${s.sync_pct}%</b><span class="sub">${esc(s.sync_detail || "")}</span></span>`};
+  };
+  return admTitle("Source Status", "Sync state, completeness progress (%), and the last 30 sync records for each technical integrator.") + tbl(["Source", "Schedule", "Sync Progress", "Last success", "Last result", "Status"],
+    S_.sources.map(s => [s.label, when(s), prog(s), ago(s.age_min), s.error ? {h: `<span class="errtx">${esc(String(s.error).slice(0, 140))}</span>`} : (s.last_msg || "–"), {h: pill((tone[s.state] || tone.off)[0], (tone[s.state] || tone.off)[1])}]), {empty: "No sources."})
+    + `<h4 class="admsub">Sync Records</h4>` + tbl(["Time", "Source", "Result", "Rows", "Duration", "Message"], S_.log.map(l => [l.at.replace("T", " ").slice(0, 19), l.source, {h: !l.ok ? pill("crit", "Failed") : l.partial ? pill("warn", "Partial") : pill("good", "Success")}, l.rows, (l.ms / 1000).toFixed(1) + " s", l.msg]), {r: [3, 4], tall: true, empty: "No records."});
 }
 
 /* ---------- events ---------- */
@@ -106,6 +112,11 @@ document.addEventListener("click", async e => {
 });
 document.addEventListener("change", e => {
   if (e.target.id === "rAll") document.querySelectorAll("[data-rmod]").forEach(c => { c.checked = e.target.checked; });
+  else if (e.target.id === "uRoleF") { S.uRoleF = e.target.value; render(false); }
+  else if (e.target.id === "uStatF") { S.uStatF = e.target.value; render(false); }
+});
+document.addEventListener("input", e => {
+  if (e.target.id === "uQ") { S.uQ = e.target.value; const pos = e.target.selectionStart; render(false); const el = $("uQ"); if (el) { el.focus(); el.setSelectionRange(pos, pos); } }
 });
 document.addEventListener("submit", async e => {
   const f = e.target.closest("[data-role-form]"), af = e.target.closest("[data-access-form]");
@@ -177,10 +188,21 @@ function vAdmin() {
   let body = "";
   const eu = S.editUser ? (V.users || []).find(x => x.u === S.editUser) : null;
   if (S.adm === "pengguna") {
-    const actN = (V.users || []).filter(u => u.active).length;
-    body = admTitle("Users", `${fmt(V.users.length)} accounts (${fmt(actN)} active). Manage user accounts, assigned roles, and password resets.`, `<button class="btn" data-adduser>+ Add User</button>`) + `${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}
+    const allU = V.users || [], actN = allU.filter(u => u.active).length;
+    const uq = (S.uQ || "").trim().toLowerCase(), ur = S.uRoleF || "", us = S.uStatF || "";
+    const filtU = allU.filter(u => (!uq || (u.name + " " + u.u + " " + (u.site || "")).toLowerCase().includes(uq)) && (!ur || u.role === ur) && (!us || (us === "active" ? u.active : !u.active)));
+    const uRows = filtU.map(u => [
+      {h: `<span style="display:inline-flex;align-items:center;gap:8px">${pav(u.name || u.u, 1)}<span><b>${esc(u.name)}</b><span class="sub" style="display:block">@${esc(u.u)}</span></span></span>`},
+      {h: `<span class="tag" title="${esc(roleAccess(u.role))}">${esc(ROLES[u.role] || u.role)}</span>`},
+      u.site || "All allowed",
+      {h: pill(u.active ? "good" : "idle", u.active ? "Active" : "Inactive")},
+      dtime(u.last),
+      {h: `<span class="acts"><button class="btn ghost sm" data-edit-user="${esc(u.u)}">Edit</button>${u.u === CFG.me.username ? "" : `<button class="btn ghost sm" data-toggle-user="${esc(u.u)}">${u.active ? "Disable" : "Enable"}</button><button class="btn ghost sm" data-reset-user="${esc(u.u)}">Reset PW</button>`}</span>`}
+    ]);
+    body = admTitle("Users", `${fmt(allU.length)} accounts (${fmt(actN)} active, ${fmt(allU.length - actN)} inactive). Manage user accounts, roles, location scopes, and password resets.`, `<button class="btn" data-adduser>+ Add User</button>`) + `${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}
     ${S.addUser || eu ? `<form id="uF" class="form formbox" style="margin-bottom:12px"><div class="fld"><label for="uU">Username *</label><input id="uU" type="text" value="${eu ? esc(eu.u) : ""}" ${eu ? "readonly" : ""}></div><div class="fld"><label for="uN">Name *</label><input id="uN" type="text" value="${eu ? esc(eu.name) : ""}"></div><div class="fld"><label for="uR">Role *</label><select id="uR" ${eu && eu.u === CFG.me.username ? "disabled" : ""}>${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${eu && eu.role === k ? "selected" : ""}>${v}</option>`).join("")}</select></div><div class="fld"><label for="uS">Branch (EOS only)</label><select id="uS"><option value="">–</option>${CFG.sites.map(x => `<option ${eu && eu.site === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div><div class="acts wide"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-adduser>Cancel</button>${eu ? "" : `<span class="sub">The initial password is random and must be changed at first login.</span>`}<span class="msg err" id="uMsg"></span></div></form>` : ""}
-    <div class="ucards">${V.users.map(u => `<article class="ucard ${u.active ? "" : "off"}"><span class="av">${esc((u.name || u.u).split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase())}</span><div class="ub"><b>${esc(u.name)}</b><span class="sub">@${esc(u.u)} · ${esc(ROLES[u.role] || u.role)}${u.site ? " · " + esc(u.site) : ""}</span><span class="sub" title="${esc(roleAccess(u.role))}">${u.active ? "Active" : "Inactive"} · last login ${esc(dtime(u.last))}</span></div><span class="acts"><button class="btn ghost sm" data-edit-user="${esc(u.u)}">Edit</button>${u.u === CFG.me.username ? "" : `<button class="btn ghost sm" data-toggle-user="${esc(u.u)}">${u.active ? "Disable" : "Enable"}</button><button class="btn ghost sm" data-reset-user="${esc(u.u)}">Reset</button>`}</span></article>`).join("")}</div>`;
+    <div class="toolbar mbar"><input type="search" id="uQ" class="msearch" value="${esc(S.uQ || "")}" placeholder="Search name, @username, or branch" aria-label="Search users"><select id="uRoleF" aria-label="Filter by role"><option value="">All roles</option>${Object.entries(ROLES).map(([k, v]) => `<option value="${esc(k)}" ${ur === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select><select id="uStatF" aria-label="Filter by status"><option value="">All statuses</option><option value="active"${us === "active" ? " selected" : ""}>Active</option><option value="inactive"${us === "inactive" ? " selected" : ""}>Inactive</option></select><span class="sub">${fmt(filtU.length)} of ${fmt(allU.length)} shown</span></div>
+    ${tbl(["User", "Role", "Location Scope", "Status", "Last Login", "Actions"], uRows, {pageSize: 15, tall: true, empty: "No users match this filter."})}`;
   }
   if (S.adm === "integrasi") body = vIntegrations();
   if (S.adm === "apikeys") body = vApiKeys();
