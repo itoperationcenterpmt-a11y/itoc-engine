@@ -183,115 +183,81 @@ document.addEventListener("submit", async e => {
   } catch (er) { BK.msg = {ok: false, t: er.message}; }
   BK.busy = false; render(false);
 });
-/* ---------- Appearance Studio & Live Multi-Menu Preview ---------- */
-const AP_SW = [["#1c5cab", "Pelindo Blue"], ["#0b2f6b", "Pelindo Navy"], ["#0891b2", "Maritime Cyan"], ["#059669", "Emerald"], ["#4f46e5", "Indigo"], ["#334155", "Slate"]];
-const AP_MENUS = [["overview", "Overview"], ["ticketing", "Ticketing"], ["network", "Network / ISP"], ["cyber", "Cyber Security"], ["devices", "Devices"], ["personnel", "Personnel"], ["report", "Report"], ["admin", "Admin"], ["login", "Login Page"], ["wall", "TV / Wall Mode"]];
-const AP = {d: null, menu: "overview", theme: "light", vp: "desktop", saving: false};
+/* ---------- Appearance: Icons & Sizing ---------- */
+const AP = {d: null, saving: false};
 function apInit() {
   const P = (CFG && CFG.params) || {};
   AP.d = {
-    accent: P["ui.accent_color"] || "#1c5cab",
-    density: P["ui.density"] || "compact",
-    radius: +(P["ui.card_radius"] ?? 14),
+    scale: +(P["ui.scale"] ?? 0.90),
+    sideIco: +(P["ui.side_icon_px"] ?? 44),
+    loginIco: +(P["ui.login_icon_px"] ?? 56),
     defTheme: P["ui.default_theme"] || "auto",
-    brand: P["ui.brand_name"] || "TERA Dashboard",
-    footer: P["ui.footer"] || "© {year} IT Operation Center",
-    publicUrl: P["ui.public_url"] || "",
-    supportPhone: P["ui.support_phone"] || "",
-    eyebrow: P["ui.login_eyebrow"] || "PT Pelindo Multi Terminal",
-    headline: P["ui.login_headline"] || "Satu layar untuk seluruh terminal",
-    tagline: P["ui.login_tagline"] || "",
-    wallSlide: +(P["ui.wall_slide_sec"] || 15),
-    wallRef: +(P["ui.wall_refresh_sec"] || 60),
-    wallTabs: Array.isArray(P["ui.wall_rotate_tabs"]) ? [...P["ui.wall_rotate_tabs"]] : ["ringkasan", "noc", "devices", "cyber"],
   };
 }
 function apPreviewHtml() {
-  const d = AP.d, m = AP.menu, pad = d.density === "spacious" ? "13px" : d.density === "comfortable" ? "10px" : "8px";
-  const st = `--p-acc:${esc(d.accent)};--p-rad:${Math.max(4, Math.min(22, +d.radius || 14))}px;--p-pad:${pad}`;
-  const cls = `ap-frame vp-${AP.vp} ${AP.theme === "dark" ? "th-dark" : ""}`;
-  const foot = (d.footer || "").replace("{year}", new Date().getFullYear());
-  if (m === "login") {
-    return `<div class="${cls}" style="${st};padding:18px;background:linear-gradient(135deg,#0f1b2d,#1c3b68)">
-      <div style="display:grid;grid-template-columns:${AP.vp === "mobile" ? "1fr" : "1.2fr 1fr"};gap:12px">
-        <div class="ap-card" style="padding:16px"><small style="color:var(--p-acc);font-weight:700">${esc(d.eyebrow)}</small><b style="font-size:16px;color:var(--p-ink);margin:4px 0">${esc(d.headline)}</b><span class="s">${esc(d.tagline || "Unified operational dashboard")}</span><div class="ap-bar" style="margin-top:8px"><i style="width:72%"></i></div></div>
-        <div class="ap-card" style="padding:16px;align-items:center;text-align:center"><img src="assets/tera-icon-col.png" alt="" style="width:42px;height:42px;object-fit:contain"><b style="font-size:13px">${esc(d.brand)}</b><div style="width:100%;height:22px;border-radius:6px;background:var(--p-sunk);border:1px solid var(--p-line)"></div><div style="width:100%;height:22px;border-radius:6px;background:var(--p-sunk);border:1px solid var(--p-line)"></div><div style="width:100%;padding:5px;border-radius:6px;background:var(--p-acc);color:#fff;font-size:10px;font-weight:700">Sign in</div></div>
-      </div></div>`;
-  }
-  const bodyByMenu = {
-    overview: `<div class="ap-grid"><div class="ap-card"><h5>Ticket SLA</h5><span class="v">87,0%</span><span class="s">within target</span></div><div class="ap-card"><h5>Link Availability</h5><span class="v">99,4%</span><span class="s">average</span></div><div class="ap-card"><h5>Infrastructure</h5><span class="v">82,8%</span><span class="s">devices up</span></div><div class="ap-card"><h5>Surveillance</h5><span class="v">91,7%</span><span class="s">servers syncing</span></div><div class="ap-card span2"><h5>Needs Attention</h5><span class="s">• 2 ISP links degraded · 15 XDR alerts open</span><div class="ap-bar"><i style="width:65%"></i></div></div><div class="ap-card span2"><h5>On Duty · Team 3</h5><span class="s">Shift Pagi · 08.00–15.00 WIB</span><div class="ap-bar"><i style="width:88%"></i></div></div></div>`,
-    ticketing: `<div class="ap-grid"><div class="ap-card"><h5>Total Tickets</h5><span class="v">1.482</span><span class="s">30 days</span></div><div class="ap-card"><h5>SLA Met</h5><span class="v">87,0%</span><span class="s">target 85%</span></div><div class="ap-card"><h5>Open Now</h5><span class="v">17</span><span class="s">2 overdue</span></div><div class="ap-card"><h5>Median Time</h5><span class="v">42 min</span><span class="s">resolution</span></div><div class="ap-card span4"><h5>Daily Tickets & Open Queue</h5><div class="ap-bar"><i style="width:78%"></i></div><span class="s">Paginated table · 50 rows/page</span></div></div>`,
-    network: `<div class="ap-grid"><div class="ap-card"><h5>ISP Links</h5><span class="v">54 / 54</span><span class="s">100% live</span></div><div class="ap-card"><h5>Dual-Link</h5><span class="v">21</span><span class="s">branches redundant</span></div><div class="ap-card"><h5>WiFi APs</h5><span class="v">169 / 186</span><span class="s">1.248 clients</span></div><div class="ap-card"><h5>Web Monitors</h5><span class="v">24 / 24</span><span class="s">all reachable</span></div><div class="ap-card span4"><h5>Branch ISP Redundancy Matrix</h5><span class="s">Astinet · Lintasarta · JLM · NEUVIZ — Dual OK / Single-Link Risk</span><div class="ap-bar"><i style="width:96%"></i></div></div></div>`,
-    cyber: `<div class="ap-grid"><div class="ap-card"><h5>NDR Events</h5><span class="v">2,47M</span><span class="s">firewall / NDR</span></div><div class="ap-card"><h5>Blocked C/H</h5><span class="v">94,2%</span><span class="s">policy active</span></div><div class="ap-card"><h5>XDR Alerts</h5><span class="v">12</span><span class="s">in period</span></div><div class="ap-card"><h5>Open C/H (all)</h5><span class="v">15</span><span class="s">endpoint backlog</span></div><div class="ap-card span4"><h5>Threat Trend & Investigation Queue</h5><div class="ap-bar"><i style="width:54%"></i></div><span class="s">NDR daily trend + XDR severity mix</span></div></div>`,
-    devices: `<div class="ap-grid"><div class="ap-card"><h5>Total Devices</h5><span class="v">1.803</span><span class="s">39 locations</span></div><div class="ap-card"><h5>Availability</h5><span class="v">82,8%</span><span class="s">live status</span></div><div class="ap-card"><h5>Cameras</h5><span class="v">1.203</span><span class="s">820 recording</span></div><div class="ap-card"><h5>PA Units</h5><span class="v">55</span><span class="s">2 offline</span></div><div class="ap-card span4"><h5>Interactive Site Map & Device Inventory</h5><div class="ap-bar"><i style="width:83%"></i></div><span class="s">Paginated table · 50 rows/page</span></div></div>`,
-    personnel: `<div class="ap-grid"><div class="ap-card span2"><h5>On Duty · Shift Pagi</h5><span class="v">Team 3</span><span class="s">5 analysts active</span></div><div class="ap-card span2"><h5>Open Handovers</h5><span class="v">3</span><span class="s">1 high priority</span></div><div class="ap-card span4"><h5>Monthly Shift Rotation Schedule</h5><span class="s">Auto-scrolled to today's date</span><div class="ap-bar"><i style="width:60%"></i></div></div></div>`,
-    report: `<div class="ap-grid"><div class="ap-card span2"><h5>Export Suite</h5><span class="v">XLSX · PDF · PPTX</span><span class="s">3-day Share Link ready</span></div><div class="ap-card span2"><h5>Shift Summary & Insights</h5><span class="v">9 Templates</span><span class="s">incl. ISP · WhatsApp ready</span></div><div class="ap-card span4"><h5>30-Day Data Completeness</h5><div class="ap-bar"><i style="width:92%"></i></div><span class="s">Validated batches & fallback uploader</span></div></div>`,
-    admin: `<div class="ap-grid"><div class="ap-card span4"><h5>Admin · Access / Data Sources / Operations / Notifications / System</h5><span class="s">Users table (search + pagination) · Source Status (% synced + Partial) · Bot & Notifier API (17 commands)</span><div class="ap-bar"><i style="width:100%"></i></div></div></div>`,
-    wall: `<div style="background:#0f1b2d;color:#fff;padding:7px 10px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;font-size:10px;margin-bottom:6px"><b>${esc(d.brand)} · NOC Wall</b><span>Slide 1/4 · ${d.wallSlide}s · Rotate (${d.wallTabs.length}) · Refresh ${d.wallRef}s</span></div><div class="ap-grid"><div class="ap-card"><h5>ISP Live</h5><span class="v">98,2%</span></div><div class="ap-card"><h5>Devices</h5><span class="v">82,8%</span></div><div class="ap-card"><h5>WiFi APs</h5><span class="v">90,9%</span></div><div class="ap-card"><h5>Surveillance</h5><span class="v">91,7%</span></div><div class="ap-card span4"><h5>Branch Dual-Link Redundancy & Health Wall</h5><div class="ap-bar"><i style="width:94%"></i></div></div></div>`,
-  };
-  const navs = AP_MENUS.slice(0, 8);
-  const title = (AP_MENUS.find(x => x[0] === m) || ["", "Overview"])[1];
-  return `<div class="${cls}" style="${st}"><div class="ap-shell">
-    ${m === "wall" ? "" : `<aside class="ap-side"><div class="ap-sbrand"><img src="assets/tera-icon-rev.png" alt=""><b>${esc(d.brand)}</b></div>${navs.map(([k, l]) => `<button type="button" class="ap-snav ${k === m ? "on" : ""}" data-ap-menu="${k}">${esc(l)}</button>`).join("")}</aside>`}
-    <div class="ap-main" style="${m === "wall" ? "grid-column:1/-1" : ""}">
-      ${m === "wall" ? "" : `<div class="ap-hd"><div><small>DASHBOARD › ${esc(title.toUpperCase())}</small><b>${esc(title)}</b></div><span class="ap-pill">● Team 3 · Pagi</span></div>`}
-      ${bodyByMenu[m] || bodyByMenu.overview}
-      <div class="ap-foot"><span>${esc(foot)}</span><span>${esc(d.density)} · ${d.radius}px</span></div>
-    </div></div></div>`;
+  const d = AP.d, pct = Math.round((+d.scale || 0.9) * 100);
+  const si = Math.max(28, Math.min(60, +d.sideIco || 44));
+  const li = Math.max(36, Math.min(88, +d.loginIco || 56));
+  const fs = (13.5 * (+d.scale || 0.9)).toFixed(1);
+  return `<div class="grid" style="gap:12px">
+    <div class="panel c6" style="background:var(--side-bg);color:#fff;border-color:rgba(255,255,255,.1)">
+      <span class="lbl" style="color:rgba(255,255,255,.6)">Sidebar Icon Preview (${si}px)</span>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 4px">
+        <img src="assets/tera-icon-rev.png" alt="TERA" style="width:${si}px;height:${si}px;object-fit:contain;flex:none">
+        <div><b style="font-size:${Math.round(si * 0.42)}px;letter-spacing:.04em;display:block;line-height:1.1">TERA</b><span style="font-size:11px;opacity:.75">Dashboard · IT Operation Center</span></div>
+      </div>
+    </div>
+    <div class="panel c6" style="align-items:center;text-align:center;justify-content:center">
+      <span class="lbl">Login Logo Preview (${li}px)</span>
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:6px 0">
+        <img src="assets/tera-icon-col.png" alt="TERA" style="width:${li}px;height:${li}px;object-fit:contain">
+        <div style="text-align:left"><b style="font-size:${Math.round(li * 0.36)}px;letter-spacing:.03em;display:block;line-height:1.1">TERA</b><span class="sub">Dashboard</span></div>
+      </div>
+    </div>
+    <div class="panel c12">
+      <span class="lbl">UI Scale Preview (${pct}% · Base text ${fs}px)</span>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;font-size:${fs}px">
+        <div style="padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--sunken)"><small class="sub" style="display:block">TICKET SLA</small><b class="num" style="font-size:1.5em">87,0%</b></div>
+        <div style="padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--sunken)"><small class="sub" style="display:block">LINK AVAILABILITY</small><b class="num" style="font-size:1.5em">99,93%</b></div>
+        <div style="padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--sunken)"><small class="sub" style="display:block">DEVICES ONLINE</small><b class="num" style="font-size:1.5em">81,3%</b></div>
+      </div>
+    </div>
+  </div>`;
 }
 function vAppearance() {
   if (!AP.d) apInit();
-  const d = AP.d, rotTabs = [["ringkasan", "Overview"], ["servicedesk", "Ticketing"], ["network", "Network"], ["noc", "ISP"], ["wifi", "WiFi"], ["cyber", "Cyber Security"], ["devices", "Devices"], ["cctv", "Milestone"]];
-  return admTitle("Appearance & Theme Studio", "Configure brand identity, accent color, UI density, card radius, login copy, and TV/Wall slideshow settings with live multi-menu preview.", `<button type="button" class="btn ghost sm" data-ap="reset">Reset Defaults</button>`) + intMsg() +
+  const d = AP.d;
+  return admTitle("Appearance (Icons & Sizing)", "Adjust brand icon sizes and global UI zoom scale across all menus.", `<button type="button" class="btn ghost sm" data-ap="reset">Reset Defaults</button>`) + intMsg() +
     `<div class="grid" style="margin-top:4px">
       <form class="panel c5 intform" data-ap-form>
-        <header><h2>Visual &amp; Theme Settings</h2></header>
-        <div class="fld wide"><label>Accent Color</label><div class="ap-swatches">${AP_SW.map(([hex, nm]) => `<button type="button" class="ap-sw ${d.accent.toLowerCase() === hex ? "on" : ""}" style="background:${hex}" data-ap-color="${hex}" title="${esc(nm)}" aria-label="${esc(nm)}"></button>`).join("")}<input type="color" id="apColor" data-ap-f="accent" value="${esc(d.accent)}" style="width:36px;height:28px;padding:1px;border-radius:6px;cursor:pointer"><span class="sub num">${esc(d.accent)}</span></div></div>
-        <div class="fld"><label for="apDen">UI Density (All Menus)</label><select id="apDen" data-ap-f="density">${[["compact", "Compact (100% zoom ideal)"], ["comfortable", "Comfortable"], ["spacious", "Spacious"]].map(([k, l]) => `<option value="${k}" ${d.density === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-        <div class="fld"><label for="apRad">Card Corner Radius: <b class="num">${d.radius}px</b></label><input id="apRad" type="range" min="6" max="22" step="2" data-ap-f="radius" value="${d.radius}"></div>
+        <header><h2>Icons &amp; UI Size</h2></header>
+        <div class="fld"><label for="apScale">Global UI Scale (Zoom Level)</label><select id="apScale" data-ap-f="scale">${[[0.80, "80% · Extra Compact"], [0.85, "85% · Compact"], [0.90, "90% · Balanced (Recommended)"], [0.95, "95% · Comfortable"], [1.00, "100% · Standard"]].map(([k, l]) => `<option value="${k}" ${Math.abs((+d.scale || 0.9) - k) < 0.02 ? "selected" : ""}>${l}</option>`).join("")}</select><span class="sub">Controls overall typography and card density at 100% browser zoom.</span></div>
+        <div class="fld"><label for="apSideIco">Sidebar Icon Size: <b class="num">${d.sideIco}px</b></label><input id="apSideIco" type="range" min="28" max="60" step="2" data-ap-f="sideIco" value="${d.sideIco}"></div>
+        <div class="fld"><label for="apLoginIco">Login Logo Size: <b class="num">${d.loginIco}px</b></label><input id="apLoginIco" type="range" min="36" max="88" step="4" data-ap-f="loginIco" value="${d.loginIco}"></div>
         <div class="fld"><label for="apTh">Default Theme (New Sessions)</label><select id="apTh" data-ap-f="defTheme">${[["auto", "Auto (follow OS)"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => `<option value="${k}" ${d.defTheme === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-        <h4 class="admsub" style="margin:8px 0 4px">Branding &amp; Login Page</h4>
-        <div class="fld"><label for="apBrand">Brand Name</label><input id="apBrand" type="text" data-ap-f="brand" value="${esc(d.brand)}"></div>
-        <div class="fld"><label for="apFoot">Footer Text ({year} = current year)</label><input id="apFoot" type="text" data-ap-f="footer" value="${esc(d.footer)}"></div>
-        <div class="fld"><label for="apUrl">Public URL (used in Shift Summary links)</label><input id="apUrl" type="url" data-ap-f="publicUrl" value="${esc(d.publicUrl)}"></div>
-        <div class="fld"><label for="apEye">Login Eyebrow</label><input id="apEye" type="text" data-ap-f="eyebrow" value="${esc(d.eyebrow)}"></div>
-        <div class="fld"><label for="apHl">Login Headline</label><input id="apHl" type="text" data-ap-f="headline" value="${esc(d.headline)}"></div>
-        <div class="fld"><label for="apTag">Login Tagline</label><input id="apTag" type="text" data-ap-f="tagline" value="${esc(d.tagline)}"></div>
-        <h4 class="admsub" style="margin:8px 0 4px">TV / Wall Slideshow Defaults</h4>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="fld"><label for="apWs">Slide Duration (sec)</label><input id="apWs" type="number" min="5" max="120" data-ap-f="wallSlide" value="${d.wallSlide}"></div><div class="fld"><label for="apWr">Auto-Refresh (sec)</label><input id="apWr" type="number" min="15" max="600" data-ap-f="wallRef" value="${d.wallRef}"></div></div>
-        <div class="fld"><label>Rotating Menus in Wall Mode</label><div class="chkgrid">${rotTabs.map(([k, l]) => `<label class="chk"><input type="checkbox" data-ap-rot="${k}" ${d.wallTabs.includes(k) ? "checked" : ""}> ${esc(l)}</label>`).join("")}</div></div>
         <div class="acts" style="margin-top:6px"><button class="btn" type="submit"${AP.saving ? " disabled" : ""}>${AP.saving ? "Saving…" : "Save Appearance"}</button></div>
       </form>
       <section class="panel c7">
-        <header><h2>Live Preview (All Menus)</h2>
-          <div class="acts"><div class="seg">${[["light", "Light"], ["dark", "Dark"]].map(([k, l]) => `<button type="button" data-ap-th="${k}" aria-pressed="${AP.theme === k}">${l}</button>`).join("")}</div><div class="seg">${[["desktop", "Desktop"], ["tablet", "Tablet"], ["mobile", "Mobile"]].map(([k, l]) => `<button type="button" data-ap-vp="${k}" aria-pressed="${AP.vp === k}">${l}</button>`).join("")}</div></div>
-        </header>
-        <div class="chips sm">${AP_MENUS.map(([k, l]) => `<button type="button" class="chip" data-ap-menu="${k}" aria-pressed="${AP.menu === k}">${esc(l)}</button>`).join("")}</div>
-        <div class="ap-stage" id="apStage">${apPreviewHtml()}</div>
+        <header><h2>Live Preview</h2></header>
+        <div id="apStage">${apPreviewHtml()}</div>
       </section>
     </div>`;
 }
 document.addEventListener("click", async e => {
-  const m = e.target.closest("[data-ap-menu]"); if (m) { AP.menu = m.dataset.apMenu; render(false); return; }
-  const th = e.target.closest("[data-ap-th]"); if (th) { AP.theme = th.dataset.apTh; render(false); return; }
-  const vp = e.target.closest("[data-ap-vp]"); if (vp) { AP.vp = vp.dataset.apVp; render(false); return; }
-  const sw = e.target.closest("[data-ap-color]"); if (sw && AP.d) { AP.d.accent = sw.dataset.apColor; render(false); return; }
   const rs = e.target.closest('[data-ap="reset"]');
-  if (rs && AP.d) { AP.d.accent = "#1c5cab"; AP.d.density = "compact"; AP.d.radius = 14; AP.d.defTheme = "auto"; AP.d.wallSlide = 15; AP.d.wallRef = 60; render(false); }
+  if (rs && AP.d) { AP.d.scale = 0.90; AP.d.sideIco = 44; AP.d.loginIco = 56; AP.d.defTheme = "auto"; render(false); }
 });
 document.addEventListener("input", e => {
   const f = e.target.dataset && e.target.dataset.apF; if (!f || !AP.d) return;
   AP.d[f] = e.target.type === "range" || e.target.type === "number" ? +e.target.value : e.target.value;
   const st = $("apStage"); if (st) st.innerHTML = apPreviewHtml();
+  const lbl = e.target.previousElementSibling && e.target.previousElementSibling.querySelector("b");
+  if (lbl && e.target.type === "range") lbl.textContent = AP.d[f] + "px";
 });
 document.addEventListener("change", e => {
-  if (e.target.dataset && e.target.dataset.apRot && AP.d) {
-    const k = e.target.dataset.apRot;
-    AP.d.wallTabs = e.target.checked ? [...new Set([...AP.d.wallTabs, k])] : AP.d.wallTabs.filter(x => x !== k);
+  if (e.target.dataset && e.target.dataset.apF && AP.d) {
+    AP.d[e.target.dataset.apF] = ["scale", "sideIco", "loginIco"].includes(e.target.dataset.apF) ? +e.target.value : e.target.value;
     const st = $("apStage"); if (st) st.innerHTML = apPreviewHtml();
-  } else if (e.target.dataset && e.target.dataset.apF && AP.d) {
-    AP.d[e.target.dataset.apF] = e.target.type === "number" ? +e.target.value : e.target.value;
-    render(false);
   }
 });
 document.addEventListener("submit", async e => {
@@ -299,15 +265,12 @@ document.addEventListener("submit", async e => {
   e.preventDefault(); e.stopImmediatePropagation();
   AP.saving = true; render(false);
   const d = AP.d, pairs = [
-    ["ui.accent_color", d.accent], ["ui.density", d.density], ["ui.card_radius", +d.radius || 14], ["ui.default_theme", d.defTheme],
-    ["ui.brand_name", d.brand.trim() || "TERA Dashboard"], ["ui.footer", d.footer.trim()], ["ui.public_url", d.publicUrl.trim()],
-    ["ui.login_eyebrow", d.eyebrow.trim()], ["ui.login_headline", d.headline.trim()], ["ui.login_tagline", d.tagline.trim()],
-    ["ui.wall_slide_sec", Math.max(5, +d.wallSlide || 15)], ["ui.wall_refresh_sec", Math.max(15, +d.wallRef || 60)], ["ui.wall_rotate_tabs", d.wallTabs],
+    ["ui.scale", +d.scale || 0.90], ["ui.side_icon_px", +d.sideIco || 44], ["ui.login_icon_px", +d.loginIco || 56], ["ui.default_theme", d.defTheme || "auto"],
   ];
   try {
     for (const [k, v] of pairs) await send("/api/admin/params/" + encodeURIComponent(k), {value: v}, "PUT");
-    await reloadConfig(); applyBrand(); $("foot").textContent = footText();
-    AP.d = null; INT.msg = {ok: true, t: "Appearance settings saved and applied across all menus."};
+    await reloadConfig(); applyAppearance(CFG.params);
+    AP.d = null; INT.msg = {ok: true, t: "Appearance settings saved and applied."};
   } catch (er) { INT.msg = {ok: false, t: er.message || String(er)}; }
   finally { AP.saving = false; render(false); }
 }, true);
@@ -317,21 +280,33 @@ function vAdmin() {
   let body = "";
   const eu = S.editUser ? (V.users || []).find(x => x.u === S.editUser) : null;
   if (S.adm === "pengguna") {
-    const allU = V.users || [], actN = allU.filter(u => u.active).length;
-    const uq = (S.uQ || "").trim().toLowerCase(), ur = S.uRoleF || "", us = S.uStatF || "";
-    const filtU = allU.filter(u => (!uq || (u.name + " " + u.u + " " + (u.site || "")).toLowerCase().includes(uq)) && (!ur || u.role === ur) && (!us || (us === "active" ? u.active : !u.active)));
+    const allU = V.users || [];
+    const uq = (S.uQ || "").trim().toLowerCase(), ur = S.uRoleF || "";
+    const filtU = allU.filter(u => (!uq || (u.name + " " + u.u + " " + (u.site || "")).toLowerCase().includes(uq)) && (!ur || u.role === ur));
     const uRows = filtU.map(u => [
-      {h: `<span style="display:inline-flex;align-items:center;gap:8px">${pav(u.name || u.u, 1)}<span><b>${esc(u.name)}</b><span class="sub" style="display:block">@${esc(u.u)}</span></span></span>`},
+      {h: `<span style="display:inline-flex;align-items:center;gap:8px">${pav(u.name || u.u, 1)}<span><b>${esc(u.name)}</b>${u.active ? "" : ` <span class="tag warn">Inactive</span>`}<span class="sub" style="display:block">@${esc(u.u)}</span></span></span>`},
       {h: `<span class="tag" title="${esc(roleAccess(u.role))}">${esc(ROLES[u.role] || u.role)}</span>`},
       u.site || "All allowed",
-      {h: pill(u.active ? "good" : "idle", u.active ? "Active" : "Inactive")},
       dtime(u.last),
-      {h: `<span class="acts"><button class="btn ghost sm" data-edit-user="${esc(u.u)}">Edit</button>${u.u === CFG.me.username ? "" : `<button class="btn ghost sm" data-toggle-user="${esc(u.u)}">${u.active ? "Disable" : "Enable"}</button><button class="btn ghost sm" data-reset-user="${esc(u.u)}">Reset PW</button>`}</span>`}
+      {h: `<button class="btn ghost sm" data-edit-user="${esc(u.u)}">Edit</button>`}
     ]);
-    body = admTitle("Users", `${fmt(allU.length)} accounts (${fmt(actN)} active, ${fmt(allU.length - actN)} inactive). Manage user accounts, roles, location scopes, and password resets.`, `<button class="btn" data-adduser>+ Add User</button>`) + `${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}
-    ${S.addUser || eu ? `<form id="uF" class="form formbox" style="margin-bottom:12px"><div class="fld"><label for="uU">Username *</label><input id="uU" type="text" value="${eu ? esc(eu.u) : ""}" ${eu ? "readonly" : ""}></div><div class="fld"><label for="uN">Name *</label><input id="uN" type="text" value="${eu ? esc(eu.name) : ""}"></div><div class="fld"><label for="uR">Role *</label><select id="uR" ${eu && eu.u === CFG.me.username ? "disabled" : ""}>${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${eu && eu.role === k ? "selected" : ""}>${v}</option>`).join("")}</select></div><div class="fld"><label for="uS">Branch (EOS only)</label><select id="uS"><option value="">–</option>${CFG.sites.map(x => `<option ${eu && eu.site === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div><div class="acts wide"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-adduser>Cancel</button>${eu ? "" : `<span class="sub">The initial password is random and must be changed at first login.</span>`}<span class="msg err" id="uMsg"></span></div></form>` : ""}
-    <div class="toolbar mbar"><input type="search" id="uQ" class="msearch" value="${esc(S.uQ || "")}" placeholder="Search name, @username, or branch" aria-label="Search users"><select id="uRoleF" aria-label="Filter by role"><option value="">All roles</option>${Object.entries(ROLES).map(([k, v]) => `<option value="${esc(k)}" ${ur === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select><select id="uStatF" aria-label="Filter by status"><option value="">All statuses</option><option value="active"${us === "active" ? " selected" : ""}>Active</option><option value="inactive"${us === "inactive" ? " selected" : ""}>Inactive</option></select><span class="sub">${fmt(filtU.length)} of ${fmt(allU.length)} shown</span></div>
-    ${tbl(["User", "Role", "Location Scope", "Status", "Last Login", "Actions"], uRows, {pageSize: 15, tall: true, empty: "No users match this filter."})}`;
+    const isSelf = eu && eu.u === CFG.me.username;
+    body = admTitle("Users", `${fmt(allU.length)} accounts. Click Edit on any user to update role, status, reset password, or delete account.`, `<button class="btn" data-adduser>+ Add User</button>`) + `${S.msg ? `<div class="msg ok">${esc(S.msg)}</div>` : ""}
+    ${S.addUser || eu ? `<form id="uF" class="form formbox" style="margin-bottom:12px">
+      <div class="fld"><label for="uU">Username *</label><input id="uU" type="text" value="${eu ? esc(eu.u) : ""}" ${eu ? "readonly" : ""}></div>
+      <div class="fld"><label for="uN">Name *</label><input id="uN" type="text" value="${eu ? esc(eu.name) : ""}"></div>
+      <div class="fld"><label for="uR">Role *</label><select id="uR" ${isSelf ? "disabled" : ""}>${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${eu && eu.role === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+      <div class="fld"><label for="uS">Branch (EOS only)</label><select id="uS"><option value="">–</option>${CFG.sites.map(x => `<option ${eu && eu.site === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></div>
+      ${eu ? `<div class="fld"><label for="uAct">Account Status</label><select id="uAct" ${isSelf ? "disabled" : ""}><option value="1" ${eu.active ? "selected" : ""}>Active</option><option value="0" ${!eu.active ? "selected" : ""}>Inactive (Disabled)</option></select></div>` : ""}
+      <div class="acts wide">
+        <button class="btn" type="submit">Save</button>
+        <button class="btn ghost" type="button" data-adduser>Cancel</button>
+        ${eu && !isSelf ? `<button class="btn ghost" type="button" data-reset-user="${esc(eu.u)}">Reset Password</button><button class="btn danger" type="button" data-del-user="${esc(eu.u)}" style="margin-left:auto">Delete User</button>` : ""}
+        ${eu ? "" : `<span class="sub">The initial password is random and must be changed at first login.</span>`}
+        <span class="msg err" id="uMsg"></span>
+      </div></form>` : ""}
+    <div class="toolbar mbar"><input type="search" id="uQ" class="msearch" value="${esc(S.uQ || "")}" placeholder="Search name, @username, or branch" aria-label="Search users"><select id="uRoleF" aria-label="Filter by role"><option value="">All roles</option>${Object.entries(ROLES).map(([k, v]) => `<option value="${esc(k)}" ${ur === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select><span class="sub">${fmt(filtU.length)} of ${fmt(allU.length)} shown</span></div>
+    ${tbl(["User", "Role", "Location Scope", "Last Login", "Actions"], uRows, {pageSize: 15, tall: true, empty: "No users match this filter."})}`;
   }
   if (S.adm === "integrasi") body = vIntegrations();
   if (S.adm === "apikeys") body = vApiKeys();

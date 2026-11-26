@@ -51,15 +51,12 @@ function applyConfig(c) {
 function applyAppearance(P) {
   if (!P) return;
   const r = document.documentElement;
-  const acc = String(P["ui.accent_color"] || "").trim();
-  if (/^#[0-9a-f]{6}$/i.test(acc)) {
-    r.style.setProperty("--accent", acc);
-    r.style.setProperty("--wash", acc + "18");
-  }
-  const rad = +P["ui.card_radius"];
-  if (rad >= 4 && rad <= 24) r.style.setProperty("--rad", rad + "px");
-  const den = String(P["ui.density"] || "compact");
-  if (["compact", "comfortable", "spacious"].includes(den)) r.dataset.density = den;
+  const sc = +P["ui.scale"];
+  if (sc >= 0.75 && sc <= 1.15) r.style.setProperty("--ui-scale", String(sc));
+  const si = +P["ui.side_icon_px"];
+  if (si >= 28 && si <= 64) r.style.setProperty("--side-ico", si + "px");
+  const li = +P["ui.login_icon_px"];
+  if (li >= 36 && li <= 96) r.style.setProperty("--login-ico", li + "px");
   const dt = String(P["ui.default_theme"] || "auto");
   try {
     if (!localStorage.getItem("itoc.theme") && (dt === "light" || dt === "dark")) r.dataset.theme = dt;

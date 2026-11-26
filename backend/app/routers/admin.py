@@ -377,6 +377,24 @@ def user_patch(username: str, body: UserPatch, db: Session = Depends(get_db), us
     return out
 
 
+@router.delete("/users/{username}")
+def user_delete(username: str, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    u = db.query(User).filter_by(username=username).one_or_none()
+    if not u:
+        raise HTTPException(404, "Account not found")
+    if u.username == user.username:
+        raise HTTPException(400, "You cannot delete your own account")
+    role = db.get(Role, u.role_key)
+    if role and role.is_admin:
+        admins = db.query(User).join(Role, User.role_key == Role.key).filter(Role.is_admin.is_(True), User.active.is_(True), User.username != u.username).count()
+        if admins < 1:
+            raise HTTPException(400, "Cannot delete the last active Super Admin account")
+    db.delete(u)
+    audit(db, user.username, "Deleted account " + u.username)
+    db.commit()
+    return {"ok": True}
+
+
 # ---------------- audit log: daftar bertahap dan ekspor CSV ----------------
 AUDIT_MAX_EXPORT = 200000
 _SECRET_KEY = ("pass", "token", "secret", "key", "hash", "url")

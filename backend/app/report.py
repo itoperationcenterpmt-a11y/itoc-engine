@@ -14,7 +14,7 @@ from .calc import soc as SOC, soc_fw as SOCFW, servicedesk as SD
 from .security import can_see
 
 PERM = {"performance": "servicedesk"}                                   # sections that share the access of another module
-SECTIONS = [("servicedesk", "Ticketing"), ("performance", "Performance"), ("noc", "Networking (PRTG)"), ("kuma", "Link / Web Availability"), ("soc", "NDR (Palo Alto)"), ("xdr", "XDR (Trend Micro)"), ("devices", "Devices"), ("cctv", "CCTV (Milestone + Zabbix)"), ("wifi", "WiFi (Ruckus)"), ("internet", "Internet Usage")]
+SECTIONS = [("servicedesk", "Ticketing"), ("performance", "Performance"), ("noc", "ISP & Network"), ("kuma", "Link / Web Availability"), ("soc", "NDR / Firewall"), ("xdr", "XDR / Endpoint"), ("devices", "Devices"), ("cctv", "Video Surveillance"), ("wifi", "Wireless / WiFi"), ("internet", "Internet Usage")]
 WEEKLY_AFTER = 31  # rentang harian lebih panjang dari ini diringkas per minggu (sama dengan dashboard Excel)
 _UK = {"type": "Threat type", "action": "Action", "severity": "Severity"}
 
@@ -210,7 +210,7 @@ def _performance(db, cfg, f, preset="standar"):
     if not T["n"]:
         s["notes"].append("No tickets in this period and filter.")
         return s
-    s["notes"].append("Tickets are counted to the technician assigned in ManageEngine; tickets from shared duty accounts count to the team on duty. Changes compare with the previous period of the same length (" + _period(cfg, pa, pb) + ").")
+    s["notes"].append("Tickets are counted to the assigned technician in the ticketing system; tickets from shared duty accounts count to the team on duty. Changes compare with the previous period of the same length (" + _period(cfg, pa, pb) + ").")
     diff = lambda a, b, k=1: None if a is None or b is None else (a - b) * k
     prev_t, prev_g = {r["name"]: r for r in P["ranking"]}, {r["name"]: r for r in P["groupRanking"]}
     rk = [r for r in T["ranking"] if r["n"]]
@@ -323,21 +323,21 @@ def _noc(db, cfg, f, preset="standar"):
     N = VW._net(db, cfg, f.d_from, f.d_to, f.shift, f.site)
     Z = ZBXISP.build(db, cfg, f.d_from, f.d_to, f.site)
     has_z = bool(Z and Z["all"]["total"])
-    s = {"key": "noc", "title": "ISP & Network SLA (PRTG + Zabbix)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    s = {"key": "noc", "title": "ISP & Network SLA", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if (not N or not N.get("links")) and not has_z:
-        s["notes"].append("No PRTG or Zabbix ISP data for this period and filter.")
+        s["notes"].append("No ISP or network availability data for this period and filter.")
         return s
     if not N or not N.get("links"):
         Za, Zh = Z["all"], Z["hist"]
         s["kpis"] = [
-            _kpi("ISP links live (Zabbix)", Za["total"], "n", f"{Za['online']} reachable, {Za['down']} down"),
-            _kpi("ISP live availability", Za["avail"], "p2", "Zabbix ISP-*"),
+            _kpi("ISP links live", Za["total"], "n", f"{Za['online']} reachable, {Za['down']} down"),
+            _kpi("ISP live availability", Za["avail"], "p2", "live reachability"),
             _kpi("Dual-link branches", Za["dualSites"], "n", f"{Za['singleRisk']} single-link risk" if Za["singleRisk"] else "full redundancy"),
-            _kpi("Zabbix ISP outages", Zh["events"], "n", f"{fmt_f(Zh['hours'], 1)} h down"),
+            _kpi("ISP outages (period)", Zh["events"], "n", f"{fmt_f(Zh['hours'], 1)} h down"),
         ]
-        s["tables"].append(_table("ISP Live Status by Provider (Zabbix)", ["Provider", "Links", "Reachable", "Down", "Live Availability"], ["t", "n", "n", "n", "p2"],
+        s["tables"].append(_table("ISP Live Status by Provider", ["Provider", "Links", "Reachable", "Down", "Live Availability"], ["t", "n", "n", "n", "p2"],
                                   [[r["k"], r["total"], r["online"], r["down"], r["avail"]] for r in Z["byProvider"]]))
-        s["tables"].append(_table("Branch ISP Redundancy Matrix (Zabbix)", ["Location", "Links", "Reachable", "Down", "Redundancy"], ["t", "n", "n", "n", "t"],
+        s["tables"].append(_table("Branch ISP Redundancy Matrix", ["Location", "Links", "Reachable", "Down", "Redundancy"], ["t", "n", "n", "n", "t"],
                                   [[r["k"], r["total"], r["online"], r["down"], r["redundancy"]] for r in Z["byLoc"]]))
         return s
     P, st = N["P"], cfg.p("net.status_labels")
@@ -384,30 +384,30 @@ def _noc(db, cfg, f, preset="standar"):
     if has_z:
         Za, Zh = Z["all"], Z["hist"]
         s["kpis"].extend([
-            _kpi("ISP links live (Zabbix)", Za["online"], "n", f"of {Za['total']} ({Za['down']} down · {Za['providers']} providers)"),
-            _kpi("Dual-link branches (Zabbix)", Za["dualSites"], "n", f"{Za['singleRisk']} single-link risk" if Za["singleRisk"] else "full redundancy"),
-            _kpi("Zabbix ISP outages", Zh["events"], "n", f"{fmt_f(Zh['hours'], 1)} h down · {fmt_p(Zh['avail'], 2)} avail."),
+            _kpi("ISP links live", Za["online"], "n", f"of {Za['total']} ({Za['down']} down · {Za['providers']} providers)"),
+            _kpi("Dual-link branches", Za["dualSites"], "n", f"{Za['singleRisk']} single-link risk" if Za["singleRisk"] else "full redundancy"),
+            _kpi("ISP outages (period)", Zh["events"], "n", f"{fmt_f(Zh['hours'], 1)} h down · {fmt_p(Zh['avail'], 2)} avail."),
         ])
         pm = {r["k"]: r for r in (Zh.get("byProvider") or [])}
-        s["tables"].append(_table("ISP Live Status by Provider (Zabbix ISP-*)", ["Provider", "Links", "Reachable", "Down", "Live Avail.", "Period Outages", "Downtime (h)"],
+        s["tables"].append(_table("ISP Live Status by Provider", ["Provider", "Links", "Reachable", "Down", "Live Avail.", "Period Outages", "Downtime (h)"],
                                   ["t", "n", "n", "n", "p2", "n", "f1"],
                                   [[r["k"], r["total"], r["online"], r["down"], r["avail"], (pm.get(r["k"]) or {}).get("events", 0), (pm.get(r["k"]) or {}).get("hours", 0.0)] for r in Z["byProvider"]]))
-        s["tables"].append(_table("Branch ISP Redundancy Matrix (Zabbix ISP-*)", ["Location", "ISP Providers", "Reachable", "Down", "Redundancy"],
+        s["tables"].append(_table("Branch ISP Redundancy Matrix", ["Location", "ISP Providers", "Reachable", "Down", "Redundancy"],
                                   ["t", "t", "n", "n", "t"],
                                   [[r["k"], ", ".join(x["provider"] + (" (DOWN)" if not x["reachable"] else "") for x in r["links"]), r["online"], r["down"], r["redundancy"]] for r in _cap(Z["byLoc"], preset, 30)]))
         if Za["down"]:
-            s["attention"].append(f"{Za['down']} Zabbix ISP-* link{'s' if Za['down'] != 1 else ''} currently down")
+            s["attention"].append(f"{Za['down']} ISP link{'s' if Za['down'] != 1 else ''} currently down")
         if Za["singleRisk"]:
-            s["attention"].append(f"{Za['singleRisk']} dual-link branch{'es' if Za['singleRisk'] != 1 else ''} on single-link risk (Zabbix ISP)")
+            s["attention"].append(f"{Za['singleRisk']} dual-link branch{'es' if Za['singleRisk'] != 1 else ''} on single-link risk")
     return s
 
 
 def _soc_site(db, cfg, f):
-    """NDR for one location: the firewalls that belong to it (Panorama device names), from the per-firewall data."""
+    """NDR for one location: the firewalls that belong to it, from the per-firewall data."""
     F = SOCFW.build(db, cfg, f.d_from, f.d_to, f.site)
-    s = {"key": "soc", "title": "NDR (Palo Alto)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    s = {"key": "soc", "title": "NDR / Firewall", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not F["nFw"]:
-        s["notes"].append(f"No firewall data for {f.site} in this period. The location needs a firewall matched to it, and per-firewall data is collected from the first Panorama sync after the update.")
+        s["notes"].append(f"No firewall data for {f.site} in this period. The location needs a firewall matched to it.")
         return s
     T = F["total"]
     s["kpis"] = [_kpi("Threat events", T["events"], "n", fmt_n(F["nFw"]) + " firewall" + ("s" if F["nFw"] > 1 else "")), _kpi("Critical + High", T["ch"], "n", fmt_n(T["crit"]) + " critical"),
@@ -436,7 +436,7 @@ def _soc(db, cfg, f, preset="standar"):
         return _soc_site(db, cfg, f)
     S = VW._soc(db, cfg, f.d_from, f.d_to)
     R = S["R"]
-    s = {"key": "soc", "title": "NDR (Palo Alto)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    s = {"key": "soc", "title": "NDR / Firewall", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not R["hasData"]:
         s["notes"].append("No validated SOC data in this period.")
         return s
@@ -507,12 +507,12 @@ def _devices(db, cfg, f, preset="standar"):
     s = {"key": "devices", "title": "Devices", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     A = D["all"]
     if not D["configured"] or not A["total"]:
-        s["notes"].append("No device data from Zabbix yet." + (" Last sync failed: " + D["error"] if D["error"] else ""))
+        s["notes"].append("No infrastructure device data yet." + (" Last sync failed: " + D["error"] if D["error"] else ""))
         return s
-    s["notes"].append("Device status is a Zabbix snapshot at report time; incidents and downtime follow the report period" + (" (recorded since " + H["since"][:10] + ")" if H.get("since") else "") + ".")
-    s["kpis"] = [_kpi("Devices", A["total"], "n", "monitored from Zabbix"), _kpi("Online", A["up"], "n", fmt_p(A["avail"], 1) + " of the active ones" if A["avail"] is not None else ""),
+    s["notes"].append("Device status is a live snapshot at report time; incidents and downtime follow the report period" + (" (recorded since " + H["since"][:10] + ")" if H.get("since") else "") + ".")
+    s["kpis"] = [_kpi("Devices", A["total"], "n", "monitored devices"), _kpi("Online", A["up"], "n", fmt_p(A["avail"], 1) + " of the active ones" if A["avail"] is not None else ""),
                  _kpi("Down", A["down"], "n", f"{D['chronic']} over {D['chronicDays']} days"), _kpi("Availability Now", A["avail"], "p2", "online ÷ (online + down)"),
-                 _kpi("Interface Issue", A["deg"], "n", "ping OK, SNMP/agent unavailable"), _kpi("Maintenance", A["maint"], "n", "disabled in Zabbix: " + fmt_n(A["off"]))]
+                 _kpi("Interface Issue", A["deg"], "n", "ping OK, SNMP/agent unavailable"), _kpi("Maintenance", A["maint"], "n", "disabled: " + fmt_n(A["off"]))]
     bk, bl, bt = D["byKind"], sorted(D["byLoc"], key=lambda r: -r["down"]), D["byType"]
     s["charts"] = _pick(cfg, "devices", DEV_IDS, preset, [
         _chart("Device status", ["Online", "Down", "Interface", "Maintenance"], [{"name": "Devices", "values": [A["up"], A["down"], A["deg"], A["maint"]]}], "donut"),
@@ -524,7 +524,7 @@ def _devices(db, cfg, f, preset="standar"):
         _daily("Down incidents", [x["date"] for x in H["daily"]], [{"name": "Incidents", "values": [x["events"] for x in H["daily"]]}]),
         _top("Top 10 locations by downtime in the period (hours)", [(r["k"], r["hours"]) for r in H["byLoc"]], "Hours"),
         _top("Top 10 device types by downtime in the period (hours)", [(r["k"], r["hours"]) for r in H["byType"]], "Hours")])
-    s["kpis"] += [_kpi("Down incidents (period)", H["events"], "n", "incidents from Zabbix"), _kpi("Period downtime (hours)", H["hours"], "f0", fmt_n(H["hosts"]) + " devices affected"),
+    s["kpis"] += [_kpi("Down incidents (period)", H["events"], "n", "recorded incidents"), _kpi("Period downtime (hours)", H["hours"], "f0", fmt_n(H["hosts"]) + " devices affected"),
                   _kpi("Average recovery (hours)", H["mttr"], "f1", "resolved incidents"), _kpi("Period availability", H["avail"], "p2", "1 − downtime ÷ (devices × period)")]
     s["tables"].append(_table("Downtime per location (period)", ["Location", "Incidents", "Downtime (h)", "Devices", "Availability"], ["t", "n", "f1", "n", "p1"], [[r["k"], r["events"], r["hours"], r["hosts"], r["avail"]] for r in H["byLoc"]]))
     s["tables"].append(_table("Downtime per device type (period)", ["Type", "Incidents", "Downtime (h)", "Devices"], ["t", "n", "f1", "n"], [[r["k"], r["events"], r["hours"], r["hosts"]] for r in H["byType"]]))
@@ -538,7 +538,7 @@ def _devices(db, cfg, f, preset="standar"):
     if A["down"]:
         s["attention"].append(f"{A['down']} devices down, {D['chronic']} of them over {D['chronicDays']} days")
     if D["unmapped"]:
-        s["attention"].append(f"{len(D['unmapped'])} Zabbix location codes are not mapped to a location")
+        s["attention"].append(f"{len(D['unmapped'])} device location codes are not mapped to a location")
     return s
 
 
@@ -546,12 +546,12 @@ KUMA_IDS = ["kuma_status", "kuma_daily", "kuma_loc", "kuma_slow"]
 
 
 def _kuma(db, cfg, f, preset="standar"):
-    """Uptime Kuma monitors: status now, and availability and response time over the report period."""
+    """Link & web availability monitors: status now, and availability and response time over the report period."""
     from .calc import kuma as KUMA
     K = KUMA.build(db, cfg, f.d_from, f.d_to, f.site)
     s = {"key": "kuma", "title": "Link / Web Availability", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not K["configured"] or not K["total"]:
-        s["notes"].append("No link and web availability data from Uptime Kuma" + (f" for {f.site}" if f.site else "") + " yet." + (" Last sync failed: " + K["error"] if K["error"] else ""))
+        s["notes"].append("No link and web availability data" + (f" for {f.site}" if f.site else "") + " yet." + (" Last sync failed: " + K["error"] if K["error"] else ""))
         return s
     s["notes"].append("Status is the latest sample; availability and response time follow the report period" + (" (recorded since " + K["since"][:10] + ")" if K.get("since") else "") + ". Monitors in maintenance are not counted in availability.")
     s["kpis"] = [_kpi("Monitors", K["total"], "n", f"{fmt_n(K['up'])} up"), _kpi("Down now", K["down"], "n", f"{fmt_n(K['pending'])} pending, {fmt_n(K['maint'])} in maintenance"),
@@ -584,7 +584,7 @@ def _cctv(db, cfg, f, preset="standar"):
     from .calc import cctv as CCTV, devices as DEV
     from .calc.network import site_resolver
     every = preset == "lengkap"
-    s = {"key": "cctv", "title": "CCTV (Milestone + Zabbix)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    s = {"key": "cctv", "title": "Video Surveillance", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     to_site, names = site_resolver(db), {}
     for st in db.query(VW.M.Site).filter_by(active=True):
         for nm in VW.NET.device_names(db, st.name):
@@ -606,19 +606,18 @@ def _cctv(db, cfg, f, preset="standar"):
     srvs = [x for x in Mi["servers"] if not f.site or server_site(x["name"]) == f.site] if Mi["configured"] else []
     A = D["all"]
     if not cams and not A["total"]:
-        s["notes"].append("No CCTV data" + (f" for {f.site}" if f.site else "") + " yet: Milestone and the Zabbix CCTV devices have not reported." + (" Milestone: " + Mi["error"] if Mi.get("error") else ""))
+        s["notes"].append("No video surveillance data" + (f" for {f.site}" if f.site else "") + " yet." + (" Server sync error: " + Mi["error"] if Mi.get("error") else ""))
         return s
-    s["notes"].append("Milestone shows the cameras and recording as of the last sync; the Zabbix CCTV devices show the status now, and incidents and downtime follow the report period" + (" (recorded since " + H["since"][:10] + ")" if H.get("since") else "")
-                      + ". Milestone servers are matched to a location by name.")
+    s["notes"].append("Surveillance servers show cameras and recording as of the last sync; CCTV device status reflects the live snapshot, and incidents/downtime follow the report period" + (" (recorded since " + H["since"][:10] + ")" if H.get("since") else "") + ".")
     en, rec = [c for c in cams if c["enabled"]], [c for c in cams if c["rec"]]
     norec = [c for c in en if not c["rec"]]
     zdown = [c for c in cams if c["zbx"] == "down"]
     ok_srv = sum(1 for x in srvs if x["name"] not in Mi["serverErrors"])
-    s["kpis"] = [_kpi("Cameras (Milestone)", len(cams), "n", f"{fmt_n(sum(1 for c in cams if c['type'] == 'ptz'))} PTZ, {fmt_n(sum(1 for c in cams if c['type'] == 'fix'))} fixed"),
-                 _kpi("Recording", len(rec), "n", fmt_p(len(rec) / len(en), 1) + " of the enabled cameras" if en else ""), _kpi("Enabled but not recording", len(norec), "n", "Milestone"),
-                 _kpi("Milestone servers syncing", ok_srv, "n", f"of {fmt_n(len(srvs))}"), _kpi("CCTV devices (Zabbix)", A["total"], "n", f"{fmt_n(A['down'])} down now"),
+    s["kpis"] = [_kpi("Cameras", len(cams), "n", f"{fmt_n(sum(1 for c in cams if c['type'] == 'ptz'))} PTZ, {fmt_n(sum(1 for c in cams if c['type'] == 'fix'))} fixed"),
+                 _kpi("Recording", len(rec), "n", fmt_p(len(rec) / len(en), 1) + " of the enabled cameras" if en else ""), _kpi("Enabled, not recording", len(norec), "n", "recording check"),
+                 _kpi("Surveillance servers syncing", ok_srv, "n", f"of {fmt_n(len(srvs))}"), _kpi("CCTV devices monitored", A["total"], "n", f"{fmt_n(A['down'])} down now"),
                  _kpi("Availability now", A["avail"], "p2", "online ÷ (online + down)")]
-    s["kpis"] += [_kpi("Down incidents (period)", H["events"], "n", "Zabbix CCTV devices"), _kpi("Period downtime (hours)", H["hours"], "f0", fmt_n(H["hosts"]) + " devices affected"),
+    s["kpis"] += [_kpi("Down incidents (period)", H["events"], "n", "CCTV devices"), _kpi("Period downtime (hours)", H["hours"], "f0", fmt_n(H["hosts"]) + " devices affected"),
                   _kpi("Average recovery (hours)", H["mttr"], "f1", "resolved incidents"), _kpi("Period availability", H["avail"], "p2", "1 − downtime ÷ (devices × period)")]
     # per location: Milestone cameras by the location of their server, Zabbix devices by their own location
     loc = {}
@@ -633,43 +632,43 @@ def _cctv(db, cfg, f, preset="standar"):
     rows = sorted(loc.items(), key=lambda kv: (-kv[1]["zdown"], -kv[1]["norec"], kv[0]))
     by_srv = sorted(((x["name"], x["cameras"] - x["rec"]) for x in srvs), key=lambda r: -r[1])
     s["charts"] = _pick(cfg, "cctv", CCTV_IDS, preset, [
-        _chart("Zabbix CCTV device status", ["Online", "Down", "Interface", "Maintenance"], [{"name": "Devices", "values": [A["up"], A["down"], A["deg"], A["maint"]]}], "donut") if A["total"] else None,
-        _chart("Milestone recording", ["Recording", "Enabled, not recording", "Disabled"], [{"name": "Cameras", "values": [len(rec), len(norec), len(cams) - len(en)]}], "donut") if cams else None,
+        _chart("CCTV device status", ["Online", "Down", "Interface", "Maintenance"], [{"name": "Devices", "values": [A["up"], A["down"], A["deg"], A["maint"]]}], "donut") if A["total"] else None,
+        _chart("Camera recording status", ["Recording", "Enabled, not recording", "Disabled"], [{"name": "Cameras", "values": [len(rec), len(norec), len(cams) - len(en)]}], "donut") if cams else None,
         _top("Top 10 locations by CCTV devices down", [(k, o["zdown"]) for k, o in rows], "Down"),
         _top("Top 10 servers by cameras not recording", by_srv, "Cameras"),
         _daily("CCTV downtime of all devices (hours)", [x["date"] for x in H["daily"]], [{"name": "Hours", "values": [x["hours"] for x in H["daily"]]}]),
         _daily("CCTV down incidents", [x["date"] for x in H["daily"]], [{"name": "Incidents", "values": [x["events"] for x in H["daily"]]}])])
-    s["tables"].append(_table("Per location (Milestone + Zabbix)", ["Location", "Cameras", "Recording", "Not recording", "Zabbix devices", "Down now", "Availability"], ["t", "n", "n", "n", "n", "n", "p1"],
+    s["tables"].append(_table("Per location", ["Location", "Cameras", "Recording", "Not recording", "CCTV devices", "Down now", "Availability"], ["t", "n", "n", "n", "n", "n", "p1"],
                               [[k, o["cam"], o["rec"], o["norec"], o["zdev"], o["zdown"], 1 - o["zdown"] / o["zdev"] if o["zdev"] else None] for k, o in _cap(rows, preset, 25)]))
-    s["tables"].append(_table("Milestone servers", ["Server", "Location", "Cameras", "Recording", "Not recording", "Down (Zabbix)", "Licences used", "Sync"], ["t", "t", "n", "n", "n", "n", "t", "t"],
+    s["tables"].append(_table("Surveillance servers", ["Server", "Location", "Cameras", "Recording", "Not recording", "Down", "Licences used", "Sync"], ["t", "t", "n", "n", "n", "n", "t", "t"],
                               [[x["name"], server_site(x["name"]), x["cameras"], x["rec"], x["cameras"] - x["rec"], x["down"], f"{x['licUsed']}/{x['licTotal']}" if x.get("licTotal") else "–", "failed" if x["name"] in Mi["serverErrors"] else "ok"] for x in srvs]))
-    s["tables"].append(_table("CCTV devices down (Zabbix)", ["Device", "Location", "Down for (h)", "Problem"], ["t", "t", "f1", "t"], [[x["name"], x["loc"], x["ageH"], x.get("problem")] for x in _cap(D["down"], preset, 30)]))
-    s["tables"].append(_table("Cameras down in Zabbix (matched in Milestone)", ["Camera", "Server", "Hardware", "IP", "Down since", "Problem"], ["t", "t", "t", "t", "t", "t"],
+    s["tables"].append(_table("CCTV devices down", ["Device", "Location", "Down for (h)", "Problem"], ["t", "t", "f1", "t"], [[x["name"], x["loc"], x["ageH"], x.get("problem")] for x in _cap(D["down"], preset, 30)]))
+    s["tables"].append(_table("Cameras offline", ["Camera", "Server", "Hardware", "IP", "Down since", "Problem"], ["t", "t", "t", "t", "t", "t"],
                               [[c["name"], c["server"], c["hw"], c["ip"], datetime.utcfromtimestamp(c["zsince"] / 1000).strftime("%d/%m %H.%M") if c["zsince"] else "–", c["zprob"]] for c in _cap(zdown, preset, 25)]))
-    s["tables"].append(_table("Cameras enabled but not recording (Milestone)", ["Camera", "Server", "Hardware", "IP", "Zabbix"], ["t", "t", "t", "t", "t"], [[c["name"], c["server"], c["hw"], c["ip"], c["zbx"] or "–"] for c in _cap(norec, preset, 25)]))
+    s["tables"].append(_table("Cameras enabled but not recording", ["Camera", "Server", "Hardware", "IP", "Status"], ["t", "t", "t", "t", "t"], [[c["name"], c["server"], c["hw"], c["ip"], c["zbx"] or "–"] for c in _cap(norec, preset, 25)]))
     s["tables"].append(_table("Downtime per location (period)", ["Location", "Incidents", "Downtime (h)", "Devices", "Availability"], ["t", "n", "f1", "n", "p1"], [[r["k"], r["events"], r["hours"], r["hosts"], r["avail"]] for r in H["byLoc"]]))
     s["tables"].append(_table("Most frequently down CCTV devices (period)", ["Device", "Incidents", "Downtime (h)"], ["t", "n", "f1"], [[r["k"], r["events"], r["hours"]] for r in H["byHost"]]))
     if A["down"]:
-        s["attention"].append(f"{A['down']} CCTV devices down in Zabbix, {D['chronic']} of them over {D['chronicDays']} days")
+        s["attention"].append(f"{A['down']} CCTV devices down, {D['chronic']} of them over {D['chronicDays']} days")
     if norec:
-        s["attention"].append(f"{len(norec)} cameras are enabled but not recording in Milestone")
+        s["attention"].append(f"{len(norec)} cameras are enabled but not recording")
     if Mi["srv"]["failed"] and not f.site:
-        s["attention"].append("Milestone servers that failed to sync: " + ", ".join(Mi["srv"]["failed"]))
+        s["attention"].append("Surveillance servers that failed to sync: " + ", ".join(Mi["srv"]["failed"]))
     if any(server_site(x["name"]) == "Unmapped" for x in srvs):
-        s["attention"].append("Some Milestone servers do not match a location (add the server name as a site alias)")
+        s["attention"].append("Some surveillance servers do not match a location (add the server name as a site alias)")
     return s
 
 
 def _wifi(db, cfg, f, preset="standar"):
-    """Client WiFi aktif dan Access Point dari Ruckus vSZ: kondisi terkini saat laporan dibuat; usage = trafik sesi yang sedang berjalan."""
+    """Active WiFi clients and Access Points: live snapshot at report time; usage follows the report period."""
     from .calc import wifi as WIFI
     W = WIFI.build(db, cfg, site=f.site, unlimited=preset == "lengkap")
     Hh = WIFI.history(db, cfg, f.d_from, f.d_to, site=f.site, every=preset == "lengkap")
-    s = {"key": "wifi", "title": "WiFi (Ruckus)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    s = {"key": "wifi", "title": "Wireless / WiFi", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if not W["configured"] or not (W["total"] or W["apTotal"]):
-        s["notes"].append("No WiFi data from Ruckus vSZ yet." + (" Last sync failed: " + W["error"] if W["error"] else ""))
+        s["notes"].append("No wireless / WiFi data yet." + (" Last sync failed: " + W["error"] if W["error"] else ""))
         return s
-    s["notes"].append("Status figures are a Ruckus vSZ snapshot at report time; usage, clients, and sessions follow the report period" + (" (recorded since " + Hh["since"][:10] + ")" if Hh.get("since") else "") + ".")
+    s["notes"].append("Status figures are a live snapshot at report time; usage, clients, and sessions follow the report period" + (" (recorded since " + Hh["since"][:10] + ")" if Hh.get("since") else "") + ".")
     s["kpis"] = [_kpi("Active clients", W["total"], "n", "connected now"), _kpi("Logged-in users", W["users"], "n", f"{fmt_n(W['named'])} clients with a username"),
                  _kpi("Access Points online", W["apOnline"], "n", f"of {fmt_n(W['apTotal'])} APs"), _kpi("Weak signal", W["weak"], "n", f"below {W['weakAt']} dBm"),
                  _kpi("Download (GB)", W["tx"] / _GB, "f1", "running sessions"), _kpi("Upload (GB)", W["rx"] / _GB, "f1", "running sessions")]
@@ -710,12 +709,12 @@ XDR_IDS = ["xdr_sev", "xdr_daily", "xdr_models", "xdr_status"]
 
 
 def _xdr(db, cfg, f, preset="standar"):
-    """Alert Workbench Trend Micro Vision One pada periode laporan (menurut waktu alert dibuat)."""
+    """XDR endpoint alerts in the report period (by alert creation time)."""
     from .calc import xdr as XDR
     X = XDR.build(db, cfg, f.d_from, f.d_to)
-    s = {"key": "xdr", "title": "XDR (Trend Micro)", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
+    s = {"key": "xdr", "title": "XDR / Endpoint", "kpis": [], "charts": [], "tables": [], "notes": [], "attention": []}
     if f.site:
-        s["notes"].append("XDR alerts are not split by location (Vision One reports the host, not the branch); the figures below cover all locations.")
+        s["notes"].append("XDR alerts are not split by location (alerts report the host, not the branch); the figures below cover all locations.")
     if not X["configured"] or not X["total"]:
         s["notes"].append("No XDR alerts in this period." + (" Last sync failed: " + X["error"] if X["error"] else ""))
         return s
@@ -800,7 +799,7 @@ def _internet(db, cfg, f, preset="standar"):
         if F["nFw"]:
             q = q.where(M.SocFwDay.fw.in_([x["fw"] for x in F["fw"]]))
         since = db.execute(q).scalar()
-        s["notes"].append("No Palo Alto traffic data" + (f" for {f.site}" if f.site else "") + " in this period." + (f" Traffic data for this selection starts on {since:%d %b %Y}." if since and since > f.d_to else ""))
+        s["notes"].append("No internet traffic data" + (f" for {f.site}" if f.site else "") + " in this period." + (f" Traffic data for this selection starts on {since:%d %b %Y}." if since and since > f.d_to else ""))
         return s
     T, d = F["total"], F["days"]
     busy = max(d, key=lambda x: x["bytes"])
@@ -825,18 +824,18 @@ _BUILD = {"servicedesk": _servicedesk, "performance": _performance, "internet": 
 # Jenis laporan (bisa diubah di Admin → Operasional → Target dan Parameter → report.kinds). sections: None = semua bagian yang boleh dilihat role.
 DEFAULT_KINDS = {
     "summary": {"label": "Summary", "desc": "Management summary: key figures and main charts of all areas", "title": "IT Operation Center - Summary Report", "subtitle": "Management overview of all areas", "prefix": "Management", "sections": None, "summary": True},
-    "noc": {"label": "Links (PRTG)", "desc": "Availability, downtime, problem links, utilization", "title": "IT Operation Center - Links (PRTG) Report", "subtitle": "Availability, downtime, and traffic of ISP links", "prefix": "Links", "sections": ["noc"]},
-    "performance": {"label": "Performance", "desc": "Per technician, team, and shift: tickets, completion, SLA, input quality, and change from the previous period", "title": "IT Operation Center - Performance Report", "subtitle": "Technician, team, and shift performance from ManageEngine tickets", "prefix": "Performance", "sections": ["performance"]},
-    "soc": {"label": "NDR (Palo Alto)", "desc": "Threat events, severity, firewall actions, URLs", "title": "IT Operation Center - NDR (Palo Alto) Report", "subtitle": "Threats, firewall actions, and high/critical triage", "prefix": "NDR", "sections": ["soc"]},
-    "servicedesk": {"label": "Ticketing", "desc": "Tickets received, SLA, categories, technician ranking, open tickets", "title": "IT Operation Center - Ticketing Report", "subtitle": "ManageEngine service desk performance", "prefix": "Ticketing", "sections": ["servicedesk"]},
-    "xdr": {"label": "XDR (Trend Micro)", "desc": "Vision One alerts: severity, detection models, status, backlog", "title": "IT Operation Center - XDR (Trend Micro) Report", "subtitle": "Vision One Workbench alerts", "prefix": "XDR", "sections": ["xdr"]},
-    "devices": {"label": "Devices", "desc": "Zabbix device status: category, type, location, devices down", "title": "IT Operation Center - Devices Report", "subtitle": "Device status from Zabbix", "prefix": "Devices", "sections": ["devices"]},
-    "cctv": {"label": "CCTV (Milestone + Zabbix)", "desc": "Cameras, recording, and servers from Milestone together with the CCTV devices of Zabbix, per location", "title": "IT Operation Center - CCTV Report", "subtitle": "Milestone cameras and Zabbix CCTV devices", "prefix": "CCTV", "sections": ["cctv"]},
-    "wifi": {"label": "WiFi (Ruckus)", "desc": "Active clients, Access Points, usage per SSID and AP", "title": "IT Operation Center - WiFi (Ruckus) Report", "subtitle": "Clients and Access Points from Ruckus vSZ", "prefix": "WiFi", "sections": ["wifi"]},
-    "network": {"label": "Network (PRTG + WiFi)", "desc": "PRTG links, WiFi, internet usage, and link / web availability together", "title": "IT Operation Center - Network Report", "subtitle": "ISP links, WiFi, internet usage, and web availability", "prefix": "Network", "sections": ["noc", "wifi", "internet", "kuma"]},
-    "cyber": {"label": "Cyber Security (NDR + XDR)", "desc": "Palo Alto NDR and Trend Micro XDR together", "title": "IT Operation Center - Cyber Security Report", "subtitle": "Palo Alto NDR and Trend Micro XDR", "prefix": "Cyber", "sections": ["soc", "xdr"]},
-    "kuma": {"label": "Link / Web Availability", "desc": "Status, availability, and response time of the links and web services watched by Uptime Kuma", "title": "IT Operation Center - Link / Web Availability Report", "subtitle": "Links and web services watched by Uptime Kuma", "prefix": "Availability", "sections": ["kuma"]},
-    "internet": {"label": "Internet Usage", "desc": "Traffic, applications, web categories, and top users per location (Palo Alto)", "title": "IT Operation Center - Internet Usage Report", "subtitle": "Traffic, applications, and users per location", "prefix": "Internet Usage", "sections": ["internet"]},
+    "noc": {"label": "ISP & Links", "desc": "Availability, downtime, problem links, utilization, and live ISP redundancy", "title": "IT Operation Center - ISP & Links Report", "subtitle": "Availability, downtime, and traffic of ISP links", "prefix": "Links", "sections": ["noc"]},
+    "performance": {"label": "Performance", "desc": "Per technician, team, and shift: tickets, completion, SLA, input quality, and change from the previous period", "title": "IT Operation Center - Performance Report", "subtitle": "Technician, team, and shift performance", "prefix": "Performance", "sections": ["performance"]},
+    "soc": {"label": "NDR / Firewall", "desc": "Threat events, severity, firewall actions, and URL filtering", "title": "IT Operation Center - NDR / Firewall Report", "subtitle": "Threats, firewall actions, and high/critical triage", "prefix": "NDR", "sections": ["soc"]},
+    "servicedesk": {"label": "Ticketing", "desc": "Tickets received, SLA, categories, technician ranking, open tickets", "title": "IT Operation Center - Ticketing Report", "subtitle": "Service desk and ticket SLA performance", "prefix": "Ticketing", "sections": ["servicedesk"]},
+    "xdr": {"label": "XDR / Endpoint", "desc": "Endpoint security alerts: severity, detection models, status, backlog", "title": "IT Operation Center - XDR / Endpoint Report", "subtitle": "Endpoint detection and response alerts", "prefix": "XDR", "sections": ["xdr"]},
+    "devices": {"label": "Devices", "desc": "Infrastructure device status: category, type, location, devices down", "title": "IT Operation Center - Devices Report", "subtitle": "Infrastructure device status and availability", "prefix": "Devices", "sections": ["devices"]},
+    "cctv": {"label": "Video Surveillance", "desc": "Cameras, recording, and surveillance servers together with CCTV devices per location", "title": "IT Operation Center - Video Surveillance Report", "subtitle": "Cameras, recording status, and CCTV devices", "prefix": "CCTV", "sections": ["cctv"]},
+    "wifi": {"label": "Wireless / WiFi", "desc": "Active clients, Access Points, usage per SSID and AP", "title": "IT Operation Center - Wireless / WiFi Report", "subtitle": "Wireless clients and Access Points", "prefix": "WiFi", "sections": ["wifi"]},
+    "network": {"label": "Network (ISP, WiFi & Web)", "desc": "ISP links, wireless/WiFi, internet usage, and link / web availability together", "title": "IT Operation Center - Network Report", "subtitle": "ISP links, WiFi, internet usage, and web availability", "prefix": "Network", "sections": ["noc", "wifi", "internet", "kuma"]},
+    "cyber": {"label": "Cyber Security", "desc": "NDR / Firewall and XDR / Endpoint together", "title": "IT Operation Center - Cyber Security Report", "subtitle": "NDR / Firewall and XDR / Endpoint overview", "prefix": "Cyber", "sections": ["soc", "xdr"]},
+    "kuma": {"label": "Link / Web Availability", "desc": "Status, availability, and response time of monitored links and web services", "title": "IT Operation Center - Link / Web Availability Report", "subtitle": "Monitored links and web services availability", "prefix": "Availability", "sections": ["kuma"]},
+    "internet": {"label": "Internet Usage", "desc": "Traffic, applications, web categories, and top networks per location", "title": "IT Operation Center - Internet Usage Report", "subtitle": "Traffic, applications, and usage per location", "prefix": "Internet Usage", "sections": ["internet"]},
     "full": {"label": "Full", "desc": "Summary and details of all areas in one file", "title": "IT Operation Center - Full Report", "subtitle": "Summary and details of all areas", "prefix": "", "sections": None},
 }
 

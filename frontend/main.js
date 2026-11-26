@@ -250,7 +250,7 @@ async function render(reload) {
 /* Read-only Admin (role with admin_view but not is_admin): every edit control is hidden; the server still rejects changes. */
 function lockAdmin() {
   const v = $("view");
-  v.querySelectorAll("[data-adduser],[data-edit-user],[data-reset-user],[data-toggle-user],[data-resetuser],[data-w],[data-toggleuser],[data-medit],[data-mdel],[data-sync],form button[type=submit]").forEach(e => e.hidden = true);
+  v.querySelectorAll("[data-adduser],[data-edit-user],[data-reset-user],[data-toggle-user],[data-del-user],[data-resetuser],[data-w],[data-toggleuser],[data-medit],[data-mdel],[data-sync],form button[type=submit]").forEach(e => e.hidden = true);
   v.querySelectorAll("form input, form select, form textarea").forEach(e => e.disabled = true);
   v.insertAdjacentHTML("afterbegin", `<div class="msg" style="margin-bottom:10px">Read-only</div>`);
 }
@@ -272,7 +272,7 @@ async function shareReport(fmt, btn) {
   btn.innerHTML = old; btn.disabled = false; render(false);
 }
 /* Page layout (widgets): order, size, title, show/hide per role. Super Admin edits it with the Customize button; stored in the layout table. */
-const LAYOUT_PAGES = ["ringkasan", "servicedesk", "network", "noc", "kuma", "wifi", "cyber", "soc", "xdr", "devices", "devnet", "devcctv", "devops", "cctv", "internet"], SIZES = [["c3", "S"], ["c4", "M"], ["c6", "L"], ["c8", "XL"], ["c12", "Full"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
+const LAYOUT_PAGES = ["ringkasan", "servicedesk", "network", "noc", "kuma", "wifi", "cyber", "soc", "xdr", "devices", "devnet", "devcctv", "devops", "cctv", "internet"], SIZES = [["c3", "S (3)"], ["c4", "M (4)"], ["c6", "L (6)"], ["c8", "XL (8)"], ["c12", "Full (12)"]], SZ = /\bc(?:3|4|5|6|7|8|12)\b/g;
 const slug = s => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const nearest = c => { const n = +(String(c).slice(1)) || 12; return SIZES.reduce((a, s) => Math.abs(+s[0].slice(1) - n) < Math.abs(+a[0].slice(1) - n) ? s : a)[0]; };
 const curProfile = () => (CFG.me && CFG.me.profile) || "default";
@@ -336,8 +336,8 @@ function applyLayout() {
 const LAYBAR = () => `<div class="laybar"><b>Customize</b><label>Profile <select id="layProf">${(CFG.profiles || []).map(p => `<option value="${esc(p.key)}" ${p.key === (S.layProfile || curProfile()) ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="profNew" title="Create a new profile as a copy of the selected one">New</button><button class="btn ghost" type="button" id="profRename">Rename</button><button class="btn ghost" type="button" id="profDel">Delete</button><label>Apply to <select id="layRole"><option value="">All roles</option>${Object.values(CFG.roles).map(r => `<option value="${esc(r.key)}" ${r.key === S.layRole ? "selected" : ""}>${esc(r.label)}</option>`).join("")}</select></label><button class="btn ghost" type="button" id="layAdd">+ Add widget</button><button class="btn" type="button" id="laySave">Save</button><button class="btn ghost" type="button" id="layReset">Reset</button><button class="btn ghost" type="button" id="layCancel">Cancel</button></div><div class="layoff" id="layoff"></div><div class="laycat" id="laycat" hidden></div>`;
 function addTools(blk) {
     const t = document.createElement("div"), cur = nearest(blk.dataset.size || blk.dataset.dsize); t.className = "wtools";
-    t.innerHTML = `<span class="wdrag" title="Drag to move">⠿ Move</span><button type="button" data-lay="up" title="Move up">▲</button><button type="button" data-lay="down" title="Move down">▼</button><select data-lay-size aria-label="Size">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Title" value="${esc(blk.dataset.title || "")}" aria-label="Title"><button type="button" data-lay="eye">${blk.classList.contains("off") ? "Show" : "Hide"}</button>${blk.dataset.wkey.startsWith("w-dev-map") ? `<select data-wgroup aria-label="Filter group" title="Filter group"><option value="">All groups</option>${((V.dev && V.dev.groups) || []).map(g => `<option value="${esc(g.name)}" ${blk.dataset.wkey === "w-dev-map:" + encodeURIComponent(g.name) ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>` : ""}<button type="button" data-lay="rm" title="${blk.dataset.added ? "Remove widget" : "Remove from dashboard (can be added again)"}">Remove</button>`;
-    blk.appendChild(t);
+    t.innerHTML = `<button type="button" data-lay="up" title="Move up / left">▲</button><button type="button" data-lay="down" title="Move down / right">▼</button><select data-lay-size aria-label="Size" title="Widget width">${SIZES.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${l}</option>`).join("")}</select><input data-lay-title placeholder="Custom title" value="${esc(blk.dataset.title || "")}" aria-label="Title">${blk.dataset.wkey.startsWith("w-dev-map") ? `<select data-wgroup aria-label="Filter group" title="Filter group"><option value="">All groups</option>${((V.dev && V.dev.groups) || []).map(g => `<option value="${esc(g.name)}" ${blk.dataset.wkey === "w-dev-map:" + encodeURIComponent(g.name) ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>` : ""}<button type="button" data-lay="eye">${blk.classList.contains("off") ? "Show" : "Hide"}</button><button type="button" data-lay="rm" title="${blk.dataset.added ? "Remove widget" : "Remove from dashboard (can be added again)"}">Remove</button>`;
+    blk.prepend(t);
     const rz = document.createElement("span"); rz.className = "wresize"; rz.title = "Drag sideways to resize"; blk.appendChild(rz);
 }
 function toggleCatalog() { const c = $("laycat"); if (!c) return; c.hidden = !c.hidden; if (!c.hidden) c.innerHTML = catalogHtml(); }
@@ -355,27 +355,29 @@ function moveBlock(b, dir) {
   const blk = b.closest(".wblock");
   if (dir === "eye") { const off = blk.classList.toggle("off"); b.textContent = off ? "Show" : "Hide"; renderOff(); }
   else if (dir === "rm") { if (blk.dataset.added) blk.remove(); else { blk.classList.add("off"); blk.dataset.gone = "1"; } const c = $("laycat"); if (c && !c.hidden) c.innerHTML = catalogHtml(); renderOff(); }
-  else if (dir === "up" && blk.previousElementSibling) blk.parentNode.insertBefore(blk, blk.previousElementSibling);
-  else if (dir === "down" && blk.nextElementSibling) blk.parentNode.insertBefore(blk.nextElementSibling, blk);
+  else if (dir === "up") {
+    let prev = blk.previousElementSibling;
+    while (prev && prev.classList.contains("off")) prev = prev.previousElementSibling;
+    if (prev) blk.parentNode.insertBefore(blk, prev);
+  } else if (dir === "down") {
+    let next = blk.nextElementSibling;
+    while (next && next.classList.contains("off")) next = next.nextElementSibling;
+    if (next) blk.parentNode.insertBefore(blk, next.nextElementSibling);
+  }
 }
-// Customize: drag ⠿ to move, drag the bottom-right corner to resize (pointer events: mouse and touch)
+// Customize: drag the bottom-right corner handle to resize widget width
 let LDRAG = null;
 document.addEventListener("pointerdown", e => {
-  const t = e.target.closest && e.target.closest(".wdrag,.wresize"); if (!t || !S.layEdit) return;
-  const blk = t.closest(".wblock"); LDRAG = {mode: t.classList.contains("wdrag") ? "move" : "size", blk}; blk.classList.add("lifting"); document.body.classList.add("dragging"); e.preventDefault();
+  const t = e.target.closest && e.target.closest(".wresize"); if (!t || !S.layEdit) return;
+  const blk = t.closest(".wblock"); LDRAG = {mode: "size", blk}; blk.classList.add("lifting"); document.body.classList.add("dragging"); e.preventDefault();
   try { t.setPointerCapture(e.pointerId); } catch (_) {}
 });
 document.addEventListener("pointermove", e => {
   if (!LDRAG) return;
-  if (e.buttons === 0) { endDrag(); return; }            // button was released outside the window: end the drag so it does not stick
-  const {blk, mode} = LDRAG, grid = blk.parentNode;
-  if (mode === "size") {
-    const g = grid.getBoundingClientRect(), b = blk.getBoundingClientRect(), size = nearest("c" + Math.round((e.clientX - b.left) / g.width * 12));
-    if (blk.dataset.size !== size) { blk.className = blk.className.replace(SZ, "").trim() + " " + size; blk.dataset.size = size; const sel = blk.querySelector("[data-lay-size]"); if (sel) sel.value = size; }
-  } else {
-    const over = document.elementsFromPoint(e.clientX, e.clientY).map(x => x.closest && x.closest(".grid.lay > .wblock")).find(x => x && x !== blk);
-    if (over && performance.now() - (LDRAG.t0 || 0) > 90) { LDRAG.t0 = performance.now(); const r = over.getBoundingClientRect(), bb = blk.getBoundingClientRect(), sameRow = Math.abs(r.top - bb.top) < 40, after = sameRow ? e.clientX > r.left + r.width / 2 : e.clientY > r.top + r.height / 2; grid.insertBefore(blk, after ? over.nextSibling : over); }
-  }
+  if (e.buttons === 0) { endDrag(); return; }
+  const {blk} = LDRAG, grid = blk.parentNode;
+  const g = grid.getBoundingClientRect(), b = blk.getBoundingClientRect(), size = nearest("c" + Math.round((e.clientX - b.left) / g.width * 12));
+  if (blk.dataset.size !== size) { blk.className = blk.className.replace(SZ, "").trim() + " " + size; blk.dataset.size = size; const sel = blk.querySelector("[data-lay-size]"); if (sel) sel.value = size; }
 });
 const endDrag = () => { if (LDRAG) { LDRAG.blk.classList.remove("lifting"); LDRAG = null; } document.body.classList.remove("dragging"); };
 document.addEventListener("pointerup", endDrag); document.addEventListener("pointercancel", endDrag); document.addEventListener("lostpointercapture", endDrag); window.addEventListener("blur", endDrag);
@@ -580,7 +582,8 @@ document.addEventListener("click", async e => {
     else if (d.adduser !== undefined) set({addUser: !S.addUser && !S.editUser, editUser: ""});
     else if (d.editUser) set({editUser: d.editUser, addUser: false});
     else if (d.toggleUser) { const u = V.users.find(x => x.u === d.toggleUser); await send("/api/admin/users/" + encodeURIComponent(u.u), {active: !u.active}, "PATCH"); refresh(); }
-    else if (d.resetUser) { if (!confirm("Reset password " + d.resetUser + "?")) return; const r = await send("/api/admin/users/" + encodeURIComponent(d.resetUser), {reset_password: true}, "PATCH"); refresh({msg: `Initial password for ${d.resetUser}: ${r.initial_password} (must be changed at login).`}, true); }
+    else if (d.resetUser) { if (!confirm("Reset password for " + d.resetUser + "?")) return; const r = await send("/api/admin/users/" + encodeURIComponent(d.resetUser), {reset_password: true}, "PATCH"); refresh({editUser: "", msg: `Initial password for ${d.resetUser}: ${r.initial_password} (must be changed at login).`}, true); }
+    else if (d.delUser) { if (!confirm("Permanently delete user " + d.delUser + "? This cannot be undone.")) return; await api("/api/admin/users/" + encodeURIComponent(d.delUser), {method: "DELETE"}); refresh({editUser: "", msg: `Account ${d.delUser} deleted.`}, true); }
     else if (d.medit) { S.msg = ""; set({medit: d.medit === "x" ? null : d.medit === "new" ? {} : Object.assign({__i: +d.medit}, S.mdata.rows[+d.medit])}, true); }
     else if (d.mdel !== undefined) { if (!confirm("Delete this row?")) return; await api(`/api/admin/master/${S.mkey}/${encodeURIComponent(pkOf(S.medit))}`, {method: "DELETE"}).catch(err => { $("mMsg").textContent = err.message; throw null; }); await reloadConfig(); S.mdata = null; refresh({medit: null}); }
     else if (d.sync) { b.disabled = true; b.textContent = "Menyinkron…"; const r = await send("/api/ingest/sync/" + d.sync, {}).catch(err => { alert(err.message); return null; }); if (r && r.started) alert(r.msg); refresh(); }
@@ -667,7 +670,7 @@ document.addEventListener("submit", async e => {
     refresh({msg: errs.length ? "Some failed: " + errs.join("; ") : changed.length ? `Saved (${changed.length} parameters). All figures are recalculated.` : "No changes."}, true);
   }
   if (f.id === "uF") {
-    if (S.editUser) { try { const b = {full_name: v("uN"), site: v("uS") || ""}; if (!$("uR").disabled) b.role_key = v("uR"); await send("/api/admin/users/" + encodeURIComponent(S.editUser), b, "PATCH"); await reloadConfig(); refresh({editUser: "", msg: `Akun ${S.editUser} diperbarui.`}, true); } catch (err) { $("uMsg").textContent = err.message; } return; }
+    if (S.editUser) { try { const b = {full_name: v("uN"), site: v("uS") || ""}; if (!$("uR").disabled) b.role_key = v("uR"); if ($("uAct") && !$("uAct").disabled) b.active = $("uAct").value === "1"; await send("/api/admin/users/" + encodeURIComponent(S.editUser), b, "PATCH"); await reloadConfig(); refresh({editUser: "", msg: `Account ${S.editUser} updated.`}, true); } catch (err) { $("uMsg").textContent = err.message; } return; }
     try { const r = await send("/api/admin/users", {username: v("uU"), full_name: v("uN"), role_key: v("uR"), site: v("uS") || null}); refresh({addUser: false, msg: `Account ${v("uU")} created. Initial password: ${r.initial_password} (must be changed at first login).`}, true); }
     catch (err) { $("uMsg").textContent = err.message; }
   }
