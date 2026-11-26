@@ -5,7 +5,7 @@ const RGROUPS = [
   ["cyber", "Cyber Security", "shield", ["cyber", "soc", "xdr"]],
   ["devices", "Devices", "server", ["devices", "cctv"]]
 ];
-const RSHORT = {summary: "Summary", full: "Full Report", custom: "Custom…", servicedesk: "Ticketing", performance: "Performance", network: "All Network", noc: "Links (PRTG)", wifi: "WiFi (Ruckus)", internet: "Internet Usage", kuma: "Web Availability", cyber: "All Cyber", soc: "NDR (Palo Alto)", xdr: "XDR (Trend Micro)", devices: "Devices (Zabbix)", cctv: "CCTV (Milestone)"};
+const RSHORT = {summary: "Summary", full: "Full Report", custom: "Custom…", servicedesk: "Ticketing", performance: "Performance", network: "All Network", noc: "ISP & Links", wifi: "WiFi", internet: "Internet Usage", kuma: "Web Availability", cyber: "All Cyber", soc: "NDR", xdr: "XDR", devices: "Devices", cctv: "Surveillance"};
 function vReport() {
   const rp = V.report || {sections: [], kinds: []}, kinds = rp.kinds || [];
   if (!kinds.length) return `<div class="grid"><section class="panel c12">${empty("No reports are available to this role.")}</section></div>`;

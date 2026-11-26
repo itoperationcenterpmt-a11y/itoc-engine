@@ -63,7 +63,7 @@ function vZbxIsp() {
   ]);
 
   return insArea("zbxisp") + (warns.length ? grid(`<section class="panel c12"><ul class="att">${warns.join("")}</ul></section>`) : "") + kp + grid(
-    vzGaugeCard("c3", "ISP Live Availability", A.avail, {lo: 0, hi: 1, target: 0.99, label: "ISP Live Availability", fmt: v => pc(v, 2), sub: fmt(A.online) + " / " + fmt(A.total) + " up", note: "Target 99% · Zabbix ICMP"}) +
+    vzGaugeCard("c3", "ISP Live Availability", A.avail, {lo: 0, hi: 1, target: 0.99, label: "ISP Live Availability", fmt: v => pc(v, 2), sub: fmt(A.online) + " / " + fmt(A.total) + " up", note: "Target 99% · Live ICMP"}) +
     panel("c4", "Links by Provider", "", vzDonut(Z.byProvider.map((x, i) => ({k: x.k, v: x.total, c: vzPal[i % vzPal.length]})), {sub: "ISP links", label: "ISP links by provider"})) +
     P.providers() +
     P.down() +
@@ -74,6 +74,6 @@ function vZbxIsp() {
     panel("c6", "ISP Downtime per Day", "Hours per day", bars(days, [{name: "Downtime (h)", c: "--warn", v: (H && H.daily || []).map(x => x.hours)}], {dec: 1, unit: " h", label: "ISP downtime per day"})) +
     panel("c6", "Downtime by Location", "top 12", tbl(["Location", "Incidents", "Downtime (h)", "Availability"], (H && H.byLoc || []).map(r => [r.k, r.events, fx(r.hours, 1), r.avail != null ? {h: `<span class="${zispTone(r.avail)}">${pc(r.avail, 2)}</span>`} : "-"]), {r: [1, 2, 3], empty: "No ISP outages in this period."})) +
     panel("c6", "Most Frequently Down ISP Links", "flapping / chronic watchlist", tbl(["ISP Host", "Incidents", "Downtime (h)"], (H && H.byHost || []).map(r => [r.k, r.events, fx(r.hours, 1)]), {r: [1, 2], empty: "No ISP outages in this period."})) +
-    panel("c12", "All ISP Hosts (Zabbix)", fmt(Z.listN) + " hosts", `<div class="dtool"><input type="search" id="zq" class="msearch" placeholder="Search host name, provider, location, or IP" aria-label="Search ISP hosts"><span class="sub">Provider and status filters are in the top filter bar</span></div><div id="zlist">${tbl(["Host Name", "Provider", "Location", "IP", "Status", "Down since", "Duration", "Trigger / Note"], listRows, {tall: true, empty: "No ISP hosts for this filter."})}</div>`)
+    panel("c12", "All ISP Hosts", fmt(Z.listN) + " hosts", `<div class="dtool"><input type="search" id="zq" class="msearch" placeholder="Search host name, provider, location, or IP" aria-label="Search ISP hosts"><span class="sub">Provider and status filters are in the top filter bar</span></div><div id="zlist">${tbl(["Host Name", "Provider", "Location", "IP", "Status", "Down since", "Duration", "Trigger / Note"], listRows, {tall: true, empty: "No ISP hosts for this filter."})}</div>`)
   );
 }

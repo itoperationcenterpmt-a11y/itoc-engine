@@ -295,6 +295,24 @@ def param_set(key: str, body: ParamIn, db: Session = Depends(get_db), user: User
             raise HTTPException(422, "Must be a number")
         if ("min" in ui and v < ui["min"]) or ("max" in ui and v > ui["max"]):
             raise HTTPException(422, f"Di luar batas {ui.get('min')}–{ui.get('max')}")
+    if key.startswith("ui.") and key.endswith("_img"):
+        import base64, re
+        if not isinstance(v, str):
+            raise HTTPException(422, "Image value must be a string")
+        v = v.strip()
+        if v:
+            if len(v) > 700_000:
+                raise HTTPException(422, "Image payload too large (max ~512 KB)")
+            m = re.fullmatch(r"data:image/(png|jpeg|jpg|webp|x-icon|vnd\.microsoft\.icon|svg\+xml);base64,([A-Za-z0-9+/=\s]+)", v)
+            if not m:
+                raise HTTPException(422, "Invalid image format (allowed: PNG, JPEG, WebP, ICO, SVG)")
+            if m.group(1) == "svg+xml":
+                try:
+                    raw_svg = base64.b64decode(m.group(2)).decode("utf-8", errors="ignore").lower()
+                except Exception:
+                    raise HTTPException(422, "Invalid SVG payload")
+                if re.search(r"<script|javascript:|on[a-z]+\s*=", raw_svg):
+                    raise HTTPException(422, "SVG contains disallowed script or event attributes")
     old = p.value
     p.value, p.updated_by = v, user.username
     _aud = lambda x: "(custom image)" if isinstance(x, str) and x.startswith("data:image/") else x
