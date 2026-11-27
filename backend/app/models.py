@@ -668,3 +668,49 @@ class SocFwMap(Base):
     __tablename__ = "soc_fw_map"
     fw: Mapped[str] = mapped_column(String(120), primary_key=True)
     site: Mapped[str | None] = mapped_column(String(120))
+
+
+class MajorIncident(Base):
+    """Major Incident War Room record with cross-shift timeline updates."""
+    __tablename__ = "major_incident"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(220))
+    severity: Mapped[str] = mapped_column(String(16), default="sev2")          # sev1 | sev2 | sev3
+    status: Mapped[str] = mapped_column(String(20), default="open")            # open | monitoring | resolved
+    site: Mapped[str | None] = mapped_column(String(120))
+    summary: Mapped[str | None] = mapped_column(Text)
+    root_cause: Mapped[str | None] = mapped_column(Text)
+    commander: Mapped[str | None] = mapped_column(String(120))
+    started_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_by: Mapped[str] = mapped_column(String(60), default="system")
+
+
+class IncidentUpdate(Base):
+    """Chronological timeline entry belonging to a MajorIncident."""
+    __tablename__ = "incident_update"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    incident_id: Mapped[int] = mapped_column(Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
+    at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    author: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(20), default="update")            # update | escalation | mitigation | resolved
+    message: Mapped[str] = mapped_column(Text)
+
+
+class ReportSchedule(Base):
+    """Scheduled automated report / shift digest delivery via Email or Webhook."""
+    __tablename__ = "report_schedule"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(140))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    frequency: Mapped[str] = mapped_column(String(20), default="daily")        # shift | daily | weekly | monthly
+    run_time: Mapped[str] = mapped_column(String(10), default="08:00")         # HH:MM local WIB
+    day_of_week: Mapped[int | None] = mapped_column(Integer)                   # 0=Mon..6=Sun
+    day_of_month: Mapped[int | None] = mapped_column(Integer)                  # 1..28
+    report_kind: Mapped[str] = mapped_column(String(40), default="shift_summary")
+    fmt: Mapped[str] = mapped_column(String(16), default="text")               # text | pdf | xlsx
+    site: Mapped[str | None] = mapped_column(String(120))
+    channel: Mapped[str] = mapped_column(String(20), default="webhook")        # webhook | email | both
+    recipients: Mapped[str | None] = mapped_column(Text)                       # comma-separated emails
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_status: Mapped[str | None] = mapped_column(String(220))

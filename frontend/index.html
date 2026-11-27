@@ -383,6 +383,31 @@ textarea{min-height:76px;resize:vertical}
 .ap-pvbox.pv-light{--pv-bg:#eef2f7;--pv-surf:#ffffff;--pv-sunk:#eef1f6;--pv-ink:#0f1a2a;--pv-muted:#586879;--pv-line:#e1e7ef}
 .ap-pvgrid{display:grid;grid-template-columns:180px minmax(0,1fr);min-height:210px;background:var(--pv-bg);color:var(--pv-ink)}
 @media (max-width:680px){.ap-pvgrid{grid-template-columns:1fr}}
+/* Command Center: Search Modal, Alert Bell, Major Incidents, SSO */
+.bell-badge{position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--crit);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;line-height:1}
+.bell-pop{width:min(380px,92vw)!important;padding:0!important;overflow:hidden}
+.bell-pop .pop-hd{padding:10px 12px;border-bottom:1px solid var(--line)}
+.bell-list{max-height:380px;overflow-y:auto;display:flex;flex-direction:column}
+.bell-item{padding:10px 12px;border-bottom:1px solid var(--line);border-left:3px solid var(--warn);display:flex;gap:8px}
+.bell-item.crit{border-left-color:var(--crit)}.bell-item.unread{background:var(--wash)}
+.bell-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}.bell-body b{font-size:calc(12.5px*var(--fs));line-height:1.3}
+.bell-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px;font-size:calc(11px*var(--fs));color:var(--muted)}
+.srch-dlg{border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);padding:0;width:min(580px,94vw);box-shadow:0 24px 60px -16px rgba(0,0,0,.55)}
+.srch-dlg::backdrop{background:rgba(5,10,20,.55);backdrop-filter:blur(2px)}
+.srch-hd{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.srch-hd input{flex:1;border:0;background:transparent;font-size:calc(14.5px*var(--fs));padding:6px 4px;outline:none}
+.srch-res{max-height:62vh;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:10px}
+.srch-sec{display:flex;flex-direction:column;gap:4px}
+.srch-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;padding:8px 10px;border:1px solid transparent;border-radius:9px;background:var(--sunken);cursor:pointer;color:var(--ink)}
+.srch-row:hover{border-color:var(--accent);background:var(--wash)}.srch-row b{font-size:calc(13px*var(--fs));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inc-card{border-left:4px solid var(--warn)!important}.inc-card.sev1{border-left-color:var(--crit)!important}.inc-card.res{border-left-color:var(--good)!important;opacity:.88}
+.inc-tl{display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--sunken);border-radius:10px}
+.inc-tli{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:calc(12.5px*var(--fs))}
+.inc-sug{background:rgba(208,59,59,.1);border:1px solid var(--crit);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.inc-sug-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:calc(13px*var(--fs))}
+.sso-sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:2px 0}.sso-sep:before,.sso-sep:after{content:"";flex:1;height:1px;background:var(--line)}
+.sso-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font-weight:600;text-decoration:none;transition:border-color .15s,background .15s}
+.sso-btn:hover{border-color:var(--accent);background:var(--wash);color:var(--accent)}
 .wtools{position:relative;z-index:4;display:flex;flex-wrap:wrap;gap:5px;align-items:center;background:var(--sunken);border:1px solid var(--line);border-radius:9px;padding:5px 7px;margin:-4px -4px 6px}
 .wtools button,.wtools select,.wtools input{font-size:calc(11.5px*var(--fs));padding:3px 7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;cursor:pointer;width:auto;line-height:1.25}
 .wtools select{min-width:74px}
@@ -920,6 +945,10 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
     <div class="acts"><button type="button" class="btn ghost" data-pwclose>Cancel</button><button type="submit" class="btn">Save password</button></div>
   </form>
 </dialog>
+<dialog id="dlgSearch" class="srch-dlg" aria-label="Quick Search">
+  <div class="srch-hd"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><input id="srchQ" type="search" placeholder="Search menus, locations, devices, IP, tickets, personnel, or incidents…" autocomplete="off"><button type="button" class="btn ghost sm" data-srch-close style="margin:0">Close</button></div>
+  <div class="srch-res" id="srchRes"></div>
+</dialog>
 <div id="app" class="shell" hidden>
 <aside class="side">
   <div class="brand brand-tera"><img class="g2" src="assets/tera-icon-rev.png" alt=""><div class="bt"><h1 class="brandName"><span class="b1"><img class="wm wm-c" src="assets/tera-wordmark-col.svg" alt="TERA"><img class="wm wm-r" src="assets/tera-wordmark-rev.svg" alt="TERA"></span></h1><span class="bprod">Dashboard</span><span class="bby">by IT Operation Center</span></div><button class="railbtn" id="railBtn" type="button" aria-label="Menu">‹</button></div>
@@ -950,6 +979,11 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
       <div class="ph-left"><span class="ph-crumb" id="pcrumb">TERA › OVERVIEW</span><h2 id="ptitle"></h2><span class="sub" id="psub"></span></div>
       <div class="ph-right">
         <span id="dutyH" class="dutychip"></span>
+        <button class="ph-icon" id="searchBtn" type="button" aria-label="Quick search" title="Quick search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg></button>
+        <div class="ph-popwrap" id="bellWrap">
+          <button class="ph-icon" id="bellBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Alerts and notifications" title="Alerts and notifications" style="position:relative"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="bell-badge" id="bellBadge" hidden>0</span></button>
+          <div class="ph-pop bell-pop" id="bellPop" role="menu" hidden></div>
+        </div>
         <button class="ph-icon" id="wallBtn" type="button" aria-label="TV / Wall Slideshow Mode" title="TV / Wall Slideshow Mode"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></button>
         <button class="ph-icon" id="themeH" type="button" aria-label="Switch light or dark theme" title="Switch light or dark theme"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
         <div class="ph-popwrap" id="profWrap" hidden>
@@ -997,6 +1031,7 @@ details.how{padding:12px 16px}details.how summary{cursor:pointer;font-weight:600
 <script src="common.js"></script>
 <script src="widgets.js"></script>
 <script src="viz.js"></script>
+<script src="ops.js"></script>
 <script src="main.js"></script>
 <!-- Page scripts (page-*.js, devices.js, wifi.js, admin.js, ...) are loaded on demand by main.js → ensurePage() -->
 </body>

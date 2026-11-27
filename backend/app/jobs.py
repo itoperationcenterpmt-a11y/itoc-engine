@@ -132,6 +132,8 @@ def start():
     _sched.add_job(_refresh, "interval", minutes=5, id="refresh")
     from datetime import datetime, timedelta, timezone
     _sched.add_job(run_insights, "interval", minutes=30, id="insights", max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1))
+    from .routers.ops import run_due_schedules
+    _sched.add_job(run_due_schedules, "interval", minutes=1, id="report_schedules", max_instances=1, coalesce=True)
     _sched.start()
     try:
         _refresh()

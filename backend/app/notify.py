@@ -9,7 +9,9 @@ from .models import Webhook
 
 log = logging.getLogger("itoc.notify")
 EVENTS = {"handover_new": "New handover (all priorities)", "handover_high": "High-priority handover",
-          "sync_failed": "Data source sync failed", "insight_new": "Insight baru (peringatan dan kritis)", "test": "Test message"}
+          "incident_new": "Major incident declared", "incident_resolved": "Major incident resolved",
+          "scheduled_report": "Scheduled report / shift digest",
+          "sync_failed": "Data source sync failed", "insight_new": "New insights (warning & critical)", "test": "Test message"}
 KINDS = {"generic": "Generic JSON", "whatsapp": "WhatsApp (Gateway / Webhook)", "telegram": "Telegram", "teams": "Microsoft Teams", "slack": "Slack"}
 
 

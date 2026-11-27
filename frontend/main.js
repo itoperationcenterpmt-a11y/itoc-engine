@@ -45,7 +45,7 @@ async function ensurePage(tab) {
 const devMaps = () => { if (typeof initDevMaps === "function") initDevMaps(); };
 const VIEWS = {report: () => vReport(), ringkasan: () => vRingkasan(), servicedesk: () => vSD(), noc: () => vNoc(), kuma: () => vKuma(), soc: () => vSoc(),
   devices: () => vDevices(), devnet: () => vDevices(), devcctv: () => vDevices(), devops: () => vDevices(), wifi: () => vWifi(), xdr: () => vXdr(), cctv: () => vCctv(),
-  internet: () => vInternet(), insight: () => vInsight(), network: () => vNetwork(), cyber: () => vCyber(), jadwal: () => vJadwal(), serahterima: () => vHo(),
+  internet: () => vInternet(), insight: () => vInsight(), network: () => vNetwork(), cyber: () => vCyber(), jadwal: () => vJadwal(), serahterima: () => vHo(), incidents: () => vIncidents(),
   kelengkapan: () => vData(), admin: () => vAdmin()};
 function openSheet(on) { $("sheet").hidden = !on; $("moreBtn").setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; }
 const WALL = {on: false, paused: false, rotate: true, slides: [], idx: 0, slideSec: 15, slideLeft: 15, refSec: 60, refLeft: 60, customSlideSec: null};
@@ -284,7 +284,7 @@ function layoutRows(page, role) {
   return own.length || prof === "default" ? own : pick("default");
 }
 function closePops() {
-  [["profPop", "profBtn"], ["userPop", "userBtn"]].forEach(([p, b]) => { if ($(p)) $(p).hidden = true; if ($(b)) $(b).setAttribute("aria-expanded", "false"); });
+  [["profPop", "profBtn"], ["userPop", "userBtn"], ["bellPop", "bellBtn"]].forEach(([p, b]) => { if ($(p)) $(p).hidden = true; if ($(b)) $(b).setAttribute("aria-expanded", "false"); });
 }
 function profileSwitcher(on) {
   const w = $("profWrap"), P = CFG.profiles || [];
@@ -776,14 +776,18 @@ setInterval(() => {
 /* ---------- login & boot ---------- */
 function showLogin(msg, change) {
   $("app").hidden = true; $("login").hidden = false;
+  const ssoErr = new URLSearchParams(location.search).get("sso_err");
+  const ssoErrMap = {not_registered: "Your SSO account is not registered yet. Contact an administrator.", domain_denied: "Your email domain is not permitted for SSO sign-in.", inactive: "Your account is currently disabled.", expired_state: "SSO session expired. Please try again.", invalid_state: "Invalid SSO state. Please try again.", token_failed: "SSO authentication failed with identity provider."};
+  const errTxt = msg || (ssoErr ? (ssoErrMap[ssoErr] || ("SSO sign-in error: " + ssoErr)) : "");
+  const ssoBlock = LOGIN.sso_enabled ? `<div class="sso-sep"><span>or</span></div><a class="sso-btn" href="/api/auth/sso/login"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Sign in with ${esc(LOGIN.sso_label || "Corporate SSO")}</a>` : "";
   const form = change
     ? `<form id="pwF" class="loginbox"><div class="brand"><span class="mk"><img src="assets/tera-icon-col.png" alt=""></span><h1>Change password</h1></div><span class="sub">The initial password must be changed before using the dashboard.</span>
       <div class="fld"><label for="oP">Current password</label><input type="password" id="oP" autocomplete="current-password"></div><div class="fld"><label for="nP">New password</label><input type="password" id="nP" autocomplete="new-password"></div><div class="fld"><label for="nP2">Repeat new password</label><input type="password" id="nP2" autocomplete="new-password"></div>
-      <button class="btn" type="submit">Save</button><span class="msg err" id="lMsg">${esc(msg || "")}</span></form>`
+      <button class="btn" type="submit">Save</button><span class="msg err" id="lMsg">${esc(errTxt)}</span></form>`
     : `<form id="loginF" class="loginbox"><div class="lhead"><h1>Sign in</h1></div>
       <div class="fld"><label for="lU">Username</label><input type="text" id="lU" autocomplete="username"></div><div class="fld"><label for="lP">Password</label><div class="pw"><input type="password" id="lP" autocomplete="current-password"><button type="button" class="pwt" id="pwT" aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
       ${LOGIN.turnstile ? `<div class="fld"><label>Security verification</label><div class="cf-turnstile" data-sitekey="${esc(LOGIN.turnstile)}"></div></div>` : ""}
-      <button class="btn" type="submit">Sign in</button><span class="msg err" id="lMsg" role="alert">${esc(msg || "")}</span>
+      <button class="btn" type="submit">Sign in</button>${ssoBlock}<span class="msg err" id="lMsg" role="alert">${esc(errTxt)}</span>
       <p class="lg-help">Forgot your password? ${LOGIN.support_phone ? `<a href="https://wa.me/${esc(String(LOGIN.support_phone).replace(/\D/g, ""))}?text=${encodeURIComponent("Hello IT Care, I forgot my TERA Dashboard password.")}" target="_blank" rel="noopener noreferrer">Contact us</a>` : "Contact us"}</p></form>`;
       $("login").innerHTML = `<div class="lg"><div class="lg-bg"></div><button type="button" class="lg-theme" id="themeL" aria-label="Switch light or dark theme" title="Switch light or dark theme"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor"/></svg></button><div class="lg-wrap">
     <section class="lg-card lg-info">
@@ -803,8 +807,8 @@ const brandHtml = () => {
   return `<span class="b1">${esc(t)}</span>`;
 };
 function applyBrand() { document.title = BRAND; document.querySelectorAll(".brandName").forEach(e => e.innerHTML = brandHtml()); }
-let LOGIN = {tagline: "", points: [], place: "", eyebrow: "", acronym: [], headline: "", badge: "", support_phone: "", turnstile: "", login_icon_img: "", side_icon_img: "", favicon_img: "", wordmark_light_img: "", wordmark_dark_img: "", login_bg_img: ""};
-async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || "", acronym: r.acronym || [], headline: r.headline || "", badge: r.badge || "", support_phone: r.support_phone || "", turnstile: r.turnstile || "", login_icon_img: r.login_icon_img || "", side_icon_img: r.side_icon_img || "", favicon_img: r.favicon_img || "", wordmark_light_img: r.wordmark_light_img || "", wordmark_dark_img: r.wordmark_dark_img || "", login_bg_img: r.login_bg_img || ""}; applyAppearance({"ui.scale": r.scale, "ui.side_icon_px": r.side_icon_px, "ui.side_wm_px": r.side_wm_px, "ui.login_icon_px": r.login_icon_px, "ui.side_icon_img": r.side_icon_img, "ui.login_icon_img": r.login_icon_img, "ui.favicon_img": r.favicon_img, "ui.wordmark_light_img": r.wordmark_light_img, "ui.wordmark_dark_img": r.wordmark_dark_img, "ui.login_bg_img": r.login_bg_img, "ui.accent_light": r.accent_light, "ui.accent_dark": r.accent_dark, "ui.side_bg": r.side_bg, "ui.card_radius": r.card_radius, "ui.brand_sub": r.brand_sub, "ui.brand_by": r.brand_by, "ui.default_theme": r.default_theme}); } catch (_) {} applyBrand(); }
+let LOGIN = {tagline: "", points: [], place: "", eyebrow: "", acronym: [], headline: "", badge: "", support_phone: "", turnstile: "", sso_enabled: false, sso_label: "", login_icon_img: "", side_icon_img: "", favicon_img: "", wordmark_light_img: "", wordmark_dark_img: "", login_bg_img: ""};
+async function loadPublic() { try { const r = await (await fetch("/api/public")).json(); BRAND = r.brand || BRAND; if (typeof BSPLIT === "number") BSPLIT = +r.brand_split || BSPLIT; FOOT = r.footer || FOOT; LOGIN = {tagline: r.tagline || "", points: r.points || [], place: r.place || "", eyebrow: r.eyebrow || "", acronym: r.acronym || [], headline: r.headline || "", badge: r.badge || "", support_phone: r.support_phone || "", turnstile: r.turnstile || "", sso_enabled: !!r.sso_enabled, sso_label: r.sso_label || "Corporate SSO", login_icon_img: r.login_icon_img || "", side_icon_img: r.side_icon_img || "", favicon_img: r.favicon_img || "", wordmark_light_img: r.wordmark_light_img || "", wordmark_dark_img: r.wordmark_dark_img || "", login_bg_img: r.login_bg_img || ""}; applyAppearance({"ui.scale": r.scale, "ui.side_icon_px": r.side_icon_px, "ui.side_wm_px": r.side_wm_px, "ui.login_icon_px": r.login_icon_px, "ui.side_icon_img": r.side_icon_img, "ui.login_icon_img": r.login_icon_img, "ui.favicon_img": r.favicon_img, "ui.wordmark_light_img": r.wordmark_light_img, "ui.wordmark_dark_img": r.wordmark_dark_img, "ui.login_bg_img": r.login_bg_img, "ui.accent_light": r.accent_light, "ui.accent_dark": r.accent_dark, "ui.side_bg": r.side_bg, "ui.card_radius": r.card_radius, "ui.brand_sub": r.brand_sub, "ui.brand_by": r.brand_by, "ui.default_theme": r.default_theme}); } catch (_) {} applyBrand(); }
 async function boot() {
   await loadPublic();
   try { if ((await fetch("/api/auth/me", {credentials: "same-origin"})).status === 401) return showLogin(); } catch (_) { return showLogin(); }
@@ -816,6 +820,7 @@ async function boot() {
   if ($("meH")) $("meH").textContent = CFG.me.name; if ($("avH")) $("avH").textContent = ini;
   if ($("mePop")) $("mePop").textContent = CFG.me.name; if ($("rolePop")) $("rolePop").textContent = rlab;
   applyBrand(); $("foot").textContent = footText();
+  if (typeof opsInit === "function") opsInit();
   readHash(); render(true);
 }
 boot();

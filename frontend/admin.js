@@ -1,10 +1,10 @@
 /* Admin menu: grouped pages, roles and access, data that needs completing, source status, and page access (Super Admin lock). */
 "use strict";
 const ADM = [
-  ["akses", "Access", [["pengguna", "Users"], ["roles", "Roles"], ["apikeys", "API Keys"]]],
+  ["akses", "Access", [["pengguna", "Users"], ["roles", "Roles"], ["apikeys", "API Keys"], ["sso", "SSO / Identity"]]],
   ["sumber", "Data Sources", [["integrasi", "Integrations"], ["status", "Source Status"], ["pemetaan", "Mapping"], ["dilengkapi", "Needs Completion"]]],
   ["operasional", "Operations", [["personel", "Personnel"], ["tim", "Teams & Shifts"], ["parameter", "Targets & Parameters"], ["rumus", "Formulas"]]],
-  ["notifikasi", "Notifications", [["smtp", "Email"], ["webhooks", "Webhooks"], ["chatcmd", "Bot & Notifier API"]]],
+  ["notifikasi", "Notifications", [["smtp", "Email"], ["webhooks", "Webhooks"], ["schedules", "Scheduled Reports"], ["chatcmd", "Bot & Notifier API"]]],
   ["sistem", "System", [["appearance", "Branding & Icons"], ["menu", "Menus & Widgets"], ["audit", "Audit Log"], ["sharelinks", "Share Links"], ["akses", "Page Access"], ["backup", "Backup & Restore"]]]
 ];
 const COLN = {id: "ID", name: "Name", kind: "Type", aliases: "Aliases", active: "Active", sort: "Order", lat: "Latitude", lon: "Longitude", sys_name: "System Name", unit: "Unit", job: "Job Title",
@@ -510,9 +510,11 @@ function vAdmin() {
   }
   if (S.adm === "integrasi") body = vIntegrations();
   if (S.adm === "apikeys") body = vApiKeys();
+  if (S.adm === "sso") body = vSso();
   if (S.adm === "sharelinks") body = vShareLinks();
   if (S.adm === "smtp") body = vSmtp();
   if (S.adm === "webhooks") body = vWebhooks();
+  if (S.adm === "schedules") body = vSchedules();
   if (S.adm === "chatcmd") body = vChatCmd();
   if (S.adm === "roles") body = vRoles();
   if (S.adm === "parameter") body = admTitle("Targets & Parameters", "Values used in calculations and display. Changes apply to every page immediately.") + paramForm() + `<h4 class="admsub">SLA Targets</h4>` + masterView("sla_target");

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from .config import settings
-from .routers import auth, dashboard, admin, ingest, report, integrations, wifi, insight, system, share
+from .routers import auth, dashboard, admin, ingest, report, integrations, wifi, insight, system, share, sso, ops
 from . import jobs
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -59,7 +59,7 @@ async def security_headers(request, call_next):
     else:
         h["Cache-Control"] = "no-cache"      # HTML, JS, CSS: selalu divalidasi ulang (304 bila tidak berubah), supaya browser tidak memakai kode lama setelah deploy
     return resp
-for r in (auth.router, dashboard.router, admin.router, integrations.router, ingest.router, report.router, wifi.router, insight.router, system.router, share.router, share.admin):
+for r in (auth.router, sso.router, sso.admin, ops.router, ops.sched_admin, dashboard.router, admin.router, integrations.router, ingest.router, report.router, wifi.router, insight.router, system.router, share.router, share.admin):
     app.include_router(r)
 
 
